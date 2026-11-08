@@ -269,12 +269,18 @@ impl CurvesTab {
                     .color(Color32::from_rgba_unmultiplied(180, 180, 180, 90))
                     .style(egui_plot::LineStyle::Dashed { length: 8.0 });
 
-                // Lectura en vivo del stick para dibujar el punto físico actual
+                // Lectura en vivo del periférico para dibujar el punto físico actual
                 let live_state = poller.get_state();
                 let live_in = match (self.selected_device, self.selected_axis_id) {
                     (DeviceKind::Stick, 0x30) => live_state.stick_x,
                     (DeviceKind::Stick, 0x31) => live_state.stick_y,
                     (DeviceKind::Stick, 0x35) => live_state.stick_z,
+                    (DeviceKind::Throttle, 0x30) => live_state.throttle_left,
+                    (DeviceKind::Throttle, 0x31) => live_state.throttle_right,
+                    (DeviceKind::Throttle, 0x32) => live_state.rotary_1,
+                    (DeviceKind::Throttle, 0x35) => live_state.rotary_2,
+                    (DeviceKind::Throttle, 0x36) => live_state.rotary_4,
+                    (DeviceKind::Throttle, 0x37) => live_state.rotary_3,
                     _ => 0.0,
                 };
                 let live_out = self.params.evaluate(live_in);
@@ -283,7 +289,8 @@ impl CurvesTab {
                     .color(Color32::from_rgb(255, 60, 60))
                     .radius(7.0);
 
-                let plot = Plot::new("curve_plot")
+                let plot_id = format!("curve_plot_{:?}_{:#04x}", self.selected_device, self.selected_axis_id);
+                let plot = Plot::new(plot_id)
                     .data_aspect(1.0)
                     .allow_zoom(false)
                     .allow_drag(false)

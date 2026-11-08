@@ -1,13 +1,13 @@
 //! Cálculo matemático de curvas de respuesta (S/J), zonas muertas y lectura en vivo de ejes.
 
 use std::fs::File;
-use std::io::Read;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use x56_core::Calibrator;
+use x56_core::{identify_device, DeviceKind};
 use x56_proto::CurveProfile;
 
 /// Parámetros de curva de un eje.
@@ -43,7 +43,7 @@ impl CurveParameters {
         let xsat_norm = ((self.xsat as f64) / 1000.0).max(deadband_norm + 0.01);
         let ysat_norm = (self.ysat as f64) / 1000.0;
 
-        // Zona muerta central
+        // Zona muerta central (o en ralentí para gases)
         if abs_x <= deadband_norm {
             return 0.0;
         }
@@ -94,17 +94,86 @@ impl CurveParameters {
     }
 }
 
-/// Estado en vivo de los ejes físicos leídos desde la Interfaz 0 (`/dev/hidraw*`).
+/// Estado en vivo de los ejes físicos leídos desde los dispositivos de entrada (evdev / hidraw).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct LiveAxesState {
-    pub stick_x: f64, // -1.0 .. 1.0
-    pub stick_y: f64, // -1.0 .. 1.0
-    pub stick_z: f64, // -1.0 .. 1.0
+    // Palanca (Stick)
+    pub stick_x: f64, // -1.0 .. 1.0 (Roll)
+    pub stick_y: f64, // -1.0 .. 1.0 (Pitch)
+    pub stick_z: f64, // -1.0 .. 1.0 (Twist / Yaw)
+
+    // Cuadrante de Gases (Throttle)
+    pub throttle_left: f64,  // 0.0 .. 1.0 (Unipolar)
+    pub throttle_right: f64, // 0.0 .. 1.0 (Unipolar)
+    pub rotary_1: f64,       // -1.0 .. 1.0 (Rotary 1 - 0x32)
+    pub rotary_2: f64,       // -1.0 .. 1.0 (Rotary 2 - 0x35)
+    pub rotary_3: f64,       // -1.0 .. 1.0 (Rotary 3 - 0x37)
+    pub rotary_4: f64,       // -1.0 .. 1.0 (Rotary 4 - 0x36)
+
     #[allow(dead_code)]
     pub last_updated_ms: u64,
 }
 
-/// Lector en segundo plano de la Interfaz 0 (solo lectura, sin detach).
+#[repr(C)]
+#[derive(Debug, Default, Clone, Copy)]
+pub struct InputAbsInfo {
+    pub value: i32,
+    pub minimum: i32,
+    pub maximum: i32,
+    pub fuzz: i32,
+    pub flat: i32,
+    pub resolution: i32,
+}
+
+// In Linux: _IOR('E', 0x40 + abs, struct input_absinfo) = 0x80184540 + abs
+const EVIOCGABS_BASE: u64 = 0x8018_4540;
+
+pub fn query_abs_axis(file: &File, abs_code: u32) -> Option<InputAbsInfo> {
+    use std::os::unix::io::AsRawFd;
+    let mut info = InputAbsInfo::default();
+    let request = EVIOCGABS_BASE + (abs_code as u64);
+    let ret = unsafe { libc::ioctl(file.as_raw_fd(), request, &mut info) };
+    if ret == 0 {
+        Some(info)
+    } else {
+        None
+    }
+}
+
+pub fn find_evdev_node(target_kind: DeviceKind) -> Option<PathBuf> {
+    let sys_input = Path::new("/sys/class/input");
+    let entries = std::fs::read_dir(sys_input).ok()?;
+
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if !name.starts_with("event") {
+            continue;
+        }
+
+        let dev_dir = entry.path().join("device/id");
+        let vendor_path = dev_dir.join("vendor");
+        let product_path = dev_dir.join("product");
+
+        if let (Ok(v_str), Ok(p_str)) = (
+            std::fs::read_to_string(&vendor_path),
+            std::fs::read_to_string(&product_path),
+        ) {
+            if let (Ok(vid), Ok(pid)) = (
+                u16::from_str_radix(v_str.trim(), 16),
+                u16::from_str_radix(p_str.trim(), 16),
+            ) {
+                if let Some((_, kind)) = identify_device(vid, pid) {
+                    if kind == target_kind {
+                        return Some(Path::new("/dev/input").join(name));
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Lector en segundo plano de las entradas de hardware (Stick y Throttle).
 pub struct LiveInputPoller {
     state: Arc<Mutex<LiveAxesState>>,
     running: Arc<AtomicBool>,
@@ -139,46 +208,91 @@ impl LiveInputPoller {
     }
 
     fn polling_loop(state: Arc<Mutex<LiveAxesState>>, running: Arc<AtomicBool>) {
+        let mut stick_file: Option<File> = None;
+        let mut throttle_file: Option<File> = None;
+
         while running.load(Ordering::Relaxed) {
-            let input_node = Calibrator::find_stick_input_node();
-            let Some(node_path) = input_node else {
-                thread::sleep(Duration::from_millis(500));
-                continue;
-            };
-
-            let Ok(mut file) = File::open(&node_path) else {
-                thread::sleep(Duration::from_millis(500));
-                continue;
-            };
-
-            let mut buf = [0u8; 64];
-            while running.load(Ordering::Relaxed) {
-                match file.read(&mut buf) {
-                    Ok(n) if n >= 6 => {
-                        let raw_x = u16::from_le_bytes([buf[0], buf[1]]);
-                        let raw_y = u16::from_le_bytes([buf[2], buf[3]]);
-                        let raw_z = u16::from_le_bytes([buf[4], buf[5]]) & 0x0FFF;
-
-                        // Normalizar X e Y (0..65535 centrado en ~32768)
-                        let norm_x = ((raw_x as f64) - 32768.0) / 32768.0;
-                        let norm_y = -(((raw_y as f64) - 32768.0) / 32768.0); // Invertir Y para cabeceo natural
-                        // Normalizar Z (0..4095 centrado en ~2048)
-                        let norm_z = ((raw_z as f64) - 2048.0) / 2048.0;
-
-                        if let Ok(mut lock) = state.lock() {
-                            lock.stick_x = norm_x.clamp(-1.0, 1.0);
-                            lock.stick_y = norm_y.clamp(-1.0, 1.0);
-                            lock.stick_z = norm_z.clamp(-1.0, 1.0);
-                        }
-                    }
-                    Ok(_) => {}
-                    Err(_) => {
-                        // Si se desconectó el dispositivo o hubo error temporal
-                        break;
-                    }
+            // Reintentar abrir nodos si se desconectaron o aún no estaban abiertos
+            if stick_file.is_none() {
+                if let Some(path) = find_evdev_node(DeviceKind::Stick) {
+                    stick_file = File::open(path).ok();
                 }
-                thread::sleep(Duration::from_millis(8)); // ~120 Hz de muestreo
             }
+            if throttle_file.is_none() {
+                if let Some(path) = find_evdev_node(DeviceKind::Throttle) {
+                    throttle_file = File::open(path).ok();
+                }
+            }
+
+            let mut new_stick_x = None;
+            let mut new_stick_y = None;
+            let mut new_stick_z = None;
+
+            let mut new_tl = None;
+            let mut new_tr = None;
+            let mut new_r1 = None;
+            let mut new_r2 = None;
+            let mut new_r3 = None;
+            let mut new_r4 = None;
+
+            // Muestreo del Stick (evdev / EVIOCGABS)
+            if let Some(ref file) = stick_file {
+                if let Some(info) = query_abs_axis(file, 0) {
+                    // ABS_X (Roll 0..65535, centro ~32768)
+                    new_stick_x = Some((((info.value as f64) - 32768.0) / 32768.0).clamp(-1.0, 1.0));
+                }
+                if let Some(info) = query_abs_axis(file, 1) {
+                    // ABS_Y (Pitch 0..65535, centro ~32768, invertido)
+                    new_stick_y = Some((-(((info.value as f64) - 32768.0) / 32768.0)).clamp(-1.0, 1.0));
+                }
+                if let Some(info) = query_abs_axis(file, 5) {
+                    // ABS_RZ (Twist / Yaw 0..4095, centro ~2048)
+                    new_stick_z = Some((((info.value as f64) - 2048.0) / 2048.0).clamp(-1.0, 1.0));
+                }
+            }
+
+            // Muestreo del Throttle (evdev / EVIOCGABS)
+            if let Some(ref file) = throttle_file {
+                if let Some(info) = query_abs_axis(file, 0) {
+                    // ABS_X -> Throttle Left (0..1023)
+                    new_tl = Some(((info.value as f64) / 1023.0).clamp(0.0, 1.0));
+                }
+                if let Some(info) = query_abs_axis(file, 1) {
+                    // ABS_Y -> Throttle Right (0..1023)
+                    new_tr = Some(((info.value as f64) / 1023.0).clamp(0.0, 1.0));
+                }
+                if let Some(info) = query_abs_axis(file, 2) {
+                    // ABS_Z -> Rotary 1 (0..255, centro 128)
+                    new_r1 = Some((((info.value as f64) - 128.0) / 128.0).clamp(-1.0, 1.0));
+                }
+                if let Some(info) = query_abs_axis(file, 5) {
+                    // ABS_RZ -> Rotary 2 (0..255, centro 128)
+                    new_r2 = Some((((info.value as f64) - 128.0) / 128.0).clamp(-1.0, 1.0));
+                }
+                if let Some(info) = query_abs_axis(file, 7) {
+                    // ABS_RUDDER -> Rotary 3 (0..255, centro 128)
+                    new_r3 = Some((((info.value as f64) - 128.0) / 128.0).clamp(-1.0, 1.0));
+                }
+                if let Some(info) = query_abs_axis(file, 6) {
+                    // ABS_THROTTLE -> Rotary 4 (0..255, centro 128)
+                    new_r4 = Some((((info.value as f64) - 128.0) / 128.0).clamp(-1.0, 1.0));
+                }
+            }
+
+            if let Ok(mut lock) = state.lock() {
+                if let Some(v) = new_stick_x { lock.stick_x = v; }
+                if let Some(v) = new_stick_y { lock.stick_y = v; }
+                if let Some(v) = new_stick_z { lock.stick_z = v; }
+
+                if let Some(v) = new_tl { lock.throttle_left = v; }
+                if let Some(v) = new_tr { lock.throttle_right = v; }
+                if let Some(v) = new_r1 { lock.rotary_1 = v; }
+                if let Some(v) = new_r2 { lock.rotary_2 = v; }
+                if let Some(v) = new_r3 { lock.rotary_3 = v; }
+                if let Some(v) = new_r4 { lock.rotary_4 = v; }
+            }
+
+            thread::sleep(Duration::from_millis(20)); // Muestreo constante a 50 Hz
         }
     }
 }
@@ -223,5 +337,20 @@ mod tests {
         assert_eq!(p.evaluate(0.1), 0.0);
         assert_eq!(p.evaluate(-0.19), 0.0);
         assert!(p.evaluate(0.25) > 0.0);
+    }
+
+    #[test]
+    fn throttle_unipolar_evaluation() {
+        let p = CurveParameters {
+            xsat: 1000,
+            ysat: 1000,
+            deadband: 0,
+            curvature: 500,
+            profile: CurveProfile::J,
+        };
+
+        assert_eq!(p.evaluate(0.0), 0.0);
+        assert_eq!(p.evaluate(1.0), 1.0);
+        assert!(p.evaluate(0.5) > 0.0 && p.evaluate(0.5) < 1.0);
     }
 }

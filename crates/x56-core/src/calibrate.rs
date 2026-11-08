@@ -26,8 +26,8 @@ pub struct HallCalibrationResult {
 pub struct Calibrator;
 
 impl Calibrator {
-    /// Localiza dinámicamente el nodo `hidraw` correspondiente a la Interfaz 0 (Input) del Stick.
-    pub fn find_stick_input_node() -> Option<PathBuf> {
+    /// Localiza dinámicamente el nodo `hidraw` correspondiente a la Interfaz 0 (Input) del dispositivo indicado.
+    pub fn find_device_input_node(target_kind: DeviceKind) -> Option<PathBuf> {
         let sys_hidraw = Path::new("/sys/class/hidraw");
         let entries = fs::read_dir(sys_hidraw).ok()?;
 
@@ -36,7 +36,7 @@ impl Calibrator {
             if let Ok(uevent) = fs::read_to_string(&uevent_path) {
                 if let Some((vid, pid)) = Self::parse_uevent_hid_id(&uevent) {
                     if let Some((_, kind)) = identify_device(vid, pid) {
-                        if kind == DeviceKind::Stick {
+                        if kind == target_kind {
                             if let Some(iface) = Self::find_interface_number(&entry.path()) {
                                 if iface == 0 {
                                     return Some(Path::new("/dev").join(entry.file_name()));
@@ -48,6 +48,16 @@ impl Calibrator {
             }
         }
         None
+    }
+
+    /// Localiza dinámicamente el nodo `hidraw` correspondiente a la Interfaz 0 (Input) del Stick.
+    pub fn find_stick_input_node() -> Option<PathBuf> {
+        Self::find_device_input_node(DeviceKind::Stick)
+    }
+
+    /// Localiza dinámicamente el nodo `hidraw` correspondiente a la Interfaz 0 (Input) del Throttle.
+    pub fn find_throttle_input_node() -> Option<PathBuf> {
+        Self::find_device_input_node(DeviceKind::Throttle)
     }
 
     /// Muestrea la posición física central del stick leyendo N paquetes desde la Interfaz 0
