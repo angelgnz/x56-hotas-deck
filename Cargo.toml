@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/x56-proto",
+    "crates/x56-hid",
+    "crates/x56-core",
+    "crates/x56-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/nirenjan/x56linux"
