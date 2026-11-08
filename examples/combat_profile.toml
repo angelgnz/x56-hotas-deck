@@ -1,0 +1,90 @@
+version = 1
+name = "Combate Aéreo y Espacial (DCS / Elite / Star Citizen)"
+description = "Curvas progresivas agresivas, menor zona muerta para microcorrecciones de puntería e iluminación táctica naranja"
+
+[stick]
+rgb = "#ff4400"
+
+[[stick.axes]]
+name = "X (Roll)"
+axis_id = 48
+xsat = 1000
+ysat = 1000
+deadband = 25
+curvature = 600
+profile = "s"
+
+[[stick.axes]]
+name = "Y (Pitch)"
+axis_id = 49
+xsat = 1000
+ysat = 1000
+deadband = 25
+curvature = 600
+profile = "s"
+
+[[stick.axes]]
+name = "Z (Twist/Yaw)"
+axis_id = 53
+xsat = 1000
+ysat = 1000
+deadband = 10
+curvature = 550
+profile = "s"
+
+[throttle]
+rgb = "#ff4400"
+
+[[throttle.axes]]
+name = "Throttle Left"
+axis_id = 48
+xsat = 1000
+ysat = 1000
+deadband = 0
+curvature = 480
+profile = "j"
+
+[[throttle.axes]]
+name = "Throttle Right"
+axis_id = 49
+xsat = 1000
+ysat = 1000
+deadband = 0
+curvature = 480
+profile = "j"
+
+[[throttle.axes]]
+name = "Rotary 1"
+axis_id = 50
+xsat = 1000
+ysat = 1000
+deadband = 0
+curvature = 500
+profile = "s"
+
+[[throttle.axes]]
+name = "Rotary 2"
+axis_id = 53
+xsat = 1000
+ysat = 1000
+deadband = 0
+curvature = 500
+profile = "s"
+
+[[throttle.axes]]
+name = "Rotary 4"
+axis_id = 54
+xsat = 1000
+ysat = 1000
+deadband = 0
+curvature = 500
+profile = "s"
+
+[[throttle.axes]]
+name = "Rotary 3"
+axis_id = 55
+xsat = 1000
+ysat = 1000
+deadband = 0
+curvature = 500
+profile = "s"

@@ -1,0 +1,90 @@
+version = 1
+name = "Perfil de Fábrica Saitek X56"
+description = "Curvas lineales y zonas muertas estándar de fábrica para simulación civil y general"
+
+[stick]
+rgb = "#00ffff"
+
+[[stick.axes]]
+name = "X (Roll)"
+axis_id = 48
+xsat = 1000
+ysat = 1000
+deadband = 60
+curvature = 500
+profile = "s"
+
+[[stick.axes]]
+name = "Y (Pitch)"
+axis_id = 49
+xsat = 1000
+ysat = 1000
+deadband = 50
+curvature = 500
+profile = "s"
+
+[[stick.axes]]
+name = "Z (Twist/Yaw)"
+axis_id = 53
+xsat = 1000
+ysat = 1000
+deadband = 0
+curvature = 500
+profile = "s"
+
+[throttle]
+rgb = "#00ffff"
+
+[[throttle.axes]]
+name = "Throttle Left"
+axis_id = 48
+xsat = 1000
+ysat = 1000
+deadband = 0
+curvature = 500
+profile = "j"
+
+[[throttle.axes]]
+name = "Throttle Right"
+axis_id = 49
+xsat = 1000
+ysat = 1000
+deadband = 0
+curvature = 500
+profile = "j"
+
+[[throttle.axes]]
+name = "Rotary 1"
+axis_id = 50
+xsat = 1000
+ysat = 1000
+deadband = 0
+curvature = 500
+profile = "s"
+
+[[throttle.axes]]
+name = "Rotary 2"
+axis_id = 53
+xsat = 1000
+ysat = 1000
+deadband = 0
+curvature = 500
+profile = "s"
+
+[[throttle.axes]]
+name = "Rotary 4"
+axis_id = 54
+xsat = 1000
+ysat = 1000
+deadband = 0
+curvature = 500
+profile = "s"
+
+[[throttle.axes]]
+name = "Rotary 3"
+axis_id = 55
+xsat = 1000
+ysat = 1000
+deadband = 0
+curvature = 500
+profile = "s"

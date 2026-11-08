@@ -9,6 +9,16 @@ pub use x56_hid::{
 };
 pub use x56_proto::{AxisConfig, CurveProfile, ProtoError, RgbColor};
 
+pub mod calibrate;
+pub mod doctor;
+pub mod profile;
+
+pub use calibrate::{Calibrator, HallCalibrationResult};
+pub use doctor::{CheckStatus, Doctor, DoctorCheck, DoctorReport};
+pub use profile::{
+    AxisProfileEntry, DeviceProfile, FullProfile, ProfileApplySummary, ProfileManager,
+};
+
 /// Error general de la capa de dominio `x56-core`.
 #[derive(Debug)]
 pub enum CoreError {

@@ -1,8 +1,10 @@
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use x56_core::{
-    axis_name, parse_color, CurveProfile, DeviceKind, TargetDevice, X56Descriptor, X56Manager,
+    axis_name, parse_color, Calibrator, CheckStatus, CurveProfile, DeviceKind, Doctor, FullProfile,
+    ProfileManager, TargetDevice, X56Descriptor, X56Manager,
 };
 
 #[derive(Parser)]
@@ -34,6 +36,29 @@ enum Commands {
     Axis {
         #[command(subcommand)]
         command: AxisCommands,
+    },
+
+    /// Exporta o aplica perfiles completos de configuración en formato TOML
+    Profile {
+        #[command(subcommand)]
+        command: ProfileCommands,
+    },
+
+    /// Diagnostica permisos udev, conectividad USB e integridad del sistema
+    Doctor {
+        /// Salida en formato JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Calibra el punto cero del sensor Hall (centrado) de la palanca (Stick)
+    Calibrate(CalibrateArgs),
+
+    /// Restaura los ajustes de fábrica predeterminados del hardware
+    ResetDefaults {
+        /// Dispositivo destino: stick, throttle o all (por defecto: all)
+        #[arg(short, long, default_value = "all")]
+        device: CliTargetDevice,
     },
 }
 
@@ -150,6 +175,56 @@ struct AxisSetArgs {
     json: bool,
 }
 
+#[derive(Subcommand)]
+enum ProfileCommands {
+    /// Guarda el perfil actual de todos los ejes y luces en un archivo TOML
+    Save {
+        /// Ruta del archivo .toml destino
+        path: PathBuf,
+
+        /// Nombre opcional para el perfil
+        #[arg(short, long)]
+        name: Option<String>,
+
+        /// Color RGB para el Stick (ej: #00ffff)
+        #[arg(long)]
+        stick_rgb: Option<String>,
+
+        /// Color RGB para el Throttle (ej: #ff5500)
+        #[arg(long)]
+        throttle_rgb: Option<String>,
+    },
+
+    /// Carga y aplica un perfil completo desde un archivo TOML
+    Load {
+        /// Ruta del archivo .toml a aplicar
+        path: PathBuf,
+
+        /// Salida en formato JSON
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Args)]
+struct CalibrateArgs {
+    /// Dispositivo a calibrar (actualmente: stick)
+    #[arg(short, long, default_value = "stick")]
+    device: CliDeviceKind,
+
+    /// Número de muestras de posición a promediar (por defecto: 50)
+    #[arg(short, long, default_value_t = 50)]
+    samples: usize,
+
+    /// Solo simular y mostrar valores calculados sin escribir en la EEPROM del dispositivo
+    #[arg(long)]
+    dry_run: bool,
+
+    /// Salida en formato JSON
+    #[arg(long)]
+    json: bool,
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
@@ -160,6 +235,18 @@ fn main() -> ExitCode {
             AxisCommands::Get { device, axis, json } => handle_axis_get(device.into(), &axis, json),
             AxisCommands::Set(args) => handle_axis_set(args),
         },
+        Commands::Profile { command } => match command {
+            ProfileCommands::Save {
+                path,
+                name,
+                stick_rgb,
+                throttle_rgb,
+            } => handle_profile_save(path, name, stick_rgb, throttle_rgb),
+            ProfileCommands::Load { path, json } => handle_profile_load(path, json),
+        },
+        Commands::Doctor { json } => handle_doctor(json),
+        Commands::Calibrate(args) => handle_calibrate(args),
+        Commands::ResetDefaults { device } => handle_reset_defaults(device.into()),
     }
 }
 
@@ -348,6 +435,211 @@ fn handle_axis_set(args: AxisSetArgs) -> ExitCode {
         }
         Err(err) => {
             eprintln!("Error configurando eje: {}", err);
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn handle_doctor(json: bool) -> ExitCode {
+    let report = Doctor::run();
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&report).unwrap());
+        return if report.is_healthy() {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::FAILURE
+        };
+    }
+
+    println!("Diagnóstico del Sistema Saitek / Logitech X56 (x56 doctor)");
+    println!("==========================================================");
+    for check in &report.checks {
+        let tag = match check.status {
+            CheckStatus::Ok => "✓ [OK]  ",
+            CheckStatus::Warn => "! [WARN]",
+            CheckStatus::Fail => "✗ [FAIL]",
+        };
+        println!("{} {}: {}", tag, check.title, check.message);
+        if let Some(ref remedy) = check.remedy {
+            println!("         ↳ Solución sugerida: {}", remedy);
+        }
+    }
+    println!("----------------------------------------------------------");
+    println!(
+        "Resumen: {} OK, {} advertencias, {} fallos.",
+        report.ok_count, report.warn_count, report.fail_count
+    );
+
+    if report.is_healthy() {
+        println!("Estado del sistema: 100% OPERATIVO.");
+        ExitCode::SUCCESS
+    } else {
+        println!("Se detectaron problemas que impiden el funcionamiento óptimo sin privilegios.");
+        ExitCode::FAILURE
+    }
+}
+
+fn handle_profile_save(
+    path: PathBuf,
+    name: Option<String>,
+    stick_rgb: Option<String>,
+    throttle_rgb: Option<String>,
+) -> ExitCode {
+    let profile_name = name.unwrap_or_else(|| {
+        path.file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| "X56 Profile".into())
+    });
+
+    match ProfileManager::dump_current(&profile_name, stick_rgb.as_deref(), throttle_rgb.as_deref())
+    {
+        Ok(profile) => match profile.save_to_file(&path) {
+            Ok(_) => {
+                println!(
+                    "Perfil '{}' guardado exitosamente en: {}",
+                    profile.name,
+                    path.display()
+                );
+                if let Some(ref s) = profile.stick {
+                    println!("  • Palanca (Stick) : {} ejes exportados", s.axes.len());
+                }
+                if let Some(ref t) = profile.throttle {
+                    println!("  • Gases (Throttle): {} ejes exportados", t.axes.len());
+                }
+                ExitCode::SUCCESS
+            }
+            Err(err) => {
+                eprintln!("Error escribiendo archivo de perfil: {}", err);
+                ExitCode::FAILURE
+            }
+        },
+        Err(err) => {
+            eprintln!("Error volcando configuración de hardware: {}", err);
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn handle_profile_load(path: PathBuf, json: bool) -> ExitCode {
+    let profile = match FullProfile::load_from_file(&path) {
+        Ok(p) => p,
+        Err(err) => {
+            eprintln!("Error leyendo archivo de perfil {:?}: {}", path, err);
+            return ExitCode::FAILURE;
+        }
+    };
+
+    match ProfileManager::apply(&profile) {
+        Ok(summary) => {
+            if json {
+                let json_obj = serde_json::json!({
+                    "status": "applied",
+                    "profile_name": profile.name,
+                    "file": path.display().to_string(),
+                    "stick_axes_updated": summary.stick_axes_updated,
+                    "throttle_axes_updated": summary.throttle_axes_updated,
+                    "rgb_updated": summary.rgb_updated,
+                });
+                println!("{}", serde_json::to_string_pretty(&json_obj).unwrap());
+            } else {
+                println!("Perfil '{}' aplicado exitosamente:", profile.name);
+                println!(
+                    "  • Ejes actualizados en Stick    : {}",
+                    summary.stick_axes_updated
+                );
+                println!(
+                    "  • Ejes actualizados en Throttle : {}",
+                    summary.throttle_axes_updated
+                );
+                if summary.rgb_updated {
+                    println!("  • Iluminación RGB               : Actualizada según perfil");
+                }
+            }
+            ExitCode::SUCCESS
+        }
+        Err(err) => {
+            eprintln!("Error aplicando perfil al hardware: {}", err);
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn handle_reset_defaults(target: TargetDevice) -> ExitCode {
+    match ProfileManager::reset_defaults(target) {
+        Ok(_) => {
+            match target {
+                TargetDevice::All => {
+                    println!("Valores predeterminados de fábrica restaurados en Stick y Throttle.")
+                }
+                TargetDevice::Stick => {
+                    println!("Valores predeterminados de fábrica restaurados en el Stick.")
+                }
+                TargetDevice::Throttle => {
+                    println!("Valores predeterminados de fábrica restaurados en el Throttle.")
+                }
+            }
+            ExitCode::SUCCESS
+        }
+        Err(err) => {
+            eprintln!("Error restaurando valores de fábrica: {}", err);
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn handle_calibrate(args: CalibrateArgs) -> ExitCode {
+    if args.device != CliDeviceKind::Stick {
+        eprintln!("Error: La calibración de sensores de efecto Hall está disponible únicamente para la palanca (Stick).");
+        return ExitCode::FAILURE;
+    }
+
+    match Calibrator::calibrate_stick(args.samples, args.dry_run) {
+        Ok(results) => {
+            if args.json {
+                println!("{}", serde_json::to_string_pretty(&results).unwrap());
+                return ExitCode::SUCCESS;
+            }
+
+            println!("Calibración de Sensores de Efecto Hall (Stick X e Y)");
+            println!("====================================================");
+            if args.dry_run {
+                println!("MODO SIMULACIÓN (DRY-RUN): Ningún dato fue escrito en la EEPROM.");
+            } else {
+                println!("MODO ACTIVO: Puntos cero aplicados y guardados en el hardware.");
+            }
+            println!(
+                "Muestras analizadas: {} paquetes desde la Interfaz 0 (solo lectura)",
+                args.samples
+            );
+            println!();
+
+            for r in &results {
+                println!("• {}", r.axis_name);
+                println!(
+                    "  Punto cero anterior  : {:#06x} ({})",
+                    r.old_hall_zero, r.old_hall_zero
+                );
+                println!(
+                    "  Punto cero muestreado: {:#06x} ({})",
+                    r.sampled_hall_zero, r.sampled_hall_zero
+                );
+                println!("  Ajuste (Delta)       : {:+}", r.delta);
+                println!(
+                    "  Estado               : {}",
+                    if r.applied {
+                        "APLICADO"
+                    } else {
+                        "PENDIENTE (dry-run)"
+                    }
+                );
+                println!();
+            }
+
+            ExitCode::SUCCESS
+        }
+        Err(err) => {
+            eprintln!("Error ejecutando calibración: {}", err);
             ExitCode::FAILURE
         }
     }

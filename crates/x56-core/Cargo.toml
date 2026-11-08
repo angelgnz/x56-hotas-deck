@@ -9,3 +9,5 @@ repository.workspace = true
 x56-proto = { path = "../x56-proto" }
 x56-hid = { path = "../x56-hid" }
 serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+libc = "0.2"
