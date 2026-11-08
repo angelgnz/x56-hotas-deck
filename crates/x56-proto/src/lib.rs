@@ -11,21 +11,34 @@ pub const REPORT_ID_COMMIT: u8 = 0x01;
 pub const REPORT_ID_RGB: u8 = 0x09;
 pub const REPORT_ID_AXIS: u8 = 0x0b;
 pub const REPORT_ID_AXIS_RESPONSE: u8 = 0x08;
+pub const REPORT_ID_INTERRUPT_RESPONSE: u8 = 0xff;
 
 /// Valor máximo permitido para xsat/ysat/deadband/curvature.
 pub const AXIS_PARAM_MAX: u16 = 1000;
 
-/// Longitud mínima de la respuesta (Report 0x08) para contener todos los campos.
+/// Longitud mínima de la respuesta Feature Report 0x08 (Packet 6).
 pub const AXIS_RESPONSE_MIN_LEN: usize = 38;
 
-// Offsets en la respuesta Report 0x08 (byte 0 = Report ID).
-const RESP_AXIS_ID: usize = 22;
-const RESP_XSAT: usize = 27;
-const RESP_YSAT: usize = 29;
-const RESP_DEADBAND: usize = 31;
-const RESP_CURVATURE: usize = 33;
-const RESP_PROFILE: usize = 35;
-const RESP_HALL_ZERO: usize = 36;
+/// Longitud mínima de la respuesta Interrupt Report 0xff (Packet 8).
+pub const AXIS_INTERRUPT_MIN_LEN: usize = 20;
+
+// Offsets en la respuesta Feature Report 0x08 (Packet 6).
+const RESP6_AXIS_ID: usize = 22;
+const RESP6_XSAT: usize = 27;
+const RESP6_YSAT: usize = 29;
+const RESP6_DEADBAND: usize = 31;
+const RESP6_CURVATURE: usize = 33;
+const RESP6_PROFILE: usize = 35;
+const RESP6_HALL_ZERO: usize = 36;
+
+// Offsets en la respuesta Interrupt Report 0xff (Packet 8).
+const RESP8_AXIS_ID: usize = 4;
+const RESP8_XSAT: usize = 9;
+const RESP8_YSAT: usize = 11;
+const RESP8_DEADBAND: usize = 13;
+const RESP8_CURVATURE: usize = 15;
+const RESP8_PROFILE: usize = 17;
+const RESP8_HALL_ZERO: usize = 18;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProtoError {
@@ -298,19 +311,40 @@ impl AxisConfig {
         Ok(())
     }
 
-    /// Decodifica la respuesta Feature Report 0x08 (Packet 6/8).
+    /// Decodifica la configuración de un eje desde la respuesta binaria de hardware.
+    ///
+    /// Soporta tanto Packet 8 (Interrupt Report IN con prefijo `0xff`, obtenido tras Packet 7)
+    /// como Packet 6 (Feature Report `0x08`, primer eje del dispositivo).
     pub fn decode(buf: &[u8]) -> Result<Self, ProtoError> {
-        check_report_id(buf, REPORT_ID_AXIS_RESPONSE)?;
-        check_len(buf, AXIS_RESPONSE_MIN_LEN)?;
-        Self::new(
-            buf[RESP_AXIS_ID],
-            be16(buf, RESP_XSAT),
-            be16(buf, RESP_YSAT),
-            be16(buf, RESP_DEADBAND),
-            be16(buf, RESP_CURVATURE),
-            CurveProfile::try_from(buf[RESP_PROFILE])?,
-            be16(buf, RESP_HALL_ZERO),
-        )
+        check_len(buf, 1)?;
+        if buf[0] == REPORT_ID_INTERRUPT_RESPONSE {
+            check_len(buf, AXIS_INTERRUPT_MIN_LEN)?;
+            Self::new(
+                buf[RESP8_AXIS_ID],
+                be16(buf, RESP8_XSAT),
+                be16(buf, RESP8_YSAT),
+                be16(buf, RESP8_DEADBAND),
+                be16(buf, RESP8_CURVATURE),
+                CurveProfile::try_from(buf[RESP8_PROFILE])?,
+                be16(buf, RESP8_HALL_ZERO),
+            )
+        } else if buf[0] == REPORT_ID_AXIS_RESPONSE {
+            check_len(buf, AXIS_RESPONSE_MIN_LEN)?;
+            Self::new(
+                buf[RESP6_AXIS_ID],
+                be16(buf, RESP6_XSAT),
+                be16(buf, RESP6_YSAT),
+                be16(buf, RESP6_DEADBAND),
+                be16(buf, RESP6_CURVATURE),
+                CurveProfile::try_from(buf[RESP6_PROFILE])?,
+                be16(buf, RESP6_HALL_ZERO),
+            )
+        } else {
+            Err(ProtoError::UnexpectedReportId {
+                expected: REPORT_ID_AXIS_RESPONSE,
+                got: buf[0],
+            })
+        }
     }
 }
 
@@ -387,8 +421,8 @@ impl PacketAxisConfig {
 
 /// Packet 7: Query Axis Config Request (Report 0x0b, subcomando 0x02).
 ///
-/// Se envía como feature set; la respuesta se lee con Report 0x08 y se
-/// decodifica con [`AxisConfig::decode`].
+/// Se envía como feature set; la respuesta se lee como reporte de interrupción
+/// o con Feature Report 0x08 y se decodifica con [`AxisConfig::decode`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PacketAxisQuery {
     pub axis_id: u8,
@@ -434,6 +468,58 @@ impl PacketAxisQuery {
     }
 }
 
+/// Packet 1: Selección de eje fase 1 (Report 0x0b, subcomando 0x03).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PacketAxisSelect1 {
+    pub axis_id: u8,
+}
+
+impl PacketAxisSelect1 {
+    pub const fn new(axis_id: u8) -> Self {
+        Self { axis_id }
+    }
+
+    pub fn encode(&self, buf: &mut [u8; PACKET_LEN]) {
+        *buf = [0; PACKET_LEN];
+        buf[0] = REPORT_ID_AXIS;
+        buf[1] = 0x03;
+        buf[2] = 0x00;
+        buf[3] = self.axis_id;
+    }
+
+    pub fn to_bytes(&self) -> [u8; PACKET_LEN] {
+        let mut b = [0; PACKET_LEN];
+        self.encode(&mut b);
+        b
+    }
+}
+
+/// Packet 2: Selección de eje fase 2 (Report 0x0b, subcomando 0x04).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PacketAxisSelect2 {
+    pub axis_id: u8,
+}
+
+impl PacketAxisSelect2 {
+    pub const fn new(axis_id: u8) -> Self {
+        Self { axis_id }
+    }
+
+    pub fn encode(&self, buf: &mut [u8; PACKET_LEN]) {
+        *buf = [0; PACKET_LEN];
+        buf[0] = REPORT_ID_AXIS;
+        buf[1] = 0x04;
+        buf[2] = 0x00;
+        buf[3] = self.axis_id;
+    }
+
+    pub fn to_bytes(&self) -> [u8; PACKET_LEN] {
+        let mut b = [0; PACKET_LEN];
+        self.encode(&mut b);
+        b
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -462,6 +548,25 @@ mod tests {
         assert_eq!(cfg.profile, CurveProfile::S);
         assert_eq!(cfg.hall_zero, 0x8859);
         assert_eq!(cfg, sample());
+    }
+
+    #[test]
+    fn decode_real_hardware_capture_packet8() {
+        const HW_PACKET8: [u8; 64] = [
+            0xff, 0x0b, 0x02, 0x00, 0x31, 0x00, 0x01, 0x00, 0x31, 0x03, 0xe8, 0x03, 0xe8, 0x00,
+            0x32, 0x01, 0xf4, 0x00, 0x83, 0xf7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
+        let cfg = AxisConfig::decode(&HW_PACKET8).unwrap();
+        assert_eq!(cfg.axis_id, 0x31);
+        assert_eq!(cfg.xsat, 1000);
+        assert_eq!(cfg.ysat, 1000);
+        assert_eq!(cfg.deadband, 50);
+        assert_eq!(cfg.curvature, 500);
+        assert_eq!(cfg.profile, CurveProfile::S);
+        assert_eq!(cfg.hall_zero, 0x83f7);
     }
 
     #[test]

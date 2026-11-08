@@ -6,3 +6,6 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+x56-proto = { path = "../x56-proto" }
+x56-hid = { path = "../x56-hid" }
+serde = { version = "1.0", features = ["derive"] }

@@ -12,8 +12,9 @@ use std::fmt;
 
 use hidapi::{DeviceInfo, HidApi, HidDevice, HidError};
 use x56_proto::{
-    AxisConfig, PacketAxisConfig, PacketAxisQuery, PacketCommit, PacketRgb, ProtoError, RgbColor,
-    AXIS_RESPONSE_MIN_LEN, PACKET_LEN, REPORT_ID_AXIS_RESPONSE,
+    AxisConfig, PacketAxisConfig, PacketAxisQuery, PacketAxisSelect1, PacketAxisSelect2,
+    PacketCommit, PacketRgb, ProtoError, RgbColor, AXIS_RESPONSE_MIN_LEN, PACKET_LEN,
+    REPORT_ID_AXIS_RESPONSE,
 };
 
 /// Vendor ID de Saitek / Mad Catz.
@@ -324,13 +325,30 @@ impl X56Device {
     /// Obtiene la configuración actual de un eje (`axis_id`).
     ///
     /// Envía primero [`PacketAxisQuery`] (Report `0x0b`, subcomando `0x02`) para seleccionar
-    /// el eje y a continuación solicita el Feature Report `0x08` ([`REPORT_ID_AXIS_RESPONSE`]),
-    /// decodificando la respuesta con [`AxisConfig::decode`].
+    /// el eje y a continuación lee Packet 8 ([`x56_proto::REPORT_ID_INTERRUPT_RESPONSE`])
+    /// desde el endpoint de interrupción IN, con fallback al Feature Report `0x08`.
     pub fn get_axis_config(&self, axis_id: u8) -> Result<AxisConfig, HidTransportError> {
         let query_pkt = PacketAxisQuery::new(axis_id).to_bytes();
         self.device.send_feature_report(&query_pkt)?;
 
         let mut buf = [0u8; PACKET_LEN];
+        // En Linux hidraw, Packet 8 arriba como reporte de interrupción IN
+        for _ in 0..5 {
+            match self.device.read_timeout(&mut buf, 300) {
+                Ok(len) if len >= 20 => {
+                    if let Ok(cfg) = AxisConfig::decode(&buf[..len]) {
+                        if cfg.axis_id == axis_id {
+                            return Ok(cfg);
+                        }
+                    }
+                }
+                Ok(_) => {}
+                Err(err) => return Err(HidTransportError::Hid(err)),
+            }
+        }
+
+        // Fallback: Si el reporte de interrupción no llegó o es el primer eje
+        buf = [0u8; PACKET_LEN];
         buf[0] = REPORT_ID_AXIS_RESPONSE;
         let len = self.device.get_feature_report(&mut buf)?;
         if len < AXIS_RESPONSE_MIN_LEN {
@@ -344,14 +362,38 @@ impl X56Device {
         Ok(cfg)
     }
 
-    /// Aplica la configuración de un eje enviando [`PacketAxisConfig`] (Report `0x0b`)
-    /// seguido de [`PacketCommit`] (Report `0x01`) como Feature Reports.
+    /// Aplica la configuración de un eje al hardware mediante la secuencia completa del protocolo:
+    /// 1. Packet 1 (`PacketAxisSelect1`, Report `0x0b`, subcomando `0x03`)
+    /// 2. Packet 2 (`PacketAxisSelect2`, Report `0x0b`, subcomando `0x04`)
+    /// 3. Packet 3 (`PacketAxisConfig`, Report `0x0b`, subcomando `0x01`)
+    /// 4. Packet 4 (`PacketCommit`, Report `0x01`)
+    ///
+    /// Se introduce un retardo de 20ms entre transferencias para permitir al microcontrolador
+    /// del X56 procesar los comandos y evitar saturación del buffer interno.
     pub fn set_axis_config(&self, config: &AxisConfig) -> Result<(), HidTransportError> {
+        let p1 = PacketAxisSelect1::new(config.axis_id).to_bytes();
+        let p2 = PacketAxisSelect2::new(config.axis_id).to_bytes();
         let axis_pkt = PacketAxisConfig::new(*config).to_bytes()?;
         let commit_pkt = PacketCommit.to_bytes();
 
+        let inter_packet_delay = std::time::Duration::from_millis(20);
+
+        self.device.send_feature_report(&p1)?;
+        std::thread::sleep(inter_packet_delay);
+
+        self.device.send_feature_report(&p2)?;
+        std::thread::sleep(inter_packet_delay);
+
+        // Drenar acknowledge de interrupción sin bloquear
+        let mut discard_buf = [0u8; PACKET_LEN];
+        let _ = self.device.read_timeout(&mut discard_buf, 10);
+
         self.device.send_feature_report(&axis_pkt)?;
+        std::thread::sleep(inter_packet_delay);
+
         self.device.send_feature_report(&commit_pkt)?;
+        std::thread::sleep(inter_packet_delay);
+
         Ok(())
     }
 
