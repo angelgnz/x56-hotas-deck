@@ -3,7 +3,7 @@
 [![Rust](https://img.shields.io/badge/language-Rust-orange.svg)](https://www.rust-lang.org/)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Platform: Linux](https://img.shields.io/badge/platform-Linux-green.svg)]()
-[![Tests: 23 passing](https://img.shields.io/badge/tests-23%20passed-brightgreen.svg)]()
+[![Tests: 25 passing](https://img.shields.io/badge/tests-25%20passed-brightgreen.svg)]()
 
 Herramienta moderna, segura y de alto rendimiento en **Rust** para la configuración de iluminación LED RGB, curvas de respuesta de ejes, zonas muertas y calibración de hardware en el sistema HOTAS **Saitek / Mad Catz Pro Flight X-56 Rhino** y **Logitech G X56**.
 
@@ -26,6 +26,11 @@ Diseñada específicamente para operar en Linux **sin privilegios de root (`sudo
   - [Perfiles TOML (`x56 profile`)](#5-perfiles-toml-x56-profile)
   - [Calibración de Sensores Hall (`x56 calibrate`)](#6-calibración-de-sensores-hall-x56-calibrate)
   - [Restauración de Fábrica (`x56 reset-defaults`)](#7-restauración-de-fábrica-x56-reset-defaults)
+- [Centro de Control Gráfico (`x56-gui`)](#centro-de-control-gráfico-x56-gui)
+  - [Editor de Curvas con Muestreo en Vivo](#1-editor-de-curvas-con-muestreo-en-vivo)
+  - [Gestor de Iluminación RGB](#2-gestor-de-iluminación-rgb)
+  - [Asistente de Calibración Hall](#3-asistente-de-calibración-hall)
+  - [Diagnóstico del Sistema Integrado](#4-diagnóstico-del-sistema-integrado)
 - [Especificación del Protocolo Binario HID](#especificación-del-protocolo-binario-hid)
 - [Arquitectura del Workspace](#arquitectura-del-workspace)
 - [Estado del Roadmap](#estado-del-roadmap)
@@ -258,6 +263,49 @@ x56 reset-defaults --device all
 
 ---
 
+## Centro de Control Gráfico (`x56-gui`)
+
+`x56-gui` es una interfaz gráfica moderna, nativa y de modo inmediato construida con **egui / eframe** y **egui_plot**. Se ejecuta a 30+ FPS en X11 o Wayland con renderizado OpenGL acelerado.
+
+```bash
+# Lanzar la aplicación gráfica
+x56-gui
+
+# O compilar y ejecutar directamente con Cargo
+cargo run -p x56-gui --release
+```
+
+### 1. Editor de Curvas con Muestreo en Vivo
+- **Visualización 2D reactiva**: Dibuja la función de transferencia matemática real calculando en tiempo real las transformaciones de curvatura (S/J), saturación X/Y y zona muerta (deadband).
+- **Entrada física en vivo**: Un hilo poller en segundo plano lee pasivamente los reportes HID de la **Interfaz 0** (`/dev/hidraw*`) sin detach del driver del kernel, graficando un punto rojo animado en la posición exacta del joystick.
+- **Controles interactivos**: Sliders para curvatura (`0..1000`), deadband (`0..1000`), saturación X/Y (`0..1000`) y selector de perfil (Simétrico S vs Progresivo J).
+- **Botones de acción inmediata**:
+  - `Aplicar al Hardware`: Escribe y comete la configuración en la EEPROM del periférico.
+  - `Leer del Hardware`: Refresca los controles leyendo la configuración actual del firmware.
+  - `Valores Lineales (1:1)`: Restablece rápidamente la curva a respuesta pura sin zona muerta.
+
+### 2. Gestor de Iluminación RGB
+- Selector de color visual integrado (Color Picker RGB).
+- Previsualización en tiempo real y aplicación instantánea en hardware.
+- Sincronización automática opcional entre Stick y Throttle con un solo clic.
+- Paleta de presets rápidos: *Rhino Cyan, Neon Green, Solar Orange, Deep Red, Pure White, Royal Purple, Stealth (Off)*.
+
+### 3. Asistente de Calibración Hall
+- Wizard guiado paso a paso para eliminar el centrado imperfecto y la deriva física en los sensores de Efecto Hall (ejes X e Y del Stick).
+- Muestreo pasivo de 50 paquetes del centro físico sin interferir con simuladores activos.
+- Cálculo de desviación (Delta) y evaluación de umbral de deriva (< 1000 = Excelente, 1000..3000 = Aceptable, > 3000 = Desviación Alta).
+- Modo seguro `--dry-run` para previsualizar antes de cometer en la EEPROM.
+
+### 4. Diagnóstico del Sistema Integrado
+- Panel visual de comprobación del estado del sistema en tiempo real.
+- Inspección de 6 capas: permisos udev, nodos `/dev/hidraw*`, detección de periféricos USB, soporte de simulador (`/dev/input/js*`) y handshake bidireccional con el firmware.
+
+### 5. Gestión de Perfiles TOML
+- Acceso directo en la barra superior para `Guardar Perfil TOML` o `Cargar Perfil TOML`.
+- Permite respaldar perfiles completos y compartirlos entre diferentes simuladores de vuelo (*DCS*, *MSFS*, *X-Plane*, *Star Citizen*).
+
+---
+
 ## Especificación del Protocolo Binario HID
 
 El periférico Saitek/Logitech X56 expone dos interfaces USB principales:
@@ -298,7 +346,8 @@ El proyecto está organizado en un workspace modular de Rust:
 x56linux/
 ├── Cargo.toml
 ├── packaging/
-│   └── 70-x56.rules             # Regla udev uaccess moderna
+│   ├── 70-x56.rules             # Regla udev uaccess moderna
+│   └── com.saitek.x56.desktop   # Lanzador de escritorio Linux
 ├── examples/
 │   ├── default_profile.toml     # Perfil de fábrica
 │   └── combat_profile.toml      # Perfil de combate para simuladores
@@ -306,7 +355,8 @@ x56linux/
     ├── x56-proto/               # Decodificador/codificador binario puro (no_std friendly)
     ├── x56-hid/                 # Transporte HID hidraw (aislamiento de interfaz 2)
     ├── x56-core/                # Dominio, perfiles TOML, calibrador Hall y doctor
-    └── x56-cli/                 # CLI basado en clap con salidas formateadas y --json
+    ├── x56-cli/                 # CLI basado en clap con salidas formateadas y --json
+    └── x56-gui/                 # Centro de control gráfico nativo (egui / egui_plot)
 ```
 
 ---
@@ -329,8 +379,14 @@ x56linux/
 - [ ] **Fase 2 — Empaquetado y Servicio en Segundo Plano**
   - [ ] Generación de paquetes `.deb` y `.rpm`.
   - [ ] Servicio `systemd --user` para reaplicación automática de perfiles al reconectar.
-- [ ] **Fase 3 — Interfaz Gráfica (GUI)**
-  - [ ] Editor visual interactivo de curvas y previsualización de entrada en vivo.
+- [x] **Fase 3 — Interfaz Gráfica (GUI)**
+  - [x] Centro de control nativo en egui (`x56-gui`) a 30+ FPS.
+  - [x] Editor visual interactivo de curvas 2D con `egui_plot`.
+  - [x] Graficado en tiempo real del punto físico de entrada (muestreo pasivo en Interfaz 0).
+  - [x] Gestor de color RGB con selector interactivo y sincronización Stick + Throttle.
+  - [x] Asistente paso a paso de calibración de sensores Hall con umbrales de deriva.
+  - [x] Pestaña de diagnóstico del sistema (`DoctorTab`) integrada.
+  - [x] Modal de exportación / importación de perfiles TOML.
 
 ---
 

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=X56 HOTAS Control Center
+Comment=Configurador nativo para Saitek / Logitech G X56 HOTAS (curvas, RGB, calibración Hall)
+Exec=x56-gui
+Icon=input-gaming
+Terminal=false
+Type=Application
+Categories=Settings;HardwareSettings;Game;
+Keywords=saitek;logitech;x56;hotas;joystick;flight;simulator;curves;rgb;
+StartupNotify=true

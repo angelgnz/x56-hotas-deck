@@ -1,0 +1,21 @@
+# Reglas udev para Saitek / Logitech G X56 HOTAS
+# Otorga permisos de lectura/escritura a usuarios en sesiones locales sin requerir root.
+
+# --- Saitek Pro Flight X56 Rhino (Azul) ---
+# Stick (0738:2221) y Throttle (0738:a221)
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0738", ATTRS{idProduct}=="2221|a221", \
+  TAG+="uaccess", GROUP="input", MODE="0660"
+
+# --- Logitech G X56 HOTAS (Gris/Negro) ---
+# Stick (046d:c22a) y Throttle (046d:c22b)
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c22a|c22b", \
+  TAG+="uaccess", GROUP="input", MODE="0660"
+
+# --- Nivel Dispositivo USB (Fallback) ---
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", \
+  ATTR{idVendor}=="0738", ATTR{idProduct}=="2221|a221", \
+  TAG+="uaccess"
+
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", \
+  ATTR{idVendor}=="046d", ATTR{idProduct}=="c22a|c22b", \
+  TAG+="uaccess"

@@ -1,0 +1,22 @@
+[package]
+name = "x56-gui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "x56-gui"
+path = "src/main.rs"
+
+[dependencies]
+x56-core = { path = "../x56-core" }
+x56-proto = { path = "../x56-proto" }
+eframe = { version = "0.37.0", default-features = false, features = [
+    "default_fonts",
+    "wayland",
+    "x11",
+    "glow",
+] }
+egui_plot = "0.38.0"
+serde = { version = "1.0", features = ["derive"] }

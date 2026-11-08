@@ -5,6 +5,7 @@ members = [
     "crates/x56-hid",
     "crates/x56-core",
     "crates/x56-cli",
+    "crates/x56-gui",
 ]
 
 [workspace.package]
