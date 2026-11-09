@@ -3,7 +3,7 @@
 [![Rust](https://img.shields.io/badge/language-Rust-orange.svg)](https://www.rust-lang.org/)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Platform: Linux](https://img.shields.io/badge/platform-Linux-green.svg)]()
-[![Tests: 44 passing](https://img.shields.io/badge/tests-44%20passed-brightgreen.svg)]()
+[![Tests: 45 passing](https://img.shields.io/badge/tests-45%20passed-brightgreen.svg)]()
 
 Herramienta moderna, segura y de alto rendimiento en **Rust** para la configuración de iluminación LED RGB, curvas de respuesta de ejes, zonas muertas y calibración de hardware en el sistema HOTAS **Saitek / Mad Catz Pro Flight X-56 Rhino** y **Logitech G X56**.
 
@@ -198,15 +198,29 @@ deadband = 0
 curvature = 500
 profile = "j"
 
+[programming.m1]
+name = "Vuelo y Supercrucero"
+rgb = "#9d4edd"          # Color dinámico LED para este modo (morado cósmico)
+
 [programming.m1.cells.stick_trigger]
 button_id = "stick_trigger"
 name = "Fuego Primario"
 keys = ["Space"]
 
+[programming.m2]
+name = "Combate y Ataque"
+rgb = "#ff1100"          # Rojo alerta de combate
+# stick_rgb = "#ff0000"  # Opcional: anulación específica para el Stick
+# throttle_rgb = "#ff1100" # Opcional: anulación específica para el Throttle
+
 [programming.m2.cells.stick_trigger]
 button_id = "stick_trigger"
 name = "Armas de Energía // Modo Combate"
 keys = ["Ctrl", "Space"]
+
+[programming.s1]
+name = "Minería y Operaciones"
+rgb = "#0088ff"          # Azul escaneo y minería
 ```
 
 ### Detalle de Campos y Parámetros
@@ -216,24 +230,28 @@ keys = ["Ctrl", "Space"]
 | `version` | Entero | Sí | Versión del esquema del archivo (actual: `1`). |
 | `name` | String | Sí | Nombre identificador desplegado en la GUI y CLI. |
 | `description` | String | No | Notas o detalles del rol (ej. nave, caza, simulador). |
-| `[stick].rgb` | String | No | Color LED hex del Stick (ej. `"#ff7700"`, `"#00f0ff"`). |
+| `[stick].rgb` | String | No | Color LED hex por defecto del Stick (ej. `"#ff7700"`, `"#00f0ff"`). |
 | `[stick].spring` | String | No | Muelle físico instalado: `"red"` (52mm), `"green"` (47mm), `"yellow"` (42mm) o `"blue"` (36mm). |
-| `[throttle].rgb` | String | No | Color LED hex del cuadrante de gases. |
+| `[throttle].rgb` | String | No | Color LED hex por defecto del cuadrante de gases. |
 | `*.axes[].axis_id` | Entero | Sí | Código de uso HID canónico (48=X, 49=Y, 50=R1, 53=Z/R2, 54=R4, 55=R3). |
 | `*.axes[].deadband`| Entero | Sí | Zona muerta central en rango permille `0..=1000`. |
 | `*.axes[].curvature`| Entero | Sí | Curvatura en rango `0..=1000` (`500` = lineal 1:1, `>500` = curva S/exponencial agresiva). |
 | `*.axes[].profile` | String | Sí | Perfil matemático: `"s"` (simétrico / centro cero) o `"j"` (unipolar progresivo para gases). |
-| `programming.<m>` | Tabla | No | Matriz de comandos para los modos `m1`, `m2` y `s1`. |
+| `programming.<m>` | Tabla | No | Configuración del modo `m1`, `m2` o `s1`. |
+| `programming.<m>.name` | String | No | Nombre descriptivo del modo visible en CLI y GUI (ej. `"Vuelo y Supercrucero"`). |
+| `programming.<m>.rgb` | String | No | Color LED hex dinámico al activar este modo (`"#9d4edd"`, `"#ff1100"`, etc.). Se aplica en automático al girar el selector o al conectar el hardware. |
+| `programming.<m>.stick_rgb` | String | No | Anulación de color LED específica para el Stick en este modo. |
+| `programming.<m>.throttle_rgb` | String | No | Anulación de color LED específica para el Throttle en este modo. |
 | `cells.<id>.keys` | Array | Sí | Secuencia de nombres de teclas para `/dev/uinput` (ej. `["Space"]`, `["Ctrl", "Alt", "Delete"]`). |
 
 ### Perfiles Oficiales Incluidos en [`examples/`](examples/)
 
 - [`default_profile.toml`](examples/default_profile.toml): Perfil lineal 1:1 con valores y zonas muertas estándar de fábrica.
 - [`combat_profile.toml`](examples/combat_profile.toml): Curvas agresivas S-Curve, zonas muertas ajustadas para combate aéreo y espacial (*Star Citizen*, *DCS World*), muelle verde e iluminación táctica naranja.
-- [`elite_dangerous_profile.toml`](examples/elite_dangerous_profile.toml): Perfil completo oficial para **Elite Dangerous**, con iluminación naranja ámbar HUD de cabina (`#ff7700`), muelle verde 47mm y matriz de comandos mapeada para los tres modos del selector físico:
-  - **Modo M1 (Vuelo Normal / Supercrucero)**: Fuego primario/secundario, boost de motores (`Tab`), FA Off/On (`Z`), distribuidor de energía de 4 vías (`Up`/`Left`/`Right`/`Down`), paneles de cabina 1-4, salto hiperespacial FSD (`J`), supercrucero (`K`), tren de aterrizaje (`L`), colector de carga (`Home`), luces (`Insert`), visión nocturna (`Delete`) y anclajes en `thr_sld` (`U`).
-  - **Modo M2 (Combate Táctico)**: Contramedidas activas (Chaff, Heat Sink, Shield Cell Bank, ECM, Silent Running), selección de subsistemas y mayor amenaza.
-  - **Modo S1 (Aterrizaje, Minería y SRV)**: Despliegue de bahía de carga, freno de mano SRV, torreta, escáner de composición y conducción planetaria.
+- [`elite_dangerous_profile.toml`](examples/elite_dangerous_profile.toml): Perfil completo oficial para **Elite Dangerous**, con muelle verde de 47mm y **colores dinámicos automáticos por modo**:
+  - **Modo M1 — Vuelo Normal / Supercrucero (Morado `#9d4edd`)**: Fuego primario/secundario, boost de motores (`Tab`), FA Off/On (`Z`), distribuidor de energía de 4 vías (`Up`/`Left`/`Right`/`Down`), paneles de cabina 1-4, salto hiperespacial FSD (`J`), supercrucero (`K`), tren de aterrizaje (`L`), colector de carga (`Home`), luces (`Insert`), visión nocturna (`Delete`) y anclajes en `thr_sld` (`U`).
+  - **Modo M2 — Combate Táctico / Ataque (Rojo `#ff1100`)**: Contramedidas activas (Chaff, Heat Sink, Shield Cell Bank, ECM, Silent Running), selección de subsistemas y mayor amenaza.
+  - **Modo S1 — Operaciones de Superficie / Minería / SRV (Azul `#0088ff`)**: Despliegue de bahía de carga, láseres mineros, freno de mano SRV, torreta, escáner de composición y conducción planetaria.
 
 ---
 

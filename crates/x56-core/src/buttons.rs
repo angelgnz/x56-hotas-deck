@@ -16,7 +16,10 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
-use x56_hid::{identify_device, DeviceKind};
+use x56_hid::{identify_device, DeviceKind, X56Device};
+use x56_proto::RgbColor;
+
+use crate::parse_color;
 
 // ---------------------------------------------------------------------------
 // Selector de modo
@@ -338,8 +341,30 @@ impl CommandCell {
 /// Asignaciones de un modo, indexadas por `button_id`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ModeBindings {
+    /// Nombre descriptivo opcional para este modo (ej: "Vuelo y Supercrucero").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Color LED RGB en formato hexadecimal (`#RRGGBB` o `#RGB`) para ambos dispositivos en este modo.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rgb: Option<String>,
+    /// Color LED RGB específico para la palanca (Stick) en este modo.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stick_rgb: Option<String>,
+    /// Color LED RGB específico para el acelerador (Throttle) en este modo.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub throttle_rgb: Option<String>,
     #[serde(default)]
     pub cells: BTreeMap<String, CommandCell>,
+}
+
+impl ModeBindings {
+    /// Resuelve el color hex configurado para el dispositivo indicado en este modo.
+    pub fn rgb_for(&self, device: DeviceKind) -> Option<&str> {
+        match device {
+            DeviceKind::Stick => self.stick_rgb.as_deref().or(self.rgb.as_deref()),
+            DeviceKind::Throttle => self.throttle_rgb.as_deref().or(self.rgb.as_deref()),
+        }
+    }
 }
 
 /// Perfil de programación: asignaciones por cada posición del selector de modo.
@@ -370,6 +395,24 @@ impl ProgrammingProfile {
             ModeSlot::M2 => &mut self.m2,
             ModeSlot::S1 => &mut self.s1,
         }
+    }
+
+    /// Resuelve el color hex configurado para un modo y dispositivo dado.
+    pub fn rgb_for_mode(&self, mode: ModeSlot, device: DeviceKind) -> Option<&str> {
+        self.bindings_for(mode).rgb_for(device)
+    }
+
+    /// Comprueba si algún modo tiene configurada iluminación RGB propia.
+    pub fn has_mode_rgb(&self) -> bool {
+        self.m1.rgb.is_some()
+            || self.m1.stick_rgb.is_some()
+            || self.m1.throttle_rgb.is_some()
+            || self.m2.rgb.is_some()
+            || self.m2.stick_rgb.is_some()
+            || self.m2.throttle_rgb.is_some()
+            || self.s1.rgb.is_some()
+            || self.s1.stick_rgb.is_some()
+            || self.s1.throttle_rgb.is_some()
     }
 
     /// Celda de un botón en un modo, si existe.
@@ -743,7 +786,10 @@ const MAX_QUEUED_EVENTS: usize = 500;
 struct MonitorState {
     snapshot: LiveButtonsSnapshot,
     profile: ProgrammingProfile,
+    fallback_stick_rgb: Option<String>,
+    fallback_throttle_rgb: Option<String>,
     events: VecDeque<TriggeredCommandEvent>,
+    force_rgb_update: bool,
 }
 
 struct Shared {
@@ -779,7 +825,10 @@ impl ButtonMonitor {
             state: Mutex::new(MonitorState {
                 snapshot: LiveButtonsSnapshot::default(),
                 profile: ProgrammingProfile::default(),
+                fallback_stick_rgb: None,
+                fallback_throttle_rgb: None,
                 events: VecDeque::new(),
+                force_rgb_update: true,
             }),
             active: AtomicBool::new(false),
             uinput: AtomicBool::new(keyboard.is_some()),
@@ -802,9 +851,19 @@ impl ButtonMonitor {
         self.shared.lock().snapshot.clone()
     }
 
-    /// Reemplaza el perfil de programación usado para resolver comandos.
+    /// Define colores de iluminación de reserva para cuando un modo no especifique su propio RGB.
+    pub fn set_fallback_rgb(&self, stick_rgb: Option<String>, throttle_rgb: Option<String>) {
+        let mut st = self.shared.lock();
+        st.fallback_stick_rgb = stick_rgb;
+        st.fallback_throttle_rgb = throttle_rgb;
+        st.force_rgb_update = true;
+    }
+
+    /// Reemplaza el perfil de programación usado para resolver comandos y actualiza la iluminación.
     pub fn set_profile(&self, profile: ProgrammingProfile) {
-        self.shared.lock().profile = profile;
+        let mut st = self.shared.lock();
+        st.profile = profile;
+        st.force_rgb_update = true;
     }
 
     /// Perfil de programación vigente.
@@ -942,6 +1001,22 @@ fn open_node(kind: DeviceKind) -> Option<InputNode> {
     })
 }
 
+/// Detecta pasivamente la posición actual del selector físico de modo (M1, M2, S1)
+/// leyendo el estado actual mediante ioctl EVIOCGKEY sin lanzar hilos ni alterar el kernel.
+pub fn detect_current_mode() -> Option<ModeSlot> {
+    let node = open_node(DeviceKind::Throttle)?;
+    let raw = node.read(false).ok()?;
+    if test_bit(&raw.keys, EVDEV_MODE_M1) {
+        Some(ModeSlot::M1)
+    } else if test_bit(&raw.keys, EVDEV_MODE_M2) {
+        Some(ModeSlot::M2)
+    } else if test_bit(&raw.keys, EVDEV_MODE_S1) {
+        Some(ModeSlot::S1)
+    } else {
+        None
+    }
+}
+
 /// Hora local `HH:MM:SS`.
 fn now_hms() -> String {
     // SAFETY: `time`/`localtime_r` con punteros a valores locales válidos.
@@ -984,6 +1059,9 @@ struct Worker {
     throttle_desc: Vec<ButtonDescriptor>,
     prev_pressed: HashSet<String>,
     mode: ModeSlot,
+    prev_applied_mode: Option<ModeSlot>,
+    last_applied_stick_color: Option<RgbColor>,
+    last_applied_throttle_color: Option<RgbColor>,
     last_scan: Instant,
     last_keyboard_try: Instant,
 }
@@ -1000,6 +1078,9 @@ impl Worker {
             throttle_desc: catalog_for_device(DeviceKind::Throttle),
             prev_pressed: HashSet::new(),
             mode: ModeSlot::default(),
+            prev_applied_mode: None,
+            last_applied_stick_color: None,
+            last_applied_throttle_color: None,
             // Fuerza un escaneo inmediato.
             last_scan: now.checked_sub(RESCAN_INTERVAL).unwrap_or(now),
             last_keyboard_try: now,
@@ -1146,6 +1227,57 @@ impl Worker {
                 st.events.pop_front();
             }
             st.events.push_back(event);
+        }
+
+        // Comprobar y despachar actualización de color LED RGB por modo
+        let (should_update_rgb, target_stick_color, target_throttle_color) = {
+            let mut st = self.shared.lock();
+            let force = st.force_rgb_update;
+            st.force_rgb_update = false;
+
+            let mode_changed = self.prev_applied_mode != Some(mode);
+            if mode_changed || force {
+                let s_str = st
+                    .profile
+                    .rgb_for_mode(mode, DeviceKind::Stick)
+                    .map(str::to_string)
+                    .or_else(|| st.fallback_stick_rgb.clone());
+                let t_str = st
+                    .profile
+                    .rgb_for_mode(mode, DeviceKind::Throttle)
+                    .map(str::to_string)
+                    .or_else(|| st.fallback_throttle_rgb.clone());
+
+                let s_col = s_str.and_then(|s| parse_color(&s).ok());
+                let t_col = t_str.and_then(|t| parse_color(&t).ok());
+
+                (true, s_col, t_col)
+            } else {
+                (false, None, None)
+            }
+        };
+
+        if should_update_rgb {
+            self.prev_applied_mode = Some(mode);
+
+            if let Some(color) = target_stick_color {
+                if self.last_applied_stick_color != Some(color) {
+                    if let Ok(dev) = X56Device::open(DeviceKind::Stick) {
+                        if dev.set_rgb(color).is_ok() {
+                            self.last_applied_stick_color = Some(color);
+                        }
+                    }
+                }
+            }
+            if let Some(color) = target_throttle_color {
+                if self.last_applied_throttle_color != Some(color) {
+                    if let Ok(dev) = X56Device::open(DeviceKind::Throttle) {
+                        if dev.set_rgb(color).is_ok() {
+                            self.last_applied_throttle_color = Some(color);
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -1294,6 +1426,47 @@ mod tests {
         assert_eq!(
             toml::from_str::<ProgrammingProfile>("").unwrap(),
             ProgrammingProfile::default()
+        );
+    }
+
+    #[test]
+    fn mode_rgb_configuration_and_resolution() {
+        let toml_str = r##"
+[m1]
+name = "Vuelo y Supercrucero"
+rgb = "#9d4edd"
+
+[m2]
+name = "Combate y Ataque"
+rgb = "#ff1100"
+stick_rgb = "#ff0000"
+
+[s1]
+name = "Minería y Operaciones"
+rgb = "#0088ff"
+"##;
+        let p: ProgrammingProfile = toml::from_str(toml_str).unwrap();
+        assert!(p.has_mode_rgb());
+        assert_eq!(p.m1.name.as_deref(), Some("Vuelo y Supercrucero"));
+        assert_eq!(
+            p.rgb_for_mode(ModeSlot::M1, DeviceKind::Stick),
+            Some("#9d4edd")
+        );
+        assert_eq!(
+            p.rgb_for_mode(ModeSlot::M1, DeviceKind::Throttle),
+            Some("#9d4edd")
+        );
+        assert_eq!(
+            p.rgb_for_mode(ModeSlot::M2, DeviceKind::Stick),
+            Some("#ff0000")
+        );
+        assert_eq!(
+            p.rgb_for_mode(ModeSlot::M2, DeviceKind::Throttle),
+            Some("#ff1100")
+        );
+        assert_eq!(
+            p.rgb_for_mode(ModeSlot::S1, DeviceKind::Stick),
+            Some("#0088ff")
         );
     }
 

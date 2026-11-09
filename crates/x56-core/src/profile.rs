@@ -157,6 +157,27 @@ impl FullProfile {
         })?;
         Self::from_toml(&content)
     }
+
+    /// Resuelve el color RGB efectivo para el modo y dispositivo indicados.
+    /// Prioriza:
+    /// 1. Color específico del dispositivo en ese modo (`programming.<mode>.stick_rgb` o `throttle_rgb`)
+    /// 2. Color general de ese modo (`programming.<mode>.rgb`)
+    /// 3. Color global del dispositivo (`[stick].rgb` o `[throttle].rgb`)
+    pub fn effective_rgb_for_mode(
+        &self,
+        mode: crate::buttons::ModeSlot,
+        device: DeviceKind,
+    ) -> Option<&str> {
+        if let Some(prog) = &self.programming {
+            if let Some(color) = prog.rgb_for_mode(mode, device) {
+                return Some(color);
+            }
+        }
+        match device {
+            DeviceKind::Stick => self.stick.as_ref().and_then(|s| s.rgb.as_deref()),
+            DeviceKind::Throttle => self.throttle.as_ref().and_then(|t| t.rgb.as_deref()),
+        }
+    }
 }
 
 /// Resumen de aplicación de un perfil al hardware.
@@ -228,11 +249,14 @@ impl ProfileManager {
     /// Aplica un perfil completo a los dispositivos físicos conectados.
     pub fn apply(profile: &FullProfile) -> Result<ProfileApplySummary, CoreError> {
         let mut summary = ProfileApplySummary::default();
+        let current_mode =
+            crate::buttons::detect_current_mode().unwrap_or(crate::buttons::ModeSlot::M1);
 
         // Aplicar a Stick
         if let Some(ref stick_prof) = profile.stick {
             if let Ok(dev) = X56Device::open(DeviceKind::Stick) {
-                if let Some(ref rgb_str) = stick_prof.rgb {
+                let rgb_str = profile.effective_rgb_for_mode(current_mode, DeviceKind::Stick);
+                if let Some(rgb_str) = rgb_str {
                     if let Ok(color) = parse_color(rgb_str) {
                         let _ = dev.set_rgb(color);
                         summary.rgb_updated = true;
@@ -254,7 +278,8 @@ impl ProfileManager {
         // Aplicar a Throttle
         if let Some(ref thr_prof) = profile.throttle {
             if let Ok(dev) = X56Device::open(DeviceKind::Throttle) {
-                if let Some(ref rgb_str) = thr_prof.rgb {
+                let rgb_str = profile.effective_rgb_for_mode(current_mode, DeviceKind::Throttle);
+                if let Some(rgb_str) = rgb_str {
                     if let Ok(color) = parse_color(rgb_str) {
                         let _ = dev.set_rgb(color);
                         summary.rgb_updated = true;
@@ -269,6 +294,28 @@ impl ProfileManager {
                     let cfg = axis_entry.to_axis_config(current_hall)?;
                     dev.set_axis_config(&cfg)?;
                     summary.throttle_axes_updated += 1;
+                }
+            }
+        }
+
+        // Si no se actualizaron ejes para alguno pero sí existen colores en [programming]:
+        if !summary.rgb_updated {
+            if let Some(rgb_str) = profile.effective_rgb_for_mode(current_mode, DeviceKind::Stick) {
+                if let Ok(color) = parse_color(rgb_str) {
+                    if let Ok(dev) = X56Device::open(DeviceKind::Stick) {
+                        let _ = dev.set_rgb(color);
+                        summary.rgb_updated = true;
+                    }
+                }
+            }
+            if let Some(rgb_str) =
+                profile.effective_rgb_for_mode(current_mode, DeviceKind::Throttle)
+            {
+                if let Ok(color) = parse_color(rgb_str) {
+                    if let Ok(dev) = X56Device::open(DeviceKind::Throttle) {
+                        let _ = dev.set_rgb(color);
+                        summary.rgb_updated = true;
+                    }
                 }
             }
         }

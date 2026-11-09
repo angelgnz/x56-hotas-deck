@@ -15,8 +15,9 @@ pub mod doctor;
 pub mod profile;
 
 pub use buttons::{
-    all_button_descriptors, catalog_for_device, ButtonDescriptor, ButtonMonitor, CommandCell,
-    LiveButtonsSnapshot, ModeBindings, ModeSlot, ProgrammingProfile, TriggeredCommandEvent,
+    all_button_descriptors, catalog_for_device, detect_current_mode, ButtonDescriptor,
+    ButtonMonitor, CommandCell, LiveButtonsSnapshot, ModeBindings, ModeSlot, ProgrammingProfile,
+    TriggeredCommandEvent,
 };
 pub use calibrate::{Calibrator, HallCalibrationResult};
 pub use doctor::{CheckStatus, Doctor, DoctorCheck, DoctorReport};

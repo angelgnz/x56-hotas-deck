@@ -459,15 +459,28 @@ impl ProgrammingTab {
                 );
 
                 let modes = [
-                    (ModeSlot::M1, "M1: DOGFIGHT / COMBATE", COLOR_PRIMARY_CONTAINER),
-                    (ModeSlot::M2, "M2: QUANTUM NAV", COLOR_WARNING_AMBER),
-                    (ModeSlot::S1, "M3: LANDING / MINING", COLOR_SECONDARY),
+                    (ModeSlot::M1, "DOGFIGHT / COMBATE", COLOR_PRIMARY_CONTAINER),
+                    (ModeSlot::M2, "QUANTUM NAV", COLOR_WARNING_AMBER),
+                    (ModeSlot::S1, "LANDING / MINING", COLOR_SECONDARY),
                 ];
 
-                for (slot, label, active_tint) in modes {
+                for (slot, default_label, active_tint) in modes {
                     let is_sel = self.selected_mode == slot;
+                    let bindings = self.profile.bindings_for(slot);
+                    let label = if let Some(ref name) = bindings.name {
+                        format!("{}: {}", slot.as_str(), name.to_uppercase())
+                    } else {
+                        format!("{}: {}", slot.as_str(), default_label)
+                    };
+
+                    let tint = bindings
+                        .rgb_for(DeviceKind::Stick)
+                        .and_then(|hex| x56_core::parse_color(hex).ok())
+                        .map(|c| Color32::from_rgb(c.r, c.g, c.b))
+                        .unwrap_or(active_tint);
+
                     let (bg, fg, stroke_col) = if is_sel {
-                        (active_tint, COLOR_ON_PRIMARY_CONTAINER, active_tint)
+                        (tint, Color32::WHITE, tint)
                     } else {
                         (COLOR_SURFACE_CONTAINER, COLOR_ON_SURFACE, COLOR_OUTLINE_VARIANT)
                     };

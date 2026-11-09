@@ -94,6 +94,10 @@ profile = "s"
 # MODO M1: VUELO NORMAL, NAVEGACIÓN ESTELAR Y SUPERCRUCERO
 # =============================================================================
 
+[programming.m1]
+name = "Vuelo y Supercrucero"
+rgb = "#9d4edd"
+
 [programming.m1.cells.stick_trigger]
 button_id = "stick_trigger"
 name = "Fuego Primario"
@@ -233,6 +237,10 @@ keys = ["U"]
 # MODO M2: COMBATE TÁCTICO Y GUERRA ELECTRÓNICA
 # =============================================================================
 
+[programming.m2]
+name = "Combate y Ataque"
+rgb = "#ff1100"
+
 [programming.m2.cells.stick_trigger]
 button_id = "stick_trigger"
 name = "Fuego Primario (Armas Térmicas / Cinéticas)"
@@ -371,6 +379,10 @@ keys = ["U"]
 # =============================================================================
 # MODO S1: ATERRIZAJE, MINERÍA Y OPERACIONES PLANETARIAS / SRV
 # =============================================================================
+
+[programming.s1]
+name = "Minería y Operaciones de Superficie"
+rgb = "#0088ff"
 
 [programming.s1.cells.stick_trigger]
 button_id = "stick_trigger"

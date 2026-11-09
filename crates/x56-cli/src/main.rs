@@ -1012,7 +1012,10 @@ fn handle_buttons_run(path: &Path) -> ExitCode {
 
     install_sigint_handler();
     let monitor = ButtonMonitor::new();
-    monitor.set_profile(programming);
+    let fallback_stick = profile.stick.as_ref().and_then(|s| s.rgb.clone());
+    let fallback_throttle = profile.throttle.as_ref().and_then(|t| t.rgb.clone());
+    monitor.set_fallback_rgb(fallback_stick, fallback_throttle);
+    monitor.set_profile(programming.clone());
     monitor.set_active(true);
 
     println!(
@@ -1025,18 +1028,28 @@ fn handle_buttons_run(path: &Path) -> ExitCode {
         );
     }
 
+    let mode_desc = |m: ModeSlot| -> String {
+        let name_str = programming
+            .bindings_for(m)
+            .name
+            .as_deref()
+            .map(|n| format!(" ({n})"))
+            .unwrap_or_default();
+        let rgb_str = programming
+            .rgb_for_mode(m, DeviceKind::Stick)
+            .map(|c| format!(" [RGB: {c}]"))
+            .unwrap_or_default();
+        format!("{}: {}{}{}", m.as_str(), m.description(), name_str, rgb_str)
+    };
+
     thread::sleep(Duration::from_millis(60));
     let mut last_mode = monitor.snapshot().active_mode;
-    println!(
-        "Modo actual: {} - {}",
-        last_mode.as_str(),
-        last_mode.description()
-    );
+    println!("Modo actual: {}", mode_desc(last_mode));
 
     while !STOP.load(Ordering::SeqCst) {
         let mode = monitor.snapshot().active_mode;
         if mode != last_mode {
-            println!("Modo -> {} - {}", mode.as_str(), mode.description());
+            println!("Modo -> {}", mode_desc(mode));
             last_mode = mode;
         }
         for ev in monitor.drain_events() {

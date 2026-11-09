@@ -171,6 +171,10 @@ impl X56App {
                     self.programming_tab
                         .load_programming_profile(prog.clone(), &self.button_monitor);
                 }
+                let fallback_stick = prof.stick.as_ref().and_then(|s| s.rgb.clone());
+                let fallback_throttle = prof.throttle.as_ref().and_then(|t| t.rgb.clone());
+                self.button_monitor
+                    .set_fallback_rgb(fallback_stick, fallback_throttle);
 
                 match ProfileManager::apply(&prof) {
                     Ok(summary) => {
