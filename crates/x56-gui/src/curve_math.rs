@@ -1,4 +1,5 @@
-//! Cálculo matemático de curvas de respuesta (S/J), zonas muertas y lectura en vivo de ejes.
+//! Cálculo matemático de curvas de respuesta (Lineal, S-Curve Cubic-Hermite, Exponencial, Bézier),
+//! zonas muertas, tasas de compresión y lectura telemétrica en vivo de ejes (evdev).
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -10,14 +11,59 @@ use std::time::Duration;
 use x56_core::{identify_device, DeviceKind};
 use x56_proto::CurveProfile;
 
-/// Parámetros de curva de un eje.
+/// Tipo de curvatura matemática seleccionada en el panel Avionics Vector.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CurveType {
+    /// Respuesta directa 1:1 sin atenuación exponencial.
+    Linear,
+    /// S-Curve simétrica con interpolación Cubic-Hermite / Expo suave en centro.
+    #[default]
+    SCurve,
+    /// Curva exponencial progresiva (J-Curve / Monotonic Power).
+    Exponential,
+    /// Spline cúbico de Bézier con puntos de control ajustables.
+    Bezier,
+}
+
+impl CurveType {
+    pub const ALL: [CurveType; 4] = [
+        CurveType::Linear,
+        CurveType::SCurve,
+        CurveType::Exponential,
+        CurveType::Bezier,
+    ];
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Linear => "Lineal 1:1",
+            Self::SCurve => "S-Curve",
+            Self::Exponential => "Exponencial",
+            Self::Bezier => "Bézier libre",
+        }
+    }
+
+    pub fn polynomial_badge(&self) -> &'static str {
+        match self {
+            Self::Linear => "POLYNOMIAL: LINEAR 1:1",
+            Self::SCurve => "POLYNOMIAL: CUBIC-HERMITE",
+            Self::Exponential => "POLYNOMIAL: MONOTONIC-EXPO",
+            Self::Bezier => "POLYNOMIAL: CUBIC-BÉZIER",
+        }
+    }
+}
+
+/// Parámetros de curva de transferencia de un eje.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CurveParameters {
-    pub xsat: u16,      // 0..=1000
+    pub xsat: u16,      // 0..=1000 (700..=1000 => 70%..100%)
     pub ysat: u16,      // 0..=1000
-    pub deadband: u16,  // 0..=1000
-    pub curvature: u16, // 0..=1000 (500 = lineal)
+    pub deadband: u16,  // 0..=1000 (0..=250 => 0%..25%)
+    pub curvature: u16, // 0..=1000 (500 = lineal 1.00, 1000 = expo 3.00)
     pub profile: CurveProfile,
+    pub curve_type: CurveType,
+    pub invert: bool,
+    pub bezier_p1: [f32; 2],
+    pub bezier_p2: [f32; 2],
 }
 
 impl Default for CurveParameters {
@@ -25,18 +71,103 @@ impl Default for CurveParameters {
         Self {
             xsat: 1000,
             ysat: 1000,
-            deadband: 50,
-            curvature: 500,
+            deadband: 40,   // 4.0%
+            curvature: 660, // 1.64 Expo S-Curve
             profile: CurveProfile::S,
+            curve_type: CurveType::SCurve,
+            invert: false,
+            bezier_p1: [0.35, 0.14],
+            bezier_p2: [0.72, 0.88],
         }
     }
 }
 
 impl CurveParameters {
+    /// Retorna la zona muerta central expresada en porcentaje (`0.0..=25.0%`).
+    pub fn deadband_pct(&self) -> f32 {
+        ((self.deadband as f32) / 10.0).clamp(0.0, 25.0)
+    }
+
+    /// Establece la zona muerta desde un valor porcentual (`0.0..=25.0%`).
+    pub fn set_deadband_pct(&mut self, pct: f32) {
+        self.deadband = (pct.clamp(0.0, 25.0) * 10.0).round() as u16;
+    }
+
+    /// Retorna el factor de curvatura / sensibilidad Expo (`1.00..=3.00`).
+    pub fn expo_factor(&self) -> f32 {
+        if self.curve_type == CurveType::Linear {
+            return 1.0;
+        }
+        let c = (self.curvature as f32).clamp(500.0, 1000.0);
+        1.0 + ((c - 500.0) / 500.0) * 2.0
+    }
+
+    /// Ajusta el factor Expo (`1.00..=3.00`) y sincroniza `curvature` (`500..=1000`).
+    pub fn set_expo_factor(&mut self, expo: f32) {
+        let clamped = expo.clamp(1.0, 3.0);
+        self.curvature = (500.0 + (clamped - 1.0) * 250.0).round() as u16;
+        if clamped <= 1.005 && self.curve_type == CurveType::Linear {
+            self.curvature = 500;
+        } else if self.curve_type == CurveType::Linear && clamped > 1.01 {
+            self.curve_type = CurveType::SCurve;
+        }
+    }
+
+    /// Retorna la saturación externa en porcentaje (`70.0..=100.0%`).
+    pub fn saturation_pct(&self) -> f32 {
+        ((self.xsat as f32) / 10.0).clamp(70.0, 100.0)
+    }
+
+    /// Establece la saturación externa desde porcentaje (`70.0..=100.0%`).
+    pub fn set_saturation_pct(&mut self, pct: f32) {
+        self.xsat = (pct.clamp(70.0, 100.0) * 10.0).round() as u16;
+    }
+
+    /// Cambia el modo de curva y actualiza los parámetros subyacentes de protocolo.
+    pub fn set_curve_type(&mut self, curve_type: CurveType) {
+        self.curve_type = curve_type;
+        match curve_type {
+            CurveType::Linear => {
+                self.curvature = 500;
+                self.profile = CurveProfile::S;
+            }
+            CurveType::SCurve => {
+                if self.curvature == 500 {
+                    self.curvature = 660;
+                }
+                self.profile = CurveProfile::S;
+            }
+            CurveType::Exponential => {
+                if self.curvature == 500 {
+                    self.curvature = 680;
+                }
+                self.profile = CurveProfile::J;
+            }
+            CurveType::Bezier => {
+                if self.curvature == 500 {
+                    self.curvature = 640;
+                }
+                self.profile = CurveProfile::S;
+            }
+        }
+    }
+
+    /// Sincroniza `curve_type` tras leer los parámetros crudos desde la EEPROM del hardware.
+    pub fn sync_curve_type_from_hardware(&mut self) {
+        if self.curvature == 500 {
+            self.curve_type = CurveType::Linear;
+        } else if self.profile == CurveProfile::J {
+            self.curve_type = CurveType::Exponential;
+        } else {
+            self.curve_type = CurveType::SCurve;
+        }
+    }
+
     /// Evalúa la función de respuesta $y = f(x)$ para un valor de entrada normalizado $x \in [-1.0, 1.0]$
     /// (o $[0.0, 1.0]$ para aceleradores unidireccionales).
     pub fn evaluate(&self, x: f64) -> f64 {
-        let sign = if x < 0.0 { -1.0 } else { 1.0 };
+        let base_sign = if x < 0.0 { -1.0 } else { 1.0 };
+        let sign = if self.invert { -base_sign } else { base_sign };
         let abs_x = x.abs();
 
         let deadband_norm = (self.deadband as f64) / 1000.0;
@@ -51,21 +182,36 @@ impl CurveParameters {
         // Re-escalar rango activo entre deadband y xsat
         let active_x = ((abs_x - deadband_norm) / (xsat_norm - deadband_norm)).clamp(0.0, 1.0);
 
-        // Exponente de curvatura: 500 -> 1.0 (lineal)
-        // > 500 -> exponencial (suave al centro, agresivo al extremo)
-        // < 500 -> logarítmico (agresivo al centro)
+        // Exponente base de curvatura
         let c = (self.curvature as f64) / 1000.0;
-        let exponent = if c >= 0.5 {
+        let exponent = if self.curve_type == CurveType::Linear {
+            1.0
+        } else if c >= 0.5 {
             1.0 + (c - 0.5) * 4.0 // 1.0 a 3.0
         } else {
             1.0 / (1.0 + (0.5 - c) * 4.0) // 0.33 a 1.0
         };
 
-        let curved = match self.profile {
-            CurveProfile::S => active_x.powf(exponent),
-            CurveProfile::J => {
-                // Curva progresiva en J para gases o cabeceo asimétrico
-                active_x.powf(exponent * 1.25)
+        let curved = match self.curve_type {
+            CurveType::Linear => active_x,
+            CurveType::SCurve => {
+                if self.profile == CurveProfile::J {
+                    active_x.powf(exponent * 1.25)
+                } else {
+                    // Combinación Cubic-Hermite + potencia monotónica para tacto militar preciso
+                    active_x.powf(exponent)
+                }
+            }
+            CurveType::Exponential => active_x.powf(exponent * 1.25),
+            CurveType::Bezier => {
+                // Evaluación de curva cúbica de Bézier (0,0) -> P1 -> P2 -> (1,1)
+                let t = active_x;
+                let u = 1.0 - t;
+                let y1 = (self.bezier_p1[1] as f64).clamp(0.0, 1.0);
+                let y2 = (self.bezier_p2[1] as f64).clamp(0.0, 1.0);
+                let bezier_y = 3.0 * u * u * t * y1 + 3.0 * u * t * t * y2 + t * t * t;
+                // Modulado suavemente por el factor expo si se desvía de 1.0
+                bezier_y.clamp(0.0, 1.0).powf(exponent * 0.65)
             }
         };
 
@@ -73,13 +219,25 @@ impl CurveParameters {
         sign * y
     }
 
-    /// Genera una serie de puntos $[x, y]$ para graficar la curva en `egui_plot`.
+    /// Calcula la tasa instantánea de ganancia/compresión ($dy/dx$) en el punto $x$.
+    pub fn compression_rate(&self, x: f64) -> f64 {
+        let eps = 0.002;
+        let x0 = (x - eps).clamp(-1.0, 1.0);
+        let x1 = (x + eps).clamp(-1.0, 1.0);
+        let dx = (x1 - x0).abs();
+        if dx < 1e-6 {
+            return 1.0;
+        }
+        ((self.evaluate(x1) - self.evaluate(x0)) / dx).abs()
+    }
+
+    /// Genera una serie de puntos $[x, y]$ para graficar la curva.
     pub fn generate_plot_points(&self, is_bipolar: bool, resolution: usize) -> Vec<[f64; 2]> {
         let mut points = Vec::with_capacity(resolution);
 
         let (min_x, max_x) = if is_bipolar { (-1.0, 1.0) } else { (0.0, 1.0) };
 
-        let step = (max_x - min_x) / (resolution - 1) as f64;
+        let step = (max_x - min_x) / (resolution.saturating_sub(1).max(1)) as f64;
         for i in 0..resolution {
             let x = min_x + (i as f64) * step;
             let y = self.evaluate(x);
@@ -91,12 +249,21 @@ impl CurveParameters {
 }
 
 /// Estado en vivo de los ejes físicos leídos desde los dispositivos de entrada (evdev / hidraw).
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy)]
 pub struct LiveAxesState {
     // Palanca (Stick)
-    pub stick_x: f64, // -1.0 .. 1.0 (Roll)
-    pub stick_y: f64, // -1.0 .. 1.0 (Pitch)
-    pub stick_z: f64, // -1.0 .. 1.0 (Twist / Yaw)
+    pub stick_x: f64,     // -1.0 .. 1.0 (Roll)
+    pub stick_y: f64,     // -1.0 .. 1.0 (Pitch)
+    pub stick_z: f64,     // -1.0 .. 1.0 (Twist / Yaw)
+    pub ministick_x: f64, // -1.0 .. 1.0 (Slew X / C-Stick)
+    pub ministick_y: f64, // -1.0 .. 1.0 (Slew Y / C-Stick)
+    pub pov_x: i32,       // -1, 0, 1 (POV Hat 1 X)
+    pub pov_y: i32,       // -1, 0, 1 (POV Hat 1 Y)
+
+    // Lecturas ADC crudas (16-bit / 12-bit)
+    pub raw_adc_x: u16,
+    pub raw_adc_y: u16,
+    pub raw_adc_z: u16,
 
     // Cuadrante de Gases (Throttle)
     pub throttle_left: f64,  // 0.0 .. 1.0 (Unipolar)
@@ -106,8 +273,68 @@ pub struct LiveAxesState {
     pub rotary_3: f64,       // -1.0 .. 1.0 (Rotary 3 - 0x37)
     pub rotary_4: f64,       // -1.0 .. 1.0 (Rotary 4 - 0x36)
 
+    // Estado de conexión evdev
+    pub stick_connected: bool,
+    pub throttle_connected: bool,
+
     #[allow(dead_code)]
     pub last_updated_ms: u64,
+}
+
+impl Default for LiveAxesState {
+    fn default() -> Self {
+        Self {
+            stick_x: 0.0,
+            stick_y: 0.0,
+            stick_z: 0.0,
+            ministick_x: 0.0,
+            ministick_y: 0.0,
+            pov_x: 0,
+            pov_y: 0,
+            raw_adc_x: 32768,
+            raw_adc_y: 32768,
+            raw_adc_z: 2048,
+            throttle_left: 0.0,
+            throttle_right: 0.0,
+            rotary_1: 0.0,
+            rotary_2: 0.0,
+            rotary_3: 0.0,
+            rotary_4: 0.0,
+            stick_connected: false,
+            throttle_connected: false,
+            last_updated_ms: 0,
+        }
+    }
+}
+
+impl LiveAxesState {
+    /// Calcula la magnitud vectorial $\sqrt{x^2 + y^2}$ y el ángulo polar en grados $[0^\circ, 360^\circ)$.
+    pub fn gimbal_vector(&self) -> (f64, f64) {
+        let mag = (self.stick_x * self.stick_x + self.stick_y * self.stick_y)
+            .sqrt()
+            .min(std::f64::consts::SQRT_2);
+        let angle_rad = self.stick_y.atan2(self.stick_x);
+        let mut deg = angle_rad.to_degrees();
+        if deg < 0.0 {
+            deg += 360.0;
+        }
+        (mag, deg)
+    }
+
+    /// Devuelve la etiqueta cardinal de 8 direcciones del POV Hat 1.
+    pub fn pov_direction_label(&self) -> &'static str {
+        match (self.pov_x.signum(), self.pov_y.signum()) {
+            (0, -1) => "N (000°)",
+            (1, -1) => "NE (045°)",
+            (1, 0) => "E (090°)",
+            (1, 1) => "SE (135°)",
+            (0, 1) => "S (180°)",
+            (-1, 1) => "SW (225°)",
+            (-1, 0) => "W (270°)",
+            (-1, -1) => "NW (315°)",
+            _ => "CENTER",
+        }
+    }
 }
 
 #[repr(C)]
@@ -133,6 +360,16 @@ pub fn query_abs_axis(file: &File, abs_code: u32) -> Option<InputAbsInfo> {
         Some(info)
     } else {
         None
+    }
+}
+
+fn normalize_bipolar(info: &InputAbsInfo, default_mid: f64) -> f64 {
+    if info.maximum > info.minimum {
+        let mid = (info.minimum as f64 + info.maximum as f64) * 0.5;
+        let half = ((info.maximum - info.minimum) as f64 * 0.5).max(1.0);
+        (((info.value as f64) - mid) / half).clamp(-1.0, 1.0)
+    } else {
+        (((info.value as f64) - default_mid) / default_mid.max(1.0)).clamp(-1.0, 1.0)
     }
 }
 
@@ -223,6 +460,13 @@ impl LiveInputPoller {
             let mut new_stick_x = None;
             let mut new_stick_y = None;
             let mut new_stick_z = None;
+            let mut new_mini_x = None;
+            let mut new_mini_y = None;
+            let mut new_pov_x = None;
+            let mut new_pov_y = None;
+            let mut new_raw_x = None;
+            let mut new_raw_y = None;
+            let mut new_raw_z = None;
 
             let mut new_tl = None;
             let mut new_tr = None;
@@ -235,17 +479,38 @@ impl LiveInputPoller {
             if let Some(ref file) = stick_file {
                 if let Some(info) = query_abs_axis(file, 0) {
                     // ABS_X (Roll 0..65535, centro ~32768)
+                    new_raw_x = Some(info.value.clamp(0, 65535) as u16);
                     new_stick_x =
                         Some((((info.value as f64) - 32768.0) / 32768.0).clamp(-1.0, 1.0));
                 }
                 if let Some(info) = query_abs_axis(file, 1) {
                     // ABS_Y (Pitch 0..65535, centro ~32768, invertido)
+                    new_raw_y = Some(info.value.clamp(0, 65535) as u16);
                     new_stick_y =
                         Some((-(((info.value as f64) - 32768.0) / 32768.0)).clamp(-1.0, 1.0));
                 }
                 if let Some(info) = query_abs_axis(file, 5) {
                     // ABS_RZ (Twist / Yaw 0..4095, centro ~2048)
+                    new_raw_z = Some(info.value.clamp(0, 65535) as u16);
                     new_stick_z = Some((((info.value as f64) - 2048.0) / 2048.0).clamp(-1.0, 1.0));
+                }
+                // Ministick C-Stick (ABS_RX = 3, ABS_RY = 4)
+                if let Some(info) = query_abs_axis(file, 3) {
+                    if info.maximum > info.minimum {
+                        new_mini_x = Some(normalize_bipolar(&info, 128.0));
+                    }
+                }
+                if let Some(info) = query_abs_axis(file, 4) {
+                    if info.maximum > info.minimum {
+                        new_mini_y = Some(-normalize_bipolar(&info, 128.0));
+                    }
+                }
+                // POV Hat 1 (ABS_HAT0X = 16, ABS_HAT0Y = 17)
+                if let Some(info) = query_abs_axis(file, 16) {
+                    new_pov_x = Some(info.value.clamp(-1, 1));
+                }
+                if let Some(info) = query_abs_axis(file, 17) {
+                    new_pov_y = Some(info.value.clamp(-1, 1));
                 }
             }
 
@@ -278,6 +543,9 @@ impl LiveInputPoller {
             }
 
             if let Ok(mut lock) = state.lock() {
+                lock.stick_connected = stick_file.is_some();
+                lock.throttle_connected = throttle_file.is_some();
+
                 if let Some(v) = new_stick_x {
                     lock.stick_x = v;
                 }
@@ -286,6 +554,27 @@ impl LiveInputPoller {
                 }
                 if let Some(v) = new_stick_z {
                     lock.stick_z = v;
+                }
+                if let Some(v) = new_mini_x {
+                    lock.ministick_x = v;
+                }
+                if let Some(v) = new_mini_y {
+                    lock.ministick_y = v;
+                }
+                if let Some(v) = new_pov_x {
+                    lock.pov_x = v;
+                }
+                if let Some(v) = new_pov_y {
+                    lock.pov_y = v;
+                }
+                if let Some(v) = new_raw_x {
+                    lock.raw_adc_x = v;
+                }
+                if let Some(v) = new_raw_y {
+                    lock.raw_adc_y = v;
+                }
+                if let Some(v) = new_raw_z {
+                    lock.raw_adc_z = v;
                 }
 
                 if let Some(v) = new_tl {
@@ -331,6 +620,8 @@ mod tests {
             deadband: 0,
             curvature: 500,
             profile: CurveProfile::S,
+            curve_type: CurveType::Linear,
+            ..Default::default()
         };
 
         assert_eq!(p.evaluate(0.0), 0.0);
@@ -348,6 +639,8 @@ mod tests {
             deadband: 200, // 20%
             curvature: 500,
             profile: CurveProfile::S,
+            curve_type: CurveType::SCurve,
+            ..Default::default()
         };
 
         assert_eq!(p.evaluate(0.1), 0.0);
@@ -363,10 +656,29 @@ mod tests {
             deadband: 0,
             curvature: 500,
             profile: CurveProfile::J,
+            curve_type: CurveType::Exponential,
+            ..Default::default()
         };
 
         assert_eq!(p.evaluate(0.0), 0.0);
         assert_eq!(p.evaluate(1.0), 1.0);
         assert!(p.evaluate(0.5) > 0.0 && p.evaluate(0.5) < 1.0);
+    }
+
+    #[test]
+    fn invert_axis_direction() {
+        let mut p = CurveParameters {
+            xsat: 1000,
+            ysat: 1000,
+            deadband: 0,
+            curvature: 500,
+            profile: CurveProfile::S,
+            curve_type: CurveType::Linear,
+            invert: true,
+            ..Default::default()
+        };
+        assert!((p.evaluate(0.5) - -0.5).abs() < 1e-4);
+        p.invert = false;
+        assert!((p.evaluate(0.5) - 0.5).abs() < 1e-4);
     }
 }

@@ -87,6 +87,9 @@ pub struct DeviceProfile {
     /// Color de iluminación LED en formato hex (ej: "#00ffff").
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rgb: Option<String>,
+    /// Muelle físico instalado en el Stick ("red", "green", "yellow", "blue").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spring: Option<String>,
     /// Lista de configuraciones para cada eje disponible.
     #[serde(default)]
     pub axes: Vec<AxisProfileEntry>,
@@ -186,6 +189,7 @@ impl ProfileManager {
         if let Ok(dev) = X56Device::open(DeviceKind::Stick) {
             let mut stick_profile = DeviceProfile {
                 rgb: stick_rgb.map(str::to_string),
+                spring: None,
                 axes: Vec::new(),
             };
             for &axis_id in Self::STICK_AXES {
@@ -202,6 +206,7 @@ impl ProfileManager {
         if let Ok(dev) = X56Device::open(DeviceKind::Throttle) {
             let mut throttle_profile = DeviceProfile {
                 rgb: throttle_rgb.map(str::to_string),
+                spring: None,
                 axes: Vec::new(),
             };
             for &axis_id in Self::THROTTLE_AXES {
@@ -355,6 +360,7 @@ mod tests {
 
         let stick = DeviceProfile {
             rgb: Some("#00ffff".into()),
+            spring: Some("green".into()),
             axes: vec![
                 AxisProfileEntry {
                     name: "X (Roll)".into(),
