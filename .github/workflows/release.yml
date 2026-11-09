@@ -1,0 +1,148 @@
+name: Release Packages
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-deb-rpm-tarball:
+    name: Build .deb, .rpm & Universal Tarball
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev pkg-config libxkbcommon-dev rpm
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry and build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build workspace binaries in release mode
+        run: cargo build --release --workspace
+
+      - name: Install cargo-deb and cargo-generate-rpm
+        run: cargo install cargo-deb cargo-generate-rpm --locked
+
+      - name: Create output directory
+        run: mkdir -p dist
+
+      - name: Build Debian package (.deb)
+        run: |
+          cargo deb -p x56-cli --no-build
+          cp target/debian/*.deb dist/
+
+      - name: Build RedHat package (.rpm)
+        run: |
+          cargo generate-rpm -p crates/x56-cli/Cargo.toml
+          cp target/generate-rpm/*.rpm dist/
+
+      - name: Package Universal Standalone Tarball (.tar.gz)
+        run: |
+          TAG_NAME="${GITHUB_REF_NAME:-v0.1.0}"
+          TAR_DIR="x56linux-${TAG_NAME}-x86_64"
+          mkdir -p "${TAR_DIR}/examples"
+
+          cp target/release/x56 "${TAR_DIR}/"
+          cp target/release/x56-gui "${TAR_DIR}/"
+          cp packaging/70-x56.rules "${TAR_DIR}/"
+          cp packaging/com.saitek.x56.desktop "${TAR_DIR}/"
+          cp packaging/x56linux.svg "${TAR_DIR}/"
+          cp packaging/install.sh "${TAR_DIR}/"
+          cp packaging/uninstall.sh "${TAR_DIR}/"
+          cp examples/combat_profile.toml "${TAR_DIR}/examples/"
+          cp LICENSE "${TAR_DIR}/"
+          cp README.md "${TAR_DIR}/"
+
+          tar -czvf "dist/${TAR_DIR}.tar.gz" "${TAR_DIR}"
+
+      - name: Upload Debian, RPM and Tarball artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages-native
+          path: dist/*
+          if-no-files-found: error
+
+  build-arch-package:
+    name: Build Arch Linux Package (.pkg.tar.zst)
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Install Arch build dependencies
+        run: |
+          pacman -Syu --noconfirm base-devel git rust cargo pkgconf libxkbcommon systemd-libs
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Arch Linux package with makepkg
+        run: |
+          # makepkg requires a non-root user
+          useradd -m builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+
+          mkdir -p /tmp/arch-build
+          cp packaging/PKGBUILD /tmp/arch-build/
+          chown -R builder:builder /tmp/arch-build
+
+          su builder -c "cd /tmp/arch-build && makepkg -s --noconfirm --nodeps"
+
+          mkdir -p "$GITHUB_WORKSPACE/dist-arch"
+          cp /tmp/arch-build/*.pkg.tar.zst "$GITHUB_WORKSPACE/dist-arch/"
+
+      - name: Upload Arch Linux package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages-arch
+          path: dist-arch/*
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish Release Assets
+    needs: [build-deb-rpm-tarball, build-arch-package]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create release assets directory
+        run: mkdir -p release-assets
+
+      - name: Download native packages (.deb, .rpm, .tar.gz)
+        uses: actions/download-artifact@v4
+        with:
+          name: packages-native
+          path: release-assets
+
+      - name: Download Arch packages (.pkg.tar.zst)
+        uses: actions/download-artifact@v4
+        with:
+          name: packages-arch
+          path: release-assets
+
+      - name: Generate SHA256 checksums
+        run: |
+          cd release-assets
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create GitHub Release and upload assets
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          files: release-assets/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false

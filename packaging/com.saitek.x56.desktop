@@ -2,7 +2,7 @@
 Name=X56 HOTAS Control Center
 Comment=Configurador nativo para Saitek / Logitech G X56 HOTAS (curvas, RGB, calibración Hall)
 Exec=x56-gui
-Icon=input-gaming
+Icon=x56linux
 Terminal=false
 Type=Application
 Categories=Settings;HardwareSettings;Game;

@@ -1,0 +1,63 @@
+# Maintainer: Angel Gonzalez <https://github.com/angelgnz>
+# Contributor: Community
+pkgname=x56linux-git
+_pkgname=x56linux
+pkgver=0.1.0.r0.g894d1db
+pkgrel=1
+pkgdesc="Configurador y controlador en espacio de usuario para HOTAS Saitek / Logitech G X56 (CLI y GUI Avionics Vector)"
+arch=('x86_64')
+url="https://github.com/angelgnz/x56linux"
+license=('GPL-3.0-or-later')
+depends=('systemd-libs' 'libxkbcommon' 'hicolor-icon-theme')
+makedepends=('cargo' 'pkgconf' 'git')
+provides=('x56linux')
+conflicts=('x56linux')
+source=("${_pkgname}::git+https://github.com/angelgnz/x56linux.git#branch=master")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$srcdir/$_pkgname"
+  if git describe --long --tags >/dev/null 2>&1; then
+    git describe --long --tags | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+  else
+    printf "0.1.0.r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+  fi
+}
+
+prepare() {
+  cd "$srcdir/$_pkgname"
+  export RUSTUP_TOOLCHAIN=stable
+  cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+  cd "$srcdir/$_pkgname"
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR=target
+  cargo build --frozen --release --workspace
+}
+
+check() {
+  cd "$srcdir/$_pkgname"
+  export RUSTUP_TOOLCHAIN=stable
+  cargo test --frozen --workspace
+}
+
+package() {
+  cd "$srcdir/$_pkgname"
+  # Binarios
+  install -Dm755 target/release/x56 "$pkgdir/usr/bin/x56"
+  install -Dm755 target/release/x56-gui "$pkgdir/usr/bin/x56-gui"
+
+  # Regla udev para acceso sin root (hidraw + uinput)
+  install -Dm644 packaging/70-x56.rules "$pkgdir/usr/lib/udev/rules.d/70-x56.rules"
+
+  # Entrada de escritorio XDG e icono vectorial
+  install -Dm644 packaging/com.saitek.x56.desktop "$pkgdir/usr/share/applications/com.saitek.x56.desktop"
+  install -Dm644 packaging/x56linux.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/x56linux.svg"
+
+  # Perfiles de ejemplo y licencia
+  install -Dm644 examples/combat_profile.toml "$pkgdir/usr/share/x56linux/examples/combat_profile.toml"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}
