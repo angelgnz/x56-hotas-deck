@@ -88,3 +88,49 @@ ysat = 1000
 deadband = 0
 curvature = 500
 profile = "s"
+
+[programming.m1.cells.stick_trigger]
+button_id = "stick_trigger"
+name = "Disparo Principal (Nav)"
+keys = ["Space"]
+
+[programming.m1.cells.thr_sw_1]
+button_id = "thr_sw_1"
+name = "Tren de Aterrizaje"
+keys = ["G"]
+
+[programming.m1.cells.thr_sw_3]
+button_id = "thr_sw_3"
+name = "Luces de Navegación"
+keys = ["L"]
+
+[programming.m2.cells.stick_btn_a]
+button_id = "stick_btn_a"
+name = "Lanzar Misil"
+keys = [
+    "LShift",
+    "F",
+]
+
+[programming.m2.cells.stick_pinkie]
+button_id = "stick_pinkie"
+name = "Contramedidas Chaff/Flare"
+keys = ["C"]
+
+[programming.m2.cells.stick_trigger]
+button_id = "stick_trigger"
+name = "Cañón Principal"
+keys = ["Space"]
+
+[programming.s1.cells.thr_k1_up]
+button_id = "thr_k1_up"
+name = "Eyección / Emergencia"
+keys = [
+    "LCtrl",
+    "E",
+]
+
+[programming.s1.cells.thr_sld]
+button_id = "thr_sld"
+name = "Aerofreno (Airbrake)"
+keys = ["B"]

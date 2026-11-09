@@ -3,7 +3,7 @@
 [![Rust](https://img.shields.io/badge/language-Rust-orange.svg)](https://www.rust-lang.org/)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Platform: Linux](https://img.shields.io/badge/platform-Linux-green.svg)]()
-[![Tests: 25 passing](https://img.shields.io/badge/tests-25%20passed-brightgreen.svg)]()
+[![Tests: 43 passing](https://img.shields.io/badge/tests-43%20passed-brightgreen.svg)]()
 
 Herramienta moderna, segura y de alto rendimiento en **Rust** para la configuración de iluminación LED RGB, curvas de respuesta de ejes, zonas muertas y calibración de hardware en el sistema HOTAS **Saitek / Mad Catz Pro Flight X-56 Rhino** y **Logitech G X56**.
 
@@ -24,13 +24,16 @@ Diseñada específicamente para operar en Linux **sin privilegios de root (`sudo
   - [Iluminación LED RGB (`x56 rgb`)](#3-iluminación-led-rgb-x56-rgb)
   - [Curvas y Zonas Muertas (`x56 axis`)](#4-curvas-y-zonas-muertas-x56-axis)
   - [Perfiles TOML (`x56 profile`)](#5-perfiles-toml-x56-profile)
-  - [Calibración de Sensores Hall (`x56 calibrate`)](#6-calibración-de-sensores-hall-x56-calibrate)
-  - [Restauración de Fábrica (`x56 reset-defaults`)](#7-restauración-de-fábrica-x56-reset-defaults)
+  - [Programación de Botones y Modos (`x56 buttons`)](#6-programación-de-botones-y-modos-x56-buttons)
+  - [Calibración de Sensores Hall (`x56 calibrate`)](#7-calibración-de-sensores-hall-x56-calibrate)
+  - [Restauración de Fábrica (`x56 reset-defaults`)](#8-restauración-de-fábrica-x56-reset-defaults)
 - [Centro de Control Gráfico (`x56-gui`)](#centro-de-control-gráfico-x56-gui)
   - [Editor de Curvas con Muestreo en Vivo](#1-editor-de-curvas-con-muestreo-en-vivo)
   - [Gestor de Iluminación RGB](#2-gestor-de-iluminación-rgb)
   - [Asistente de Calibración Hall](#3-asistente-de-calibración-hall)
   - [Diagnóstico del Sistema Integrado](#4-diagnóstico-del-sistema-integrado)
+  - [Programación de Botones y Modos (Sección 8 del Manual)](#5-programación-de-botones-y-modos-sección-8-del-manual)
+  - [Gestión de Perfiles TOML](#6-gestión-de-perfiles-toml)
 - [Especificación del Protocolo Binario HID](#especificación-del-protocolo-binario-hid)
 - [Arquitectura del Workspace](#arquitectura-del-workspace)
 - [Estado del Roadmap](#estado-del-roadmap)
@@ -58,7 +61,8 @@ El proyecto original (`Chryseus/x56linux`), escrito en C++ en 2016, quedó aband
 - **Acceso seguro sin root**: Gestionado automáticamente por `logind` y `uaccess` al iniciar sesión.
 - **Control de Iluminación RGB**: Soporte para colores hexadecimales (`#00ffff`), shorthand (`#0ff`) o nombres comunes (`cyan`, `orange`, `red`, `off`, etc.) para Stick, Throttle o ambos periféricos simultáneamente.
 - **Curvas de respuesta de alta resolución**: Rango matemático `0..=1000` (500 = lineal) para saturación X/Y, curvatura y deadband con curvas simétricas (tipo **S**) o progresivas (tipo **J**).
-- **Gestión de Perfiles en TOML**: Exportación e importación de perfiles completos de configuración en formato legible y versionado.
+- **Programación de Botones y Modos (M1/M2/S1 + SLD)**: Asignación de macros y atajos de teclado por modo con seguimiento físico del selector rotativo y emisión en vivo mediante el subsistema Linux `/dev/uinput`.
+- **Gestión de Perfiles en TOML**: Exportación e importación de perfiles completos de configuración (ejes, RGB y programación de botones) en formato legible y versionado.
 - **Calibración Hall no invasiva**: Muestreo pasivo de la posición física central en la Interfaz 0 (`/dev/hidraw*`), cálculo de desviaciones (delta) y modo `--dry-run` seguro sin riesgo de descalibración accidental.
 - **Motor de Diagnóstico (`x56 doctor`)**: Comprobación integral de 6 capas (udev, permisos, hardware USB, hidraw, kernel joydev y handshake de firmware).
 - **Salida dual humana / JSON**: Todas las operaciones admiten `--json` para scripts de automatización, integración continua o interfaces gráficas.
@@ -221,7 +225,101 @@ En la carpeta [`examples/`](examples/) se incluyen perfiles de muestra listos pa
 - [`default_profile.toml`](examples/default_profile.toml): Curvas lineales y zonas muertas de fábrica.
 - [`combat_profile.toml`](examples/combat_profile.toml): Zonas muertas reducidas, curvas agresivas para combate y LEDs naranja táctico.
 
-### 6. Calibración de Sensores Hall (`x56 calibrate`)
+#### Estructura de la tabla `[programming]` en los perfiles:
+Los perfiles TOML pueden incluir la sección `[programming]` para configurar asignaciones de teclas y macros en los tres modos del selector rotativo (`m1`, `m2`, `s1`):
+
+```toml
+[programming.m1.cells.stick_trigger]
+button_id = "stick_trigger"
+name = "Fuego Primario"
+keys = ["Space"]
+
+[programming.m2.cells.stick_trigger]
+button_id = "stick_trigger"
+name = "Misil Aire-Aire"
+keys = ["Ctrl", "Space"]
+
+[programming.s1.cells.thr_sw_1]
+button_id = "thr_sw_1"
+name = "Tren de Aterrizaje"
+keys = ["G"]
+
+[programming.s1.cells.thr_sld]
+button_id = "thr_sld"
+name = "Aerofrenos"
+keys = ["B"]
+```
+
+### 6. Programación de Botones y Modos (`x56 buttons`)
+
+Permite inspeccionar el catálogo de botones físicos, consultar el estado en vivo del hardware, asociar combinaciones de teclas en perfiles TOML y ejecutar el monitor en segundo plano para emitir pulsaciones mediante `/dev/uinput`.
+
+#### Listar catálogo de botones (`x56 buttons list`):
+Muestra el catálogo completo de controles asignables con su ID estable, código de sección del manual, código Linux evdev y grupo funcional:
+```bash
+# Listar todos los botones (Stick y Throttle)
+x56 buttons list
+
+# Filtrar únicamente los botones de la palanca o del acelerador
+x56 buttons list --device stick
+x56 buttons list --device throttle
+
+# Exportar catálogo en formato JSON
+x56 buttons list --json
+```
+
+#### Consultar estado en vivo del hardware (`x56 buttons status`):
+Lee pasivamente vía evdev la posición física actual del selector rotativo de modo F (`M1`, `M2`, `S1`), el estado del deslizador `SLD` y los botones actualmente pulsados:
+```bash
+x56 buttons status
+x56 buttons status --json
+```
+
+Salida típica:
+```text
+Estado del Hardware X56
+========================
+Dispositivos conectados: Stick [SÍ], Throttle [SÍ]
+Modo físico activo     : M1 (Modo 1: Navegación / Estándar)
+Control deslizante SLD : INACTIVO (OFF)
+Botones pulsados       : ninguno
+```
+
+#### Asignar teclas a un botón en un modo (`x56 buttons bind`):
+Asocia atajos de teclado o comandos a un botón específico en cualquiera de los tres modos (`m1`, `m2`, `s1`) y comete los cambios en el archivo TOML indicado:
+```bash
+# Asignar la barra espaciadora al gatillo en Modo 1 (M1)
+x56 buttons bind --file mi_perfil.toml --mode m1 --button stick_trigger --keys "Space" --name "Fuego Primario"
+
+# Asignar combinación de modificadores en Modo 2 (M2)
+x56 buttons bind --file mi_perfil.toml --mode m2 --button stick_btn_a --keys "Ctrl+Shift+F" --name "Contramedidas"
+
+# Asignar tecla G al conmutador TGL 1 en Modo Especial (S1)
+x56 buttons bind --file mi_perfil.toml --mode s1 --button thr_sw_1 --keys "G" --name "Tren de Aterrizaje"
+
+# Asignar aerofrenos al deslizador de 2 posiciones SLD
+x56 buttons bind --file mi_perfil.toml --mode s1 --button thr_sld --keys "B" --name "Aerofrenos"
+```
+
+> **Sintaxis de teclas**: Se admiten combinaciones separadas por `+` o `,` (p. ej. `Ctrl+Alt+Delete`, `Shift+F2`, `Space`, `Enter`, `Escape`, `Up`, `Down`, `A..Z`, `0..9`).
+
+#### Ejecutar monitor de emisión en vivo (`x56 buttons run`):
+Carga un perfil TOML, crea un teclado virtual Linux mediante `/dev/uinput` y monitoriza el hardware a 50 Hz. Al presionar los botones físicos, emite instantáneamente las pulsaciones configuradas según la posición física real del selector rotativo de modo (`M1`, `M2`, `S1`):
+```bash
+x56 buttons run mi_perfil.toml
+```
+
+Salida en ejecución:
+```text
+Perfil 'DCS Hornet' activo: 8 asignación(es). Ctrl+C para salir.
+Modo actual: M1 - Modo 1 (Navegación / Estándar)
+[M1] stick_trigger (Gatillo) -> Space
+[M1] thr_sld (SLD) -> B
+Modo -> M2 - Modo 2 (Combate / Ataque)
+[M2] stick_trigger (Gatillo) -> Ctrl + Space
+```
+
+### 7. Calibración de Sensores Hall (`x56 calibrate`)
 
 Muestrea pasivamente la posición central del joystick a través de la Interfaz 0 (sin alterar el driver) y calcula el ajuste exacto del punto cero del sensor Hall:
 
@@ -253,7 +351,7 @@ Muestras analizadas: 100 paquetes desde la Interfaz 0 (solo lectura)
   Estado               : APLICADO
 ```
 
-### 7. Restauración de Fábrica (`x56 reset-defaults`)
+### 8. Restauración de Fábrica (`x56 reset-defaults`)
 
 Restaura los valores de curva y deadband predeterminados por el fabricante:
 
@@ -300,9 +398,38 @@ cargo run -p x56-gui --release
 - Panel visual de comprobación del estado del sistema en tiempo real.
 - Inspección de 6 capas: permisos udev, nodos `/dev/hidraw*`, detección de periféricos USB, soporte de simulador (`/dev/input/js*`) y handshake bidireccional con el firmware.
 
-### 5. Gestión de Perfiles TOML
+### 5. Programación de Botones y Modos (Sección 8 del Manual)
+Inspirada directamente en la **Sección 8 del Manual de Usuario Oficial Logitech G X56 HOTAS**, esta pestaña proporciona un entorno profesional para la creación de perfiles de asignación de comandos, macros y combinaciones de teclas con soporte completo para los tres modos del selector rotativo (`M1`, `M2`, `S1`) y el control deslizante `SLD`.
+
+- **Esquema Técnico Interactivo 2D con `egui::Painter`**:
+  - Dibuja diagramas esquemáticos vectoriales de alta legibilidad técnica para el Stick y el Throttle organizados por las secciones del manual del fabricante:
+    - **Stick**: Sección A (*POV 8-Way*), Sección B (*Minipalanca analógica Push C*), Sección C (*Selectores Thumb HAT H1 Castle y H2 Witches*), Sección D (*Gatillo principal y Botones A, B, D*), Sección F (*Botón Pinkie y Palanca Flying Pinkie*).
+    - **Throttle**: Sección A (*Giratorios F/G Push y Rueda Scroll*), Sección B (*Control deslizante de 2 posiciones SLD*), Sección C (*Botones E, H, I, Minipalanca Push y HATs H3 y H4*), Sección D (*Empuñaduras dobles gemelas*), Sección F (*Selector rotativo de modo M1/M2/S1*), Sección G (*Conmutadores de base TGL 1 a 7 con SW 1 a 14*).
+  - **Retroalimentación luminosa en vivo**:
+    - **Verde Neón**: Se ilumina instantáneamente al pulsar físicamente el botón en el hardware.
+    - **Cian Brillante**: Se resalta cuando el ratón pasa por encima de la celda de comando o del nodo correspondiente.
+    - **Ámbar**: Indica que el botón ya cuenta con una tecla o comando asignado en el modo actualmente visible.
+  - **Interacción directa**: Al hacer clic sobre cualquier nodo del esquema se abre inmediatamente la celda correspondiente para su edición.
+- **Celdas de Comandos (Command Cells) por Modo (`M1`, `M2`, `S1`)**:
+  - Organizadas por grupos funcionales con filtro desplegable y contador de asignaciones.
+  - Visualización mediante **mosaicos (tiles blancos de alto contraste)** para cada tecla asignada (p. ej. `[LShift] + [F2]`).
+  - **Modo edición interactivo**: Al hacer clic en una celda, muestra un cursor parpadeante (`▌ Esperando pulsación de teclado...`), captura en tiempo real cualquier tecla presionada en el teclado (incluyendo modificadores `Ctrl`, `Shift`, `Alt`, teclas de función `F1..F12`, `Space`, `Enter`, `Tab`, `Escape`, flechas de dirección y teclas alfanuméricas), permite bautizar el comando (ej. *"Tren de aterrizaje"*) y confirmar con la marca de verificación verde (`✔`) o descartar con la cruz roja (`✖`).
+- **Seguimiento Automático del Selector Rotativo F y Deslizante SLD**:
+  - Muestreo en tiempo real a 50 Hz mediante evdev.
+  - **Sincronización física**: Al activar la opción *"🔄 Seguir selector físico M1/M2/S1"*, el editor cambia automáticamente entre los modos `M1`, `M2` y `S1` cuando el piloto gira físicamente el conmutador rotativo del cuadrante de gases.
+  - Badges luminosos en la barra superior indicando el modo físico activo y el estado del control deslizante `SLD` (`ACTIVO (ON)` / `INACTIVO (OFF)`).
+- **Activación de Emisión "Diana Azul" vía `/dev/uinput`**:
+  - Botón prominente en la barra de herramientas que activa o pausa la inyección real de teclas al sistema operativo.
+  - Cuando está activa la "Diana Azul", cualquier pulsación en los botones del X56 dispara instantáneamente los atajos de teclado asociados a través del controlador virtual `/dev/uinput`.
+  - Muestra avisos visuales claros sobre la disponibilidad y permisos del módulo `uinput`.
+- **Ventana Modal de Prueba ("Probar Perfil")**:
+  - Accesible desde el icono de engranaje `⚙️ Probar Perfil`.
+  - Monitoriza en vivo todos los comandos disparados con registro de hora local (`HH:MM:SS`), modo activo, botón físico presionado, nombre del comando, mosaico de teclas emitidas y verificación de estado `uinput`.
+  - Incluye un campo de texto interactivo para comprobar de inmediato que las teclas se escriben y emiten correctamente en el sistema sin necesidad de abrir una aplicación externa.
+
+### 6. Gestión de Perfiles TOML
 - Acceso directo en la barra superior para `Guardar Perfil TOML` o `Cargar Perfil TOML`.
-- Permite respaldar perfiles completos y compartirlos entre diferentes simuladores de vuelo (*DCS*, *MSFS*, *X-Plane*, *Star Citizen*).
+- Permite respaldar perfiles completos (ejes, curvas, iluminación RGB y asignaciones completas de botones en los 3 modos) y compartirlos entre diferentes simuladores de vuelo (*DCS*, *MSFS*, *X-Plane*, *Star Citizen*).
 
 ---
 
@@ -373,6 +500,7 @@ x56linux/
   - [x] `x56 axis get`: Lectura de todos los ejes vía Interrupt Report 0xFF.
   - [x] `x56 axis set`: Modificación y round-trip persistente de curvas.
   - [x] `x56 profile save/load`: Perfiles TOML exportables y aplicables.
+  - [x] `x56 buttons`: Catálogo de botones, estado en vivo, bind y monitor en segundo plano (`run`).
   - [x] `x56 calibrate`: Muestreo pasivo y calibración del sensor Hall.
   - [x] `x56 doctor`: Diagnóstico integral del sistema.
   - [x] `x56 reset-defaults`: Restauración de fábrica.
@@ -386,7 +514,8 @@ x56linux/
   - [x] Gestor de color RGB con selector interactivo y sincronización Stick + Throttle.
   - [x] Asistente paso a paso de calibración de sensores Hall con umbrales de deriva.
   - [x] Pestaña de diagnóstico del sistema (`DoctorTab`) integrada.
-  - [x] Modal de exportación / importación de perfiles TOML.
+  - [x] Pestaña de Programación de Botones y Modos (Sección 8) con esquema 2D interactivo, inyección uinput y ventana modal de prueba.
+  - [x] Modal de exportación / importación de perfiles TOML (ejes, RGB y botones).
 
 ---
 

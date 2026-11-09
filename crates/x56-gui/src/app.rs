@@ -2,18 +2,20 @@
 
 use std::path::PathBuf;
 
-use eframe::egui::{self, Color32, Ui};
-use x56_core::{FullProfile, ProfileManager, TargetDevice, X56Device};
+use eframe::egui::{self, Color32, RichText, Ui};
+use x56_core::{ButtonMonitor, FullProfile, ModeSlot, ProfileManager, TargetDevice, X56Device};
 
 use crate::curve_math::LiveInputPoller;
 use crate::tabs::calibrate::CalibrateTab;
 use crate::tabs::curves::CurvesTab;
 use crate::tabs::doctor::DoctorTab;
+use crate::tabs::programming::ProgrammingTab;
 use crate::tabs::rgb::RgbTab;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActiveTab {
     Curves,
+    Programming,
     Rgb,
     Calibrate,
     Doctor,
@@ -22,10 +24,12 @@ pub enum ActiveTab {
 pub struct X56App {
     pub active_tab: ActiveTab,
     pub curves_tab: CurvesTab,
+    pub programming_tab: ProgrammingTab,
     pub rgb_tab: RgbTab,
     pub calibrate_tab: CalibrateTab,
     pub doctor_tab: DoctorTab,
     pub poller: LiveInputPoller,
+    pub button_monitor: ButtonMonitor,
 
     // Hardware status
     pub stick_detected: bool,
@@ -49,10 +53,12 @@ impl Default for X56App {
         let mut app = Self {
             active_tab: ActiveTab::Curves,
             curves_tab: CurvesTab::default(),
+            programming_tab: ProgrammingTab::default(),
             rgb_tab: RgbTab::default(),
             calibrate_tab: CalibrateTab::default(),
             doctor_tab: DoctorTab::default(),
             poller: LiveInputPoller::new(),
+            button_monitor: ButtonMonitor::new(),
             stick_detected: false,
             throttle_detected: false,
             profile_path_buf: "examples/combat_profile.toml".into(),
@@ -73,12 +79,28 @@ impl X56App {
     }
 
     fn render_top_bar(&mut self, ui: &mut Ui) {
+        let snap = self.button_monitor.snapshot();
         ui.horizontal(|ui| {
             ui.heading("🦅 Saitek / Logitech X56 Control Center");
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                // Indicador en vivo del Selector Rotativo de Modo (M1/M2/S1) y SLD
+                let mode_color = match snap.active_mode {
+                    ModeSlot::M1 => Color32::from_rgb(70, 210, 255),
+                    ModeSlot::M2 => Color32::from_rgb(255, 175, 60),
+                    ModeSlot::S1 => Color32::from_rgb(190, 120, 255),
+                };
+                let sld_str = if snap.slider_sld_on { "SLD:ON" } else { "SLD:OFF" };
+                ui.colored_label(
+                    mode_color,
+                    RichText::new(format!("🎛 Modo: {} | {}", snap.active_mode.as_str(), sld_str))
+                        .strong(),
+                );
+
+                ui.separator();
+
                 // Indicador de Throttle
-                let throttle_col = if self.throttle_detected {
+                let throttle_col = if self.throttle_detected || snap.throttle_connected {
                     Color32::from_rgb(80, 220, 80)
                 } else {
                     Color32::from_rgb(140, 140, 140)
@@ -86,7 +108,7 @@ impl X56App {
                 ui.colored_label(throttle_col, "🚀 Throttle");
 
                 // Indicador de Stick
-                let stick_col = if self.stick_detected {
+                let stick_col = if self.stick_detected || snap.stick_connected {
                     Color32::from_rgb(80, 220, 80)
                 } else {
                     Color32::from_rgb(140, 140, 140)
@@ -121,6 +143,7 @@ impl X56App {
         ui.horizontal(|ui| {
             let tabs = [
                 (ActiveTab::Curves, "📈 Curvas y Ejes"),
+                (ActiveTab::Programming, "🎮 Programación (Botones y Modos)"),
                 (ActiveTab::Rgb, "💡 Iluminación RGB"),
                 (ActiveTab::Calibrate, "🎯 Calibrador Hall"),
                 (ActiveTab::Doctor, "🩺 Diagnóstico Doctor"),
@@ -163,21 +186,26 @@ impl X56App {
                             if ui.button("Guardar").clicked() {
                                 let path = PathBuf::from(&self.profile_path_buf);
                                 match ProfileManager::dump_current("Perfil X56", None, None) {
-                                    Ok(prof) => match prof.save_to_file(&path) {
-                                        Ok(_) => {
-                                            self.top_banner_message = Some((
-                                                format!("Perfil guardado en {}", path.display()),
-                                                false,
-                                            ));
-                                            self.show_profile_dialog = false;
+                                    Ok(mut prof) => {
+                                        prof.programming = Some(
+                                            self.programming_tab.current_programming_profile(),
+                                        );
+                                        match prof.save_to_file(&path) {
+                                            Ok(_) => {
+                                                self.top_banner_message = Some((
+                                                    format!("Perfil guardado en {}", path.display()),
+                                                    false,
+                                                ));
+                                                self.show_profile_dialog = false;
+                                            }
+                                            Err(err) => {
+                                                self.top_banner_message = Some((
+                                                    format!("Error guardando perfil: {err}"),
+                                                    true,
+                                                ));
+                                            }
                                         }
-                                        Err(err) => {
-                                            self.top_banner_message = Some((
-                                                format!("Error guardando perfil: {err}"),
-                                                true,
-                                            ));
-                                        }
-                                    },
+                                    }
                                     Err(err) => {
                                         self.top_banner_message = Some((
                                             format!("Error volcando configuración: {err}"),
@@ -191,27 +219,41 @@ impl X56App {
                             if ui.button("Cargar y Aplicar").clicked() {
                                 let path = PathBuf::from(&self.profile_path_buf);
                                 match FullProfile::load_from_file(&path) {
-                                    Ok(prof) => match ProfileManager::apply(&prof) {
-                                        Ok(summary) => {
-                                            self.curves_tab.read_from_hardware();
-                                            self.top_banner_message = Some((
-                                                format!(
-                                                    "Perfil '{}' aplicado ({} ejes stick, {} gases)",
-                                                    prof.name,
-                                                    summary.stick_axes_updated,
-                                                    summary.throttle_axes_updated
-                                                ),
-                                                false,
-                                            ));
-                                            self.show_profile_dialog = false;
+                                    Ok(prof) => {
+                                        if let Some(ref prog) = prof.programming {
+                                            self.programming_tab.load_programming_profile(
+                                                prog.clone(),
+                                                &self.button_monitor,
+                                            );
                                         }
-                                        Err(err) => {
-                                            self.top_banner_message = Some((
-                                                format!("Error aplicando perfil: {err}"),
-                                                true,
-                                            ));
+                                        match ProfileManager::apply(&prof) {
+                                            Ok(summary) => {
+                                                self.curves_tab.read_from_hardware();
+                                                let prog_cnt = prof
+                                                    .programming
+                                                    .as_ref()
+                                                    .map(|p| p.total_assigned_count())
+                                                    .unwrap_or(0);
+                                                self.top_banner_message = Some((
+                                                    format!(
+                                                        "Perfil '{}' aplicado ({} ejes stick, {} gases, {} botones programados)",
+                                                        prof.name,
+                                                        summary.stick_axes_updated,
+                                                        summary.throttle_axes_updated,
+                                                        prog_cnt
+                                                    ),
+                                                    false,
+                                                ));
+                                                self.show_profile_dialog = false;
+                                            }
+                                            Err(err) => {
+                                                self.top_banner_message = Some((
+                                                    format!("Error aplicando perfil: {err}"),
+                                                    true,
+                                                ));
+                                            }
                                         }
-                                    },
+                                    }
                                     Err(err) => {
                                         self.top_banner_message = Some((
                                             format!("Error cargando archivo: {err}"),
@@ -256,6 +298,7 @@ impl eframe::App for X56App {
 
         egui::CentralPanel::default().show(ui, |ui| match self.active_tab {
             ActiveTab::Curves => self.curves_tab.ui(ui, &self.poller),
+            ActiveTab::Programming => self.programming_tab.ui(ui, &self.button_monitor),
             ActiveTab::Rgb => self.rgb_tab.ui(ui),
             ActiveTab::Calibrate => self.calibrate_tab.ui(ui),
             ActiveTab::Doctor => self.doctor_tab.ui(ui),

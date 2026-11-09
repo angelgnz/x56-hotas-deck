@@ -1,10 +1,15 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread;
+use std::time::Duration;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use x56_core::{
-    axis_name, parse_color, Calibrator, CheckStatus, CurveProfile, DeviceKind, Doctor, FullProfile,
-    ProfileManager, TargetDevice, X56Descriptor, X56Manager,
+    all_button_descriptors, axis_name, catalog_for_device, parse_color, ButtonDescriptor,
+    ButtonMonitor, Calibrator, CheckStatus, CommandCell, CurveProfile, DeviceKind, Doctor,
+    FullProfile, ModeSlot, ProfileManager, ProgrammingProfile, TargetDevice, X56Descriptor,
+    X56Manager,
 };
 
 #[derive(Parser)]
@@ -60,6 +65,82 @@ enum Commands {
         #[arg(short, long, default_value = "all")]
         device: CliTargetDevice,
     },
+
+    /// Catálogo de botones, estado en vivo y asignación de teclas por modo (M1/M2/S1)
+    Buttons {
+        #[command(subcommand)]
+        command: ButtonsCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum ButtonsCommands {
+    /// Lista el catálogo de botones con su ID, sección del manual, código evdev y grupo
+    List {
+        /// Dispositivo: stick, throttle o all (por defecto: all)
+        #[arg(short, long, default_value = "all")]
+        device: CliTargetDevice,
+
+        /// Salida en formato JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Muestra el estado en vivo: modo M1/M2/S1, deslizador SLD y botones pulsados
+    Status {
+        /// Salida en formato JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Asigna teclas a un botón en un modo y guarda el perfil TOML
+    Bind(ButtonsBindArgs),
+
+    /// Ejecuta el perfil: emite las teclas asignadas por /dev/uinput hasta Ctrl+C
+    Run {
+        /// Ruta del perfil .toml con las asignaciones
+        path: PathBuf,
+    },
+}
+
+#[derive(Args)]
+struct ButtonsBindArgs {
+    /// Perfil .toml a modificar (se crea si no existe)
+    #[arg(short, long)]
+    file: PathBuf,
+
+    /// Modo del selector rotativo: m1, m2 o s1
+    #[arg(short, long, ignore_case = true)]
+    mode: CliModeSlot,
+
+    /// ID del botón (ver `x56 buttons list`)
+    #[arg(short, long)]
+    button: String,
+
+    /// Teclas separadas por '+' o ',' (ej: Ctrl+Shift+F5)
+    #[arg(short, long)]
+    keys: String,
+
+    /// Nombre del comando (por defecto: etiqueta del botón)
+    #[arg(short, long)]
+    name: Option<String>,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, ValueEnum)]
+enum CliModeSlot {
+    M1,
+    M2,
+    S1,
+}
+
+impl From<CliModeSlot> for ModeSlot {
+    fn from(m: CliModeSlot) -> Self {
+        match m {
+            CliModeSlot::M1 => ModeSlot::M1,
+            CliModeSlot::M2 => ModeSlot::M2,
+            CliModeSlot::S1 => ModeSlot::S1,
+        }
+    }
 }
 
 #[derive(Args)]
@@ -247,6 +328,12 @@ fn main() -> ExitCode {
         Commands::Doctor { json } => handle_doctor(json),
         Commands::Calibrate(args) => handle_calibrate(args),
         Commands::ResetDefaults { device } => handle_reset_defaults(device.into()),
+        Commands::Buttons { command } => match command {
+            ButtonsCommands::List { device, json } => handle_buttons_list(device, json),
+            ButtonsCommands::Status { json } => handle_buttons_status(json),
+            ButtonsCommands::Bind(args) => handle_buttons_bind(args),
+            ButtonsCommands::Run { path } => handle_buttons_run(&path),
+        },
     }
 }
 
@@ -642,5 +729,413 @@ fn handle_calibrate(args: CalibrateArgs) -> ExitCode {
             eprintln!("Error ejecutando calibración: {}", err);
             ExitCode::FAILURE
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Subcomando `buttons`
+// ---------------------------------------------------------------------------
+
+fn device_name(kind: DeviceKind) -> &'static str {
+    match kind {
+        DeviceKind::Stick => "stick",
+        DeviceKind::Throttle => "throttle",
+    }
+}
+
+/// Código evdev en hexadecimal; el POV (código 0) se lee de `ABS_HAT0X/Y`.
+fn evdev_display(d: &ButtonDescriptor) -> String {
+    match abs_axis(d) {
+        Some(axis) => axis.to_string(),
+        None => format!("{:#05x}", d.evdev_code),
+    }
+}
+
+fn abs_axis(d: &ButtonDescriptor) -> Option<&'static str> {
+    if d.evdev_code != 0 {
+        return None;
+    }
+    match d.index {
+        100 | 102 => Some("ABS_HAT0Y"),
+        _ => Some("ABS_HAT0X"),
+    }
+}
+
+fn handle_buttons_list(device: CliTargetDevice, json: bool) -> ExitCode {
+    let descriptors = match device {
+        CliTargetDevice::All => all_button_descriptors(),
+        CliTargetDevice::Stick => catalog_for_device(DeviceKind::Stick),
+        CliTargetDevice::Throttle => catalog_for_device(DeviceKind::Throttle),
+    };
+
+    if json {
+        let list: Vec<serde_json::Value> = descriptors
+            .iter()
+            .map(|d| {
+                serde_json::json!({
+                    "id": d.id,
+                    "device": device_name(d.device),
+                    "index": d.index,
+                    "code_label": d.code_label,
+                    "evdev_code": evdev_display(d),
+                    "group": d.group,
+                    "label": d.label,
+                })
+            })
+            .collect();
+        println!("{}", serde_json::to_string_pretty(&list).unwrap());
+        return ExitCode::SUCCESS;
+    }
+
+    let id_w = descriptors
+        .iter()
+        .map(|d| d.id.len())
+        .max()
+        .unwrap_or(2)
+        .max(2);
+    let ev_w = descriptors
+        .iter()
+        .map(|d| evdev_display(d).len())
+        .max()
+        .unwrap_or(5)
+        .max(5);
+    let grp_w = descriptors
+        .iter()
+        .map(|d| d.group.chars().count())
+        .max()
+        .unwrap_or(5)
+        .max(5);
+
+    println!(
+        "{:<id_w$}  {:<3}  {:<ev_w$}  {:<grp_w$}  NOMBRE",
+        "ID", "SEC", "EVDEV", "GRUPO"
+    );
+    let mut current: Option<DeviceKind> = None;
+    for d in &descriptors {
+        if current != Some(d.device) {
+            current = Some(d.device);
+            println!("-- {} --", device_name(d.device).to_uppercase());
+        }
+        let pad = grp_w.saturating_sub(d.group.chars().count());
+        println!(
+            "{:<id_w$}  {:<3}  {:<ev_w$}  {}{}  {}",
+            d.id,
+            d.code_label,
+            evdev_display(d),
+            d.group,
+            " ".repeat(pad),
+            d.label
+        );
+    }
+    println!();
+    println!(
+        "Total: {} botones. Selector de modo F (M1/M2/S1) = 0x2d1/0x2d2/0x2d3.",
+        descriptors.len()
+    );
+    ExitCode::SUCCESS
+}
+
+fn handle_buttons_status(json: bool) -> ExitCode {
+    let monitor = ButtonMonitor::new();
+    // Deja que el hilo poller lea el estado real de evdev.
+    thread::sleep(Duration::from_millis(60));
+    let snap = monitor.snapshot();
+    drop(monitor);
+
+    let all = all_button_descriptors();
+    let mut pressed: Vec<&String> = snap.pressed_buttons.iter().collect();
+    pressed.sort();
+
+    if json {
+        let obj = serde_json::json!({
+            "active_mode": snap.active_mode.as_str(),
+            "active_mode_description": snap.active_mode.description(),
+            "slider_sld": if snap.slider_sld_on { "ON" } else { "OFF" },
+            "stick_connected": snap.stick_connected,
+            "throttle_connected": snap.throttle_connected,
+            "pressed_buttons": pressed,
+        });
+        println!("{}", serde_json::to_string_pretty(&obj).unwrap());
+        return ExitCode::SUCCESS;
+    }
+
+    let conn = |c: bool| if c { "CONECTADO" } else { "NO DETECTADO" };
+    println!("Estado en vivo del X56 (evdev)");
+    println!("------------------------------");
+    println!("Stick    : {}", conn(snap.stick_connected));
+    println!("Throttle : {}", conn(snap.throttle_connected));
+    println!(
+        "Modo     : {} - {}",
+        snap.active_mode.as_str(),
+        snap.active_mode.description()
+    );
+    println!(
+        "SLD      : {}",
+        if snap.slider_sld_on { "ON" } else { "OFF" }
+    );
+    if pressed.is_empty() {
+        println!("Botones pulsados: ninguno");
+    } else {
+        println!("Botones pulsados ({}):", pressed.len());
+        for id in pressed {
+            let label = all
+                .iter()
+                .find(|d| &d.id == id)
+                .map(|d| d.label)
+                .unwrap_or("?");
+            println!("  • {id} ({label})");
+        }
+    }
+    if !snap.stick_connected && !snap.throttle_connected {
+        eprintln!(
+            "Aviso: no se pudo leer ningún nodo /dev/input/event* del X56 (¿desconectado o sin permisos?)."
+        );
+    }
+    ExitCode::SUCCESS
+}
+
+/// Divide una lista de teclas separadas por `+` o `,`.
+fn parse_keys(input: &str) -> Vec<String> {
+    input
+        .split(['+', ','])
+        .map(str::trim)
+        .filter(|k| !k.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+/// Valida el botón y asigna la celda en el modo indicado; devuelve el descriptor del botón.
+fn apply_bind(
+    profile: &mut FullProfile,
+    mode: ModeSlot,
+    button_id: &str,
+    keys: Vec<String>,
+    name: Option<String>,
+) -> Result<ButtonDescriptor, String> {
+    let descriptor = all_button_descriptors()
+        .into_iter()
+        .find(|d| d.id == button_id)
+        .ok_or_else(|| {
+            format!("botón desconocido '{button_id}' (usa `x56 buttons list` para ver los IDs)")
+        })?;
+    if keys.is_empty() {
+        return Err("--keys no contiene ninguna tecla".to_string());
+    }
+    let cell = CommandCell {
+        button_id: descriptor.id.clone(),
+        name: name.unwrap_or_else(|| descriptor.label.to_string()),
+        keys,
+    };
+    profile
+        .programming
+        .get_or_insert_with(ProgrammingProfile::default)
+        .set_cell(mode, cell);
+    Ok(descriptor)
+}
+
+fn handle_buttons_bind(args: ButtonsBindArgs) -> ExitCode {
+    let mode: ModeSlot = args.mode.into();
+
+    let mut profile = if args.file.exists() {
+        match FullProfile::load_from_file(&args.file) {
+            Ok(p) => p,
+            Err(err) => {
+                eprintln!("Error cargando perfil {}: {}", args.file.display(), err);
+                return ExitCode::FAILURE;
+            }
+        }
+    } else {
+        let name = args
+            .file
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "x56-profile".to_string());
+        FullProfile::new(name)
+    };
+
+    let keys = parse_keys(&args.keys);
+    let descriptor = match apply_bind(&mut profile, mode, &args.button, keys.clone(), args.name) {
+        Ok(d) => d,
+        Err(err) => {
+            eprintln!("Error: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    if let Err(err) = profile.save_to_file(&args.file) {
+        eprintln!("Error guardando perfil {}: {}", args.file.display(), err);
+        return ExitCode::FAILURE;
+    }
+
+    println!(
+        "[{}] {} ({}) -> {}",
+        mode.as_str(),
+        descriptor.id,
+        descriptor.label,
+        keys.join(" + ")
+    );
+    println!("Perfil guardado en {}", args.file.display());
+    ExitCode::SUCCESS
+}
+
+static STOP: AtomicBool = AtomicBool::new(false);
+
+extern "C" fn on_sigint(_signum: i32) {
+    STOP.store(true, Ordering::SeqCst);
+}
+
+extern "C" {
+    fn signal(signum: i32, handler: extern "C" fn(i32)) -> usize;
+}
+
+fn install_sigint_handler() {
+    const SIGINT: i32 = 2;
+    // SAFETY: el manejador solo escribe un `AtomicBool` (async-signal-safe).
+    unsafe {
+        signal(SIGINT, on_sigint);
+    }
+}
+
+fn handle_buttons_run(path: &Path) -> ExitCode {
+    let profile = match FullProfile::load_from_file(path) {
+        Ok(p) => p,
+        Err(err) => {
+            eprintln!("Error cargando perfil {}: {}", path.display(), err);
+            return ExitCode::FAILURE;
+        }
+    };
+    let programming = profile.programming.unwrap_or_else(|| {
+        eprintln!("Aviso: el perfil no contiene asignaciones de botones ([programming]).");
+        ProgrammingProfile::default()
+    });
+    let assigned = programming.total_assigned_count();
+
+    install_sigint_handler();
+    let monitor = ButtonMonitor::new();
+    monitor.set_profile(programming);
+    monitor.set_active(true);
+
+    println!(
+        "Perfil '{}' activo: {} asignación(es). Ctrl+C para salir.",
+        profile.name, assigned
+    );
+    if !monitor.uinput_available() {
+        eprintln!(
+            "Aviso: /dev/uinput no disponible; los eventos se registrarán pero no se emitirán teclas."
+        );
+    }
+
+    thread::sleep(Duration::from_millis(60));
+    let mut last_mode = monitor.snapshot().active_mode;
+    println!(
+        "Modo actual: {} - {}",
+        last_mode.as_str(),
+        last_mode.description()
+    );
+
+    while !STOP.load(Ordering::SeqCst) {
+        let mode = monitor.snapshot().active_mode;
+        if mode != last_mode {
+            println!("Modo -> {} - {}", mode.as_str(), mode.description());
+            last_mode = mode;
+        }
+        for ev in monitor.drain_events() {
+            println!(
+                "[{}] [{}] {} ({}) -> {} [{}] {}",
+                ev.timestamp_hms,
+                ev.mode.as_str(),
+                ev.button_id,
+                ev.button_label,
+                ev.command_name,
+                ev.keys.join(" + "),
+                if ev.uinput_emitted {
+                    "uinput: emitido"
+                } else {
+                    "uinput: NO emitido"
+                }
+            );
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+
+    monitor.set_active(false);
+    println!("\nDetenido.");
+    ExitCode::SUCCESS
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    #[test]
+    fn cli_definition_is_valid() {
+        Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn parses_buttons_subcommands() {
+        assert!(
+            Cli::try_parse_from(["x56", "buttons", "list", "--device", "stick", "--json"]).is_ok()
+        );
+        assert!(Cli::try_parse_from(["x56", "buttons", "status", "--json"]).is_ok());
+        assert!(Cli::try_parse_from(["x56", "buttons", "run", "p.toml"]).is_ok());
+        assert!(Cli::try_parse_from([
+            "x56",
+            "buttons",
+            "bind",
+            "--file",
+            "p.toml",
+            "--mode",
+            "m2",
+            "--button",
+            "stick_trigger",
+            "--keys",
+            "Ctrl+F",
+            "--name",
+            "Fuego",
+        ])
+        .is_ok());
+        assert!(Cli::try_parse_from([
+            "x56", "buttons", "bind", "--file", "p.toml", "--mode", "m9", "--button", "x",
+            "--keys", "A",
+        ])
+        .is_err());
+    }
+
+    #[test]
+    fn keys_split_on_plus_and_comma() {
+        assert_eq!(parse_keys("Ctrl+Shift, F5"), ["Ctrl", "Shift", "F5"]);
+        assert_eq!(parse_keys(" A "), ["A"]);
+        assert!(parse_keys("+ , ").is_empty());
+    }
+
+    #[test]
+    fn bind_validates_and_assigns() {
+        let mut p = FullProfile::new("t");
+        let d = apply_bind(&mut p, ModeSlot::S1, "thr_sld", vec!["G".into()], None).unwrap();
+        assert_eq!(d.id, "thr_sld");
+        let cell = p
+            .programming
+            .as_ref()
+            .unwrap()
+            .get_cell(ModeSlot::S1, "thr_sld")
+            .unwrap();
+        assert_eq!(cell.name, d.label);
+        assert_eq!(cell.keys, ["G"]);
+
+        assert!(apply_bind(&mut p, ModeSlot::M1, "nope", vec!["A".into()], None).is_err());
+        assert!(apply_bind(&mut p, ModeSlot::M1, "thr_sld", vec![], None).is_err());
+        assert_eq!(p.programming.unwrap().total_assigned_count(), 1);
+    }
+
+    #[test]
+    fn evdev_display_formats() {
+        let all = all_button_descriptors();
+        let get = |id: &str| all.iter().find(|d| d.id == id).unwrap();
+        assert_eq!(evdev_display(get("stick_trigger")), "0x120");
+        assert_eq!(evdev_display(get("thr_sld")), "0x2d0");
+        assert_eq!(evdev_display(get("stick_pov_up")), "ABS_HAT0Y");
+        assert_eq!(evdev_display(get("stick_pov_left")), "ABS_HAT0X");
     }
 }

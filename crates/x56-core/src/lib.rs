@@ -9,10 +9,15 @@ pub use x56_hid::{
 };
 pub use x56_proto::{AxisConfig, CurveProfile, ProtoError, RgbColor};
 
+pub mod buttons;
 pub mod calibrate;
 pub mod doctor;
 pub mod profile;
 
+pub use buttons::{
+    all_button_descriptors, catalog_for_device, ButtonDescriptor, ButtonMonitor, CommandCell,
+    LiveButtonsSnapshot, ModeBindings, ModeSlot, ProgrammingProfile, TriggeredCommandEvent,
+};
 pub use calibrate::{Calibrator, HallCalibrationResult};
 pub use doctor::{CheckStatus, Doctor, DoctorCheck, DoctorReport};
 pub use profile::{

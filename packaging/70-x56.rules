@@ -19,3 +19,7 @@ SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", \
 SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", \
   ATTR{idVendor}=="046d", ATTR{idProduct}=="c22a|c22b", \
   TAG+="uaccess"
+
+# --- Teclado Virtual /dev/uinput para Programación de Botones y Modos (M1/M2/S1) ---
+KERNEL=="uinput", SUBSYSTEM=="misc", \
+  TAG+="uaccess", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"

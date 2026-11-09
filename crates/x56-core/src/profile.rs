@@ -7,7 +7,8 @@ use serde::{Deserialize, Serialize};
 use x56_proto::{AxisConfig, CurveProfile, RgbColor};
 
 use crate::{
-    axis_name, parse_color, CoreError, DeviceKind, HidTransportError, TargetDevice, X56Device,
+    axis_name, parse_color, CoreError, DeviceKind, HidTransportError, ProgrammingProfile,
+    TargetDevice, X56Device,
 };
 
 /// Configuración de un eje dentro de un perfil persistente.
@@ -107,6 +108,9 @@ pub struct FullProfile {
     /// Perfil para el cuadrante de gases (Throttle).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub throttle: Option<DeviceProfile>,
+    /// Asignación de botones por modo (`M1`, `M2`, `S1`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub programming: Option<ProgrammingProfile>,
 }
 
 impl FullProfile {
@@ -118,6 +122,7 @@ impl FullProfile {
             description: None,
             stick: None,
             throttle: None,
+            programming: None,
         }
     }
 
