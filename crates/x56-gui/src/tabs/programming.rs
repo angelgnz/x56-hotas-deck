@@ -579,19 +579,13 @@ impl ProgrammingTab {
                 painter.circle_stroke(
                     center,
                     node.radius + 4.0,
-                    Stroke::new(
-                        1.5,
-                        Color32::from_rgba_unmultiplied(0, 255, 120, 130),
-                    ),
+                    Stroke::new(1.5, Color32::from_rgba_unmultiplied(0, 255, 120, 130)),
                 );
             } else if is_hovered {
                 painter.circle_stroke(
                     center,
                     node.radius + 3.0,
-                    Stroke::new(
-                        1.5,
-                        Color32::from_rgba_unmultiplied(0, 215, 255, 110),
-                    ),
+                    Stroke::new(1.5, Color32::from_rgba_unmultiplied(0, 215, 255, 110)),
                 );
             }
 
@@ -629,10 +623,22 @@ impl ProgrammingTab {
 
                 response.clone().on_hover_ui_at_pointer(|ui| {
                     ui.heading(node.full_name);
-                    ui.label(RichText::new(format!("ID: {}", node.id)).size(10.0).monospace());
-                    ui.label(RichText::new(cell_info).strong().color(Color32::from_rgb(0, 220, 255)));
+                    ui.label(
+                        RichText::new(format!("ID: {}", node.id))
+                            .size(10.0)
+                            .monospace(),
+                    );
+                    ui.label(
+                        RichText::new(cell_info)
+                            .strong()
+                            .color(Color32::from_rgb(0, 220, 255)),
+                    );
                     ui.separator();
-                    ui.label(RichText::new("Haz clic en el nodo para editar asignación").size(11.0).italics());
+                    ui.label(
+                        RichText::new("Haz clic en el nodo para editar asignación")
+                            .size(11.0)
+                            .italics(),
+                    );
                 });
             }
         }
@@ -663,79 +669,127 @@ impl ProgrammingTab {
 
         // Cabezal superior del Stick
         let head_rect = egui::Rect::from_min_max(
-            egui::pos2(rect.min.x + rect.width() * 0.16, rect.min.y + rect.height() * 0.08),
-            egui::pos2(rect.min.x + rect.width() * 0.84, rect.min.y + rect.height() * 0.44),
+            egui::pos2(
+                rect.min.x + rect.width() * 0.16,
+                rect.min.y + rect.height() * 0.08,
+            ),
+            egui::pos2(
+                rect.min.x + rect.width() * 0.84,
+                rect.min.y + rect.height() * 0.44,
+            ),
         );
         painter.rect_stroke(head_rect, 10.0, stroke_accent, egui::StrokeKind::Inside);
 
         // Separadores de zonas funcionales del cabezal
         painter.line_segment(
             [
-                egui::pos2(rect.min.x + rect.width() * 0.16, rect.min.y + rect.height() * 0.22),
-                egui::pos2(rect.min.x + rect.width() * 0.84, rect.min.y + rect.height() * 0.22),
+                egui::pos2(
+                    rect.min.x + rect.width() * 0.16,
+                    rect.min.y + rect.height() * 0.22,
+                ),
+                egui::pos2(
+                    rect.min.x + rect.width() * 0.84,
+                    rect.min.y + rect.height() * 0.22,
+                ),
             ],
             stroke_subtle,
         );
         painter.line_segment(
             [
-                egui::pos2(rect.min.x + rect.width() * 0.50, rect.min.y + rect.height() * 0.08),
-                egui::pos2(rect.min.x + rect.width() * 0.50, rect.min.y + rect.height() * 0.35),
+                egui::pos2(
+                    rect.min.x + rect.width() * 0.50,
+                    rect.min.y + rect.height() * 0.08,
+                ),
+                egui::pos2(
+                    rect.min.x + rect.width() * 0.50,
+                    rect.min.y + rect.height() * 0.35,
+                ),
             ],
             stroke_subtle,
         );
 
         // Mástil central (Shaft)
         let shaft_rect = egui::Rect::from_min_max(
-            egui::pos2(rect.min.x + rect.width() * 0.42, rect.min.y + rect.height() * 0.44),
-            egui::pos2(rect.min.x + rect.width() * 0.58, rect.min.y + rect.height() * 0.72),
+            egui::pos2(
+                rect.min.x + rect.width() * 0.42,
+                rect.min.y + rect.height() * 0.44,
+            ),
+            egui::pos2(
+                rect.min.x + rect.width() * 0.58,
+                rect.min.y + rect.height() * 0.72,
+            ),
         );
         painter.rect_filled(shaft_rect, 4.0, Color32::from_rgb(18, 25, 38));
         painter.rect_stroke(shaft_rect, 4.0, stroke_accent, egui::StrokeKind::Inside);
 
         // Anillo de muelle / Gimbal
-        let center_ring = egui::pos2(rect.min.x + rect.width() * 0.50, rect.min.y + rect.height() * 0.76);
+        let center_ring = egui::pos2(
+            rect.min.x + rect.width() * 0.50,
+            rect.min.y + rect.height() * 0.76,
+        );
         painter.circle_stroke(center_ring, rect.width() * 0.14, stroke_subtle);
         painter.circle_stroke(center_ring, rect.width() * 0.08, stroke_accent);
 
         // Base rectangular del Stick
         let base_rect = egui::Rect::from_min_max(
-            egui::pos2(rect.min.x + rect.width() * 0.14, rect.min.y + rect.height() * 0.80),
-            egui::pos2(rect.min.x + rect.width() * 0.86, rect.min.y + rect.height() * 0.92),
+            egui::pos2(
+                rect.min.x + rect.width() * 0.14,
+                rect.min.y + rect.height() * 0.80,
+            ),
+            egui::pos2(
+                rect.min.x + rect.width() * 0.86,
+                rect.min.y + rect.height() * 0.92,
+            ),
         );
         painter.rect_filled(base_rect, 6.0, Color32::from_rgb(16, 23, 34));
         painter.rect_stroke(base_rect, 6.0, stroke_accent, egui::StrokeKind::Inside);
 
         // Textos de secciones del manual
         painter.text(
-            egui::pos2(rect.min.x + rect.width() * 0.18, rect.min.y + rect.height() * 0.10),
+            egui::pos2(
+                rect.min.x + rect.width() * 0.18,
+                rect.min.y + rect.height() * 0.10,
+            ),
             egui::Align2::LEFT_TOP,
             "SEC. A (POV)",
             egui::FontId::monospace(9.0),
             Color32::from_rgb(100, 140, 180),
         );
         painter.text(
-            egui::pos2(rect.min.x + rect.width() * 0.82, rect.min.y + rect.height() * 0.10),
+            egui::pos2(
+                rect.min.x + rect.width() * 0.82,
+                rect.min.y + rect.height() * 0.10,
+            ),
             egui::Align2::RIGHT_TOP,
             "SEC. B (MINIPALANCA)",
             egui::FontId::monospace(9.0),
             Color32::from_rgb(100, 140, 180),
         );
         painter.text(
-            egui::pos2(rect.min.x + rect.width() * 0.50, rect.min.y + rect.height() * 0.23),
+            egui::pos2(
+                rect.min.x + rect.width() * 0.50,
+                rect.min.y + rect.height() * 0.23,
+            ),
             egui::Align2::CENTER_TOP,
             "SEC. C (HATS THUMB H1 & H2)",
             egui::FontId::monospace(9.0),
             Color32::from_rgb(100, 140, 180),
         );
         painter.text(
-            egui::pos2(rect.min.x + rect.width() * 0.50, rect.min.y + rect.height() * 0.35),
+            egui::pos2(
+                rect.min.x + rect.width() * 0.50,
+                rect.min.y + rect.height() * 0.35,
+            ),
             egui::Align2::CENTER_TOP,
             "SEC. D (GATILLO & CABEZAL)",
             egui::FontId::monospace(9.0),
             Color32::from_rgb(100, 140, 180),
         );
         painter.text(
-            egui::pos2(rect.min.x + rect.width() * 0.50, rect.min.y + rect.height() * 0.52),
+            egui::pos2(
+                rect.min.x + rect.width() * 0.50,
+                rect.min.y + rect.height() * 0.52,
+            ),
             egui::Align2::CENTER_TOP,
             "SEC. F (PINKIE & FLYING PINKIE)",
             egui::FontId::monospace(9.0),
@@ -755,8 +809,14 @@ impl ProgrammingTab {
 
         // Empuñaduras dobles gemelas (Twin Levers)
         let lever_rect = egui::Rect::from_min_max(
-            egui::pos2(rect.min.x + rect.width() * 0.15, rect.min.y + rect.height() * 0.08),
-            egui::pos2(rect.min.x + rect.width() * 0.85, rect.min.y + rect.height() * 0.44),
+            egui::pos2(
+                rect.min.x + rect.width() * 0.15,
+                rect.min.y + rect.height() * 0.08,
+            ),
+            egui::pos2(
+                rect.min.x + rect.width() * 0.85,
+                rect.min.y + rect.height() * 0.44,
+            ),
         );
         painter.rect_filled(lever_rect, 8.0, Color32::from_rgb(16, 23, 34));
         painter.rect_stroke(lever_rect, 8.0, stroke_accent, egui::StrokeKind::Inside);
@@ -764,22 +824,37 @@ impl ProgrammingTab {
         // Separador central de acelerador dividido
         painter.line_segment(
             [
-                egui::pos2(rect.min.x + rect.width() * 0.50, rect.min.y + rect.height() * 0.08),
-                egui::pos2(rect.min.x + rect.width() * 0.50, rect.min.y + rect.height() * 0.44),
+                egui::pos2(
+                    rect.min.x + rect.width() * 0.50,
+                    rect.min.y + rect.height() * 0.08,
+                ),
+                egui::pos2(
+                    rect.min.x + rect.width() * 0.50,
+                    rect.min.y + rect.height() * 0.44,
+                ),
             ],
             stroke_subtle,
         );
 
         // Base consola del Throttle
         let base_rect = egui::Rect::from_min_max(
-            egui::pos2(rect.min.x + rect.width() * 0.10, rect.min.y + rect.height() * 0.48),
-            egui::pos2(rect.min.x + rect.width() * 0.90, rect.min.y + rect.height() * 0.92),
+            egui::pos2(
+                rect.min.x + rect.width() * 0.10,
+                rect.min.y + rect.height() * 0.48,
+            ),
+            egui::pos2(
+                rect.min.x + rect.width() * 0.90,
+                rect.min.y + rect.height() * 0.92,
+            ),
         );
         painter.rect_filled(base_rect, 8.0, Color32::from_rgb(14, 21, 31));
         painter.rect_stroke(base_rect, 8.0, stroke_accent, egui::StrokeKind::Inside);
 
         // Indicador del selector rotativo F de modo físico en la base
-        let knob_center = egui::pos2(rect.min.x + rect.width() * 0.20, rect.min.y + rect.height() * 0.58);
+        let knob_center = egui::pos2(
+            rect.min.x + rect.width() * 0.20,
+            rect.min.y + rect.height() * 0.58,
+        );
         painter.circle_filled(knob_center, 18.0, Color32::from_rgb(24, 34, 48));
         painter.circle_stroke(knob_center, 18.0, stroke_accent);
 
@@ -807,35 +882,50 @@ impl ProgrammingTab {
 
         // Rótulos de secciones del manual
         painter.text(
-            egui::pos2(rect.min.x + rect.width() * 0.16, rect.min.y + rect.height() * 0.09),
+            egui::pos2(
+                rect.min.x + rect.width() * 0.16,
+                rect.min.y + rect.height() * 0.09,
+            ),
             egui::Align2::LEFT_TOP,
             "SEC. A (GIRATORIOS F/G & SCROLL)",
             egui::FontId::monospace(9.0),
             Color32::from_rgb(100, 140, 180),
         );
         painter.text(
-            egui::pos2(rect.min.x + rect.width() * 0.84, rect.min.y + rect.height() * 0.09),
+            egui::pos2(
+                rect.min.x + rect.width() * 0.84,
+                rect.min.y + rect.height() * 0.09,
+            ),
             egui::Align2::RIGHT_TOP,
             "SEC. B (SLD)",
             egui::FontId::monospace(9.0),
             Color32::from_rgb(100, 140, 180),
         );
         painter.text(
-            egui::pos2(rect.min.x + rect.width() * 0.50, rect.min.y + rect.height() * 0.26),
+            egui::pos2(
+                rect.min.x + rect.width() * 0.50,
+                rect.min.y + rect.height() * 0.26,
+            ),
             egui::Align2::CENTER_TOP,
             "SEC. C (PULGAR & HATS H3/H4)",
             egui::FontId::monospace(9.0),
             Color32::from_rgb(100, 140, 180),
         );
         painter.text(
-            egui::pos2(rect.min.x + rect.width() * 0.20, rect.min.y + rect.height() * 0.50),
+            egui::pos2(
+                rect.min.x + rect.width() * 0.20,
+                rect.min.y + rect.height() * 0.50,
+            ),
             egui::Align2::CENTER_TOP,
             "SEC. F (MODO)",
             egui::FontId::monospace(9.0),
             Color32::from_rgb(100, 140, 180),
         );
         painter.text(
-            egui::pos2(rect.min.x + rect.width() * 0.58, rect.min.y + rect.height() * 0.52),
+            egui::pos2(
+                rect.min.x + rect.width() * 0.58,
+                rect.min.y + rect.height() * 0.52,
+            ),
             egui::Align2::CENTER_TOP,
             "SEC. G: CONMUTADORES DE BASE (TGL 1-7)",
             egui::FontId::monospace(9.0),
@@ -1075,7 +1165,10 @@ impl ProgrammingTab {
         ui.horizontal(|ui| {
             // Etiqueta del botón: [Código Manual] Nombre
             let code_badge = format!("[{}]", btn.code_label);
-            ui.colored_label(Color32::from_rgb(0, 220, 255), RichText::new(code_badge).monospace().strong());
+            ui.colored_label(
+                Color32::from_rgb(0, 220, 255),
+                RichText::new(code_badge).monospace().strong(),
+            );
             ui.label(RichText::new(btn.label).strong().color(Color32::WHITE));
 
             // Indicador físico ● PULSADO
@@ -1093,10 +1186,8 @@ impl ProgrammingTab {
                 {
                     self.profile.remove_cell(self.selected_mode, &btn.id);
                     monitor.set_profile(self.profile.clone());
-                    self.status_message = Some((
-                        format!("Asignación eliminada para {}", btn.label),
-                        false,
-                    ));
+                    self.status_message =
+                        Some((format!("Asignación eliminada para {}", btn.label), false));
                 }
 
                 // Botón / Mosaico para editar
@@ -1240,10 +1331,8 @@ impl ProgrammingTab {
 
                         self.profile.set_cell(self.selected_mode, cell);
                         monitor.set_profile(self.profile.clone());
-                        self.status_message = Some((
-                            format!("Asignación guardada para {}", btn.label),
-                            false,
-                        ));
+                        self.status_message =
+                            Some((format!("Asignación guardada para {}", btn.label), false));
 
                         self.editing_button_id = None;
                         self.pending_keys.clear();
@@ -1443,7 +1532,12 @@ impl ProgrammingTab {
 /// Renderiza un badge visual estilo píldora con color de acento y borde.
 fn render_badge(ui: &mut Ui, text: &str, color: Color32) {
     egui::Frame::canvas(ui.style())
-        .fill(Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 35))
+        .fill(Color32::from_rgba_unmultiplied(
+            color.r(),
+            color.g(),
+            color.b(),
+            35,
+        ))
         .stroke(Stroke::new(1.0, color))
         .corner_radius(4)
         .inner_margin(egui::Margin::symmetric(6, 2))
@@ -1460,11 +1554,7 @@ fn render_key_tiles(ui: &mut Ui, keys: &[String], large: bool) {
             if i > 0 {
                 ui.colored_label(Color32::from_rgb(140, 160, 180), "+");
             }
-            let (margin_x, margin_y, font_size) = if large {
-                (8, 4, 13.0)
-            } else {
-                (5, 2, 11.0)
-            };
+            let (margin_x, margin_y, font_size) = if large { (8, 4, 13.0) } else { (5, 2, 11.0) };
 
             egui::Frame::canvas(ui.style())
                 .fill(Color32::from_rgb(240, 244, 248)) // Mosaico blanco / gris muy claro

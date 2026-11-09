@@ -22,7 +22,9 @@ impl DoctorTab {
 
     pub fn ui(&mut self, ui: &mut Ui) {
         ui.heading("Diagnóstico del Sistema e Integridad (`x56 doctor`)");
-        ui.label("Verifica que las reglas udev, permisos sin root y drivers del kernel estén listos.");
+        ui.label(
+            "Verifica que las reglas udev, permisos sin root y drivers del kernel estén listos.",
+        );
 
         ui.add_space(8.0);
 
@@ -34,7 +36,10 @@ impl DoctorTab {
             let status_badge = if self.report.is_healthy() {
                 (Color32::from_rgb(40, 160, 40), "✓ SISTEMA 100% OPERATIVO")
             } else if self.report.fail_count > 0 {
-                (Color32::from_rgb(200, 40, 40), "✗ SE REQUIEREN ACCIONES CORRECTIVAS")
+                (
+                    Color32::from_rgb(200, 40, 40),
+                    "✗ SE REQUIEREN ACCIONES CORRECTIVAS",
+                )
             } else {
                 (Color32::from_rgb(200, 150, 20), "! ADVERTENCIAS DETECTADAS")
             };
@@ -59,7 +64,11 @@ impl DoctorTab {
                         };
 
                         ui.colored_label(badge_col, tag);
-                        ui.label(format!("[{}] {}", check.category.to_uppercase(), check.title));
+                        ui.label(format!(
+                            "[{}] {}",
+                            check.category.to_uppercase(),
+                            check.title
+                        ));
                     });
 
                     ui.label(format!("  {}", check.message));

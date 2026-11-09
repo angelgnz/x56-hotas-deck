@@ -80,7 +80,8 @@ impl CurvesTab {
                     ));
                 }
                 Err(err) => {
-                    self.status_message = Some((format!("Error aplicando al hardware: {err}"), true));
+                    self.status_message =
+                        Some((format!("Error aplicando al hardware: {err}"), true));
                 }
             }
         } else {
@@ -170,24 +171,15 @@ impl CurvesTab {
 
                     ui.add_space(4.0);
                     ui.label("Zona Muerta (Deadband):");
-                    ui.add(
-                        egui::Slider::new(&mut self.params.deadband, 0..=1000)
-                            .text("/ 1000"),
-                    );
+                    ui.add(egui::Slider::new(&mut self.params.deadband, 0..=1000).text("/ 1000"));
 
                     ui.add_space(4.0);
                     ui.label("Saturación X (Input Max):");
-                    ui.add(
-                        egui::Slider::new(&mut self.params.xsat, 0..=1000)
-                            .text("/ 1000"),
-                    );
+                    ui.add(egui::Slider::new(&mut self.params.xsat, 0..=1000).text("/ 1000"));
 
                     ui.add_space(4.0);
                     ui.label("Saturación Y (Output Max):");
-                    ui.add(
-                        egui::Slider::new(&mut self.params.ysat, 0..=1000)
-                            .text("/ 1000"),
-                    );
+                    ui.add(egui::Slider::new(&mut self.params.ysat, 0..=1000).text("/ 1000"));
 
                     ui.add_space(8.0);
                     ui.label("Perfil de Curva:");
@@ -198,7 +190,10 @@ impl CurvesTab {
 
                     if self.hall_zero > 0 {
                         ui.add_space(4.0);
-                        ui.label(format!("Calibración Hall EEPROM: {:#06x} ({})", self.hall_zero, self.hall_zero));
+                        ui.label(format!(
+                            "Calibración Hall EEPROM: {:#06x} ({})",
+                            self.hall_zero, self.hall_zero
+                        ));
                     }
                 });
 
@@ -285,11 +280,17 @@ impl CurvesTab {
                 };
                 let live_out = self.params.evaluate(live_in);
 
-                let live_dot = Points::new("Entrada Física en Vivo", PlotPoints::new(vec![[live_in, live_out]]))
-                    .color(Color32::from_rgb(255, 60, 60))
-                    .radius(7.0);
+                let live_dot = Points::new(
+                    "Entrada Física en Vivo",
+                    PlotPoints::new(vec![[live_in, live_out]]),
+                )
+                .color(Color32::from_rgb(255, 60, 60))
+                .radius(7.0);
 
-                let plot_id = format!("curve_plot_{:?}_{:#04x}", self.selected_device, self.selected_axis_id);
+                let plot_id = format!(
+                    "curve_plot_{:?}_{:#04x}",
+                    self.selected_device, self.selected_axis_id
+                );
                 let plot = Plot::new(plot_id)
                     .data_aspect(1.0)
                     .allow_zoom(false)

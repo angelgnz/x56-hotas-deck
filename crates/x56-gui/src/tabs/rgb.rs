@@ -53,11 +53,7 @@ impl RgbTab {
     }
 
     pub fn set_preset(&mut self, r: u8, g: u8, b: u8) {
-        self.color_rgba = [
-            (r as f32) / 255.0,
-            (g as f32) / 255.0,
-            (b as f32) / 255.0,
-        ];
+        self.color_rgba = [(r as f32) / 255.0, (g as f32) / 255.0, (b as f32) / 255.0];
         self.apply_color();
     }
 
@@ -69,7 +65,11 @@ impl RgbTab {
 
         ui.horizontal(|ui| {
             ui.label("Dispositivo destino:");
-            ui.radio_value(&mut self.target, TargetDevice::All, "Ambos (Stick + Throttle)");
+            ui.radio_value(
+                &mut self.target,
+                TargetDevice::All,
+                "Ambos (Stick + Throttle)",
+            );
             ui.radio_value(&mut self.target, TargetDevice::Stick, "Solo Stick");
             ui.radio_value(&mut self.target, TargetDevice::Throttle, "Solo Throttle");
         });
@@ -115,7 +115,10 @@ impl RgbTab {
                 ui.add(egui::Slider::new(&mut self.color_rgba[2], 0.0..=1.0).text("B"));
 
                 ui.add_space(8.0);
-                ui.label(format!("Código Hex: #{:02x}{:02x}{:02x}", rgb.r, rgb.g, rgb.b));
+                ui.label(format!(
+                    "Código Hex: #{:02x}{:02x}{:02x}",
+                    rgb.r, rgb.g, rgb.b
+                ));
 
                 ui.add_space(10.0);
                 if ui.button("💡 Aplicar Color al Hardware").clicked() {
@@ -131,19 +134,68 @@ impl RgbTab {
                 ui.add_space(8.0);
 
                 let presets = [
-                    ("Cyan Rhino (Fábrica)", 0x00, 0xff, 0xff, Color32::from_rgb(0, 255, 255)),
-                    ("Ámbar Táctico / Naranja", 0xff, 0x66, 0x00, Color32::from_rgb(255, 102, 0)),
-                    ("Rojo Combate Nocturno", 0xff, 0x00, 0x00, Color32::from_rgb(255, 0, 0)),
-                    ("Verde Esmeralda", 0x00, 0xff, 0x44, Color32::from_rgb(0, 255, 68)),
-                    ("Azul Espacial Profundo", 0x00, 0x44, 0xff, Color32::from_rgb(0, 68, 255)),
-                    ("Magenta Neón", 0xff, 0x00, 0xbb, Color32::from_rgb(255, 0, 187)),
-                    ("Blanco Puro", 0xff, 0xff, 0xff, Color32::from_rgb(255, 255, 255)),
-                    ("Apagar Iluminación (Off)", 0x00, 0x00, 0x00, Color32::from_rgb(40, 40, 40)),
+                    (
+                        "Cyan Rhino (Fábrica)",
+                        0x00,
+                        0xff,
+                        0xff,
+                        Color32::from_rgb(0, 255, 255),
+                    ),
+                    (
+                        "Ámbar Táctico / Naranja",
+                        0xff,
+                        0x66,
+                        0x00,
+                        Color32::from_rgb(255, 102, 0),
+                    ),
+                    (
+                        "Rojo Combate Nocturno",
+                        0xff,
+                        0x00,
+                        0x00,
+                        Color32::from_rgb(255, 0, 0),
+                    ),
+                    (
+                        "Verde Esmeralda",
+                        0x00,
+                        0xff,
+                        0x44,
+                        Color32::from_rgb(0, 255, 68),
+                    ),
+                    (
+                        "Azul Espacial Profundo",
+                        0x00,
+                        0x44,
+                        0xff,
+                        Color32::from_rgb(0, 68, 255),
+                    ),
+                    (
+                        "Magenta Neón",
+                        0xff,
+                        0x00,
+                        0xbb,
+                        Color32::from_rgb(255, 0, 187),
+                    ),
+                    (
+                        "Blanco Puro",
+                        0xff,
+                        0xff,
+                        0xff,
+                        Color32::from_rgb(255, 255, 255),
+                    ),
+                    (
+                        "Apagar Iluminación (Off)",
+                        0x00,
+                        0x00,
+                        0x00,
+                        Color32::from_rgb(40, 40, 40),
+                    ),
                 ];
 
                 for (name, r, g, b, preview_col) in presets {
                     ui.horizontal(|ui| {
-                        let (rect, _response) = ui.allocate_exact_size(egui::vec2(22.0, 22.0), egui::Sense::hover());
+                        let (rect, _response) =
+                            ui.allocate_exact_size(egui::vec2(22.0, 22.0), egui::Sense::hover());
                         ui.painter().rect_filled(rect, 4.0, preview_col);
                         if ui.button(name).clicked() {
                             self.set_preset(r, g, b);

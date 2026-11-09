@@ -53,9 +53,13 @@ impl CalibrateTab {
 
         ui.group(|ui| {
             ui.label("⚠️ Instrucciones de Seguridad:");
-            ui.label("1. Suelta la palanca por completo y permite que el resorte la centre libremente.");
+            ui.label(
+                "1. Suelta la palanca por completo y permite que el resorte la centre libremente.",
+            );
             ui.label("2. No toques la base ni el vástago durante los 2 segundos de muestreo.");
-            ui.label("3. Primero realiza un muestreo en modo simulación para revisar las desviaciones.");
+            ui.label(
+                "3. Primero realiza un muestreo en modo simulación para revisar las desviaciones.",
+            );
         });
 
         ui.add_space(10.0);
@@ -70,10 +74,7 @@ impl CalibrateTab {
         ui.add_space(8.0);
 
         ui.horizontal(|ui| {
-            if ui
-                .button("🔬 Muestrear Posición Central")
-                .clicked()
-            {
+            if ui.button("🔬 Muestrear Posición Central").clicked() {
                 self.execute_calibration(true);
             }
 
@@ -106,9 +107,15 @@ impl CalibrateTab {
                 for r in res {
                     ui.label(format!("• {}:", r.axis_name));
                     ui.horizontal(|ui| {
-                        ui.label(format!("  Punto cero anterior: {:#06x} ({})", r.old_hall_zero, r.old_hall_zero));
+                        ui.label(format!(
+                            "  Punto cero anterior: {:#06x} ({})",
+                            r.old_hall_zero, r.old_hall_zero
+                        ));
                         ui.separator();
-                        ui.label(format!("  Punto cero muestreado: {:#06x} ({})", r.sampled_hall_zero, r.sampled_hall_zero));
+                        ui.label(format!(
+                            "  Punto cero muestreado: {:#06x} ({})",
+                            r.sampled_hall_zero, r.sampled_hall_zero
+                        ));
                     });
 
                     let drift_color = if r.delta.abs() < 500 {
@@ -121,7 +128,15 @@ impl CalibrateTab {
 
                     ui.colored_label(
                         drift_color,
-                        format!("  Ajuste necesario (Delta): {:+} | Estado: {}", r.delta, if r.applied { "APLICADO" } else { "PENDIENTE (dry-run)" }),
+                        format!(
+                            "  Ajuste necesario (Delta): {:+} | Estado: {}",
+                            r.delta,
+                            if r.applied {
+                                "APLICADO"
+                            } else {
+                                "PENDIENTE (dry-run)"
+                            }
+                        ),
                     );
                     ui.add_space(4.0);
                 }

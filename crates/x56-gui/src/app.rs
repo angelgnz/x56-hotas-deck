@@ -74,8 +74,12 @@ impl Default for X56App {
 impl X56App {
     pub fn refresh_hardware_status(&mut self) {
         let devices = X56Device::enumerate();
-        self.stick_detected = devices.iter().any(|d| d.kind == x56_core::DeviceKind::Stick);
-        self.throttle_detected = devices.iter().any(|d| d.kind == x56_core::DeviceKind::Throttle);
+        self.stick_detected = devices
+            .iter()
+            .any(|d| d.kind == x56_core::DeviceKind::Stick);
+        self.throttle_detected = devices
+            .iter()
+            .any(|d| d.kind == x56_core::DeviceKind::Throttle);
     }
 
     fn render_top_bar(&mut self, ui: &mut Ui) {
@@ -90,11 +94,19 @@ impl X56App {
                     ModeSlot::M2 => Color32::from_rgb(255, 175, 60),
                     ModeSlot::S1 => Color32::from_rgb(190, 120, 255),
                 };
-                let sld_str = if snap.slider_sld_on { "SLD:ON" } else { "SLD:OFF" };
+                let sld_str = if snap.slider_sld_on {
+                    "SLD:ON"
+                } else {
+                    "SLD:OFF"
+                };
                 ui.colored_label(
                     mode_color,
-                    RichText::new(format!("🎛 Modo: {} | {}", snap.active_mode.as_str(), sld_str))
-                        .strong(),
+                    RichText::new(format!(
+                        "🎛 Modo: {} | {}",
+                        snap.active_mode.as_str(),
+                        sld_str
+                    ))
+                    .strong(),
                 );
 
                 ui.separator();
@@ -276,7 +288,8 @@ impl X56App {
 impl eframe::App for X56App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         // Redibujar a ~30 fps para suavidad del punto en vivo
-        ui.ctx().request_repaint_after(std::time::Duration::from_millis(33));
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_millis(33));
 
         egui::Panel::top("top_panel").show(ui, |ui| {
             ui.add_space(4.0);

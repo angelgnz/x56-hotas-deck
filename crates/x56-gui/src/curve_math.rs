@@ -77,11 +77,7 @@ impl CurveParameters {
     pub fn generate_plot_points(&self, is_bipolar: bool, resolution: usize) -> Vec<[f64; 2]> {
         let mut points = Vec::with_capacity(resolution);
 
-        let (min_x, max_x) = if is_bipolar {
-            (-1.0, 1.0)
-        } else {
-            (0.0, 1.0)
-        };
+        let (min_x, max_x) = if is_bipolar { (-1.0, 1.0) } else { (0.0, 1.0) };
 
         let step = (max_x - min_x) / (resolution - 1) as f64;
         for i in 0..resolution {
@@ -239,11 +235,13 @@ impl LiveInputPoller {
             if let Some(ref file) = stick_file {
                 if let Some(info) = query_abs_axis(file, 0) {
                     // ABS_X (Roll 0..65535, centro ~32768)
-                    new_stick_x = Some((((info.value as f64) - 32768.0) / 32768.0).clamp(-1.0, 1.0));
+                    new_stick_x =
+                        Some((((info.value as f64) - 32768.0) / 32768.0).clamp(-1.0, 1.0));
                 }
                 if let Some(info) = query_abs_axis(file, 1) {
                     // ABS_Y (Pitch 0..65535, centro ~32768, invertido)
-                    new_stick_y = Some((-(((info.value as f64) - 32768.0) / 32768.0)).clamp(-1.0, 1.0));
+                    new_stick_y =
+                        Some((-(((info.value as f64) - 32768.0) / 32768.0)).clamp(-1.0, 1.0));
                 }
                 if let Some(info) = query_abs_axis(file, 5) {
                     // ABS_RZ (Twist / Yaw 0..4095, centro ~2048)
@@ -280,16 +278,34 @@ impl LiveInputPoller {
             }
 
             if let Ok(mut lock) = state.lock() {
-                if let Some(v) = new_stick_x { lock.stick_x = v; }
-                if let Some(v) = new_stick_y { lock.stick_y = v; }
-                if let Some(v) = new_stick_z { lock.stick_z = v; }
+                if let Some(v) = new_stick_x {
+                    lock.stick_x = v;
+                }
+                if let Some(v) = new_stick_y {
+                    lock.stick_y = v;
+                }
+                if let Some(v) = new_stick_z {
+                    lock.stick_z = v;
+                }
 
-                if let Some(v) = new_tl { lock.throttle_left = v; }
-                if let Some(v) = new_tr { lock.throttle_right = v; }
-                if let Some(v) = new_r1 { lock.rotary_1 = v; }
-                if let Some(v) = new_r2 { lock.rotary_2 = v; }
-                if let Some(v) = new_r3 { lock.rotary_3 = v; }
-                if let Some(v) = new_r4 { lock.rotary_4 = v; }
+                if let Some(v) = new_tl {
+                    lock.throttle_left = v;
+                }
+                if let Some(v) = new_tr {
+                    lock.throttle_right = v;
+                }
+                if let Some(v) = new_r1 {
+                    lock.rotary_1 = v;
+                }
+                if let Some(v) = new_r2 {
+                    lock.rotary_2 = v;
+                }
+                if let Some(v) = new_r3 {
+                    lock.rotary_3 = v;
+                }
+                if let Some(v) = new_r4 {
+                    lock.rotary_4 = v;
+                }
             }
 
             thread::sleep(Duration::from_millis(20)); // Muestreo constante a 50 Hz
