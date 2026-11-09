@@ -1,0 +1,473 @@
+version = 1
+name = "Elite Dangerous (Piloto de la Federación)"
+description = "Perfil HOTAS completo para Elite Dangerous: retroiluminación ámbar HUD (#ff7700), curvas S-Curve de precisión FA-Off y matriz de 3 modos (M1 Navegación/Supercrucero, M2 Combate Táctico, S1 Minería/Aterrizaje/SRV)"
+
+[stick]
+rgb = "#ff7700"
+spring = "green"
+
+[[stick.axes]]
+name = "X (Roll)"
+axis_id = 48
+xsat = 1000
+ysat = 1000
+deadband = 30
+curvature = 620
+profile = "s"
+
+[[stick.axes]]
+name = "Y (Pitch)"
+axis_id = 49
+xsat = 1000
+ysat = 1000
+deadband = 25
+curvature = 640
+profile = "s"
+
+[[stick.axes]]
+name = "Z (Twist/Yaw)"
+axis_id = 53
+xsat = 1000
+ysat = 1000
+deadband = 45
+curvature = 580
+profile = "s"
+
+[throttle]
+rgb = "#ff7700"
+
+[[throttle.axes]]
+name = "Throttle Left"
+axis_id = 48
+xsat = 1000
+ysat = 1000
+deadband = 15
+curvature = 500
+profile = "j"
+
+[[throttle.axes]]
+name = "Throttle Right"
+axis_id = 49
+xsat = 1000
+ysat = 1000
+deadband = 15
+curvature = 500
+profile = "j"
+
+[[throttle.axes]]
+name = "Rotary 1"
+axis_id = 50
+xsat = 1000
+ysat = 1000
+deadband = 20
+curvature = 500
+profile = "s"
+
+[[throttle.axes]]
+name = "Rotary 2"
+axis_id = 53
+xsat = 1000
+ysat = 1000
+deadband = 20
+curvature = 500
+profile = "s"
+
+[[throttle.axes]]
+name = "Rotary 4"
+axis_id = 54
+xsat = 1000
+ysat = 1000
+deadband = 10
+curvature = 500
+profile = "s"
+
+[[throttle.axes]]
+name = "Rotary 3"
+axis_id = 55
+xsat = 1000
+ysat = 1000
+deadband = 10
+curvature = 500
+profile = "s"
+
+# =============================================================================
+# MODO M1: VUELO NORMAL, NAVEGACIÓN ESTELAR Y SUPERCRUCERO
+# =============================================================================
+
+[programming.m1.cells.stick_trigger]
+button_id = "stick_trigger"
+name = "Fuego Primario"
+keys = ["Space"]
+
+[programming.m1.cells.stick_btn_a]
+button_id = "stick_btn_a"
+name = "Fuego Secundario"
+keys = ["W"]
+
+[programming.m1.cells.stick_btn_b]
+button_id = "stick_btn_b"
+name = "Fijar Blanco Al Frente"
+keys = ["T"]
+
+[programming.m1.cells.stick_btn_c]
+button_id = "stick_btn_c"
+name = "Impulso / Boost de Motores"
+keys = ["Tab"]
+
+[programming.m1.cells.stick_btn_d]
+button_id = "stick_btn_d"
+name = "Seleccionar Mayor Amenaza"
+keys = ["H"]
+
+[programming.m1.cells.stick_pinkie]
+button_id = "stick_pinkie"
+name = "Alternar Asistencias de Vuelo (FA Off / On)"
+keys = ["Z"]
+
+[programming.m1.cells.stick_flying_pinkie]
+button_id = "stick_flying_pinkie"
+name = "Cambiar Grupo de Fuego (Siguiente)"
+keys = ["N"]
+
+[programming.m1.cells.stick_h1_up]
+button_id = "stick_h1_up"
+name = "Distribuidor SYS / Sistemas"
+keys = ["Up"]
+
+[programming.m1.cells.stick_h1_left]
+button_id = "stick_h1_left"
+name = "Distribuidor ENG / Motores"
+keys = ["Left"]
+
+[programming.m1.cells.stick_h1_right]
+button_id = "stick_h1_right"
+name = "Distribuidor WEP / Armas"
+keys = ["Right"]
+
+[programming.m1.cells.stick_h1_down]
+button_id = "stick_h1_down"
+name = "Distribuidor RST / Equilibrar"
+keys = ["Down"]
+
+[programming.m1.cells.stick_h2_up]
+button_id = "stick_h2_up"
+name = "Panel de Comunicaciones (Arriba)"
+keys = ["2"]
+
+[programming.m1.cells.stick_h2_left]
+button_id = "stick_h2_left"
+name = "Panel de Navegación (Izquierda)"
+keys = ["1"]
+
+[programming.m1.cells.stick_h2_right]
+button_id = "stick_h2_right"
+name = "Panel Interno / Sistemas (Derecha)"
+keys = ["4"]
+
+[programming.m1.cells.stick_h2_down]
+button_id = "stick_h2_down"
+name = "Panel de Rol / SRV / Caza (Abajo)"
+keys = ["3"]
+
+[programming.m1.cells.thr_btn_e]
+button_id = "thr_btn_e"
+name = "Parada Total de Motores (0% Throttle)"
+keys = ["X"]
+
+[programming.m1.cells.thr_btn_i]
+button_id = "thr_btn_i"
+name = "Crucero Óptimo 75% (Supercrucero)"
+keys = ["LCtrl", "7"]
+
+[programming.m1.cells.thr_btn_h]
+button_id = "thr_btn_h"
+name = "Siguiente Sistema en Ruta"
+keys = ["M"]
+
+[programming.m1.cells.thr_sw_1]
+button_id = "thr_sw_1"
+name = "Salto Hiperespacio / Motor FSD"
+keys = ["J"]
+
+[programming.m1.cells.thr_sw_2]
+button_id = "thr_sw_2"
+name = "Activar Supercrucero"
+keys = ["K"]
+
+[programming.m1.cells.thr_sw_3]
+button_id = "thr_sw_3"
+name = "Tren de Aterrizaje"
+keys = ["L"]
+
+[programming.m1.cells.thr_sw_4]
+button_id = "thr_sw_4"
+name = "Colector de Carga / Cargo Scoop"
+keys = ["Home"]
+
+[programming.m1.cells.thr_sw_5]
+button_id = "thr_sw_5"
+name = "Luces de la Nave"
+keys = ["Insert"]
+
+[programming.m1.cells.thr_sw_6]
+button_id = "thr_sw_6"
+name = "Visión Nocturna"
+keys = ["Delete"]
+
+[programming.m1.cells.thr_sw_7]
+button_id = "thr_sw_7"
+name = "Mapa de la Galaxia"
+keys = ["LShift", "M"]
+
+[programming.m1.cells.thr_sw_8]
+button_id = "thr_sw_8"
+name = "Mapa del Sistema"
+keys = ["LCtrl", "M"]
+
+[programming.m1.cells.thr_sld]
+button_id = "thr_sld"
+name = "Desplegar / Retraer Puntos de Anclaje"
+keys = ["U"]
+
+# =============================================================================
+# MODO M2: COMBATE TÁCTICO Y GUERRA ELECTRÓNICA
+# =============================================================================
+
+[programming.m2.cells.stick_trigger]
+button_id = "stick_trigger"
+name = "Fuego Primario (Armas Térmicas / Cinéticas)"
+keys = ["Space"]
+
+[programming.m2.cells.stick_btn_a]
+button_id = "stick_btn_a"
+name = "Fuego Secundario (Misiles / Cañones de Riel)"
+keys = ["LShift", "W"]
+
+[programming.m2.cells.stick_btn_b]
+button_id = "stick_btn_b"
+name = "Fijar Blanco Al Frente"
+keys = ["T"]
+
+[programming.m2.cells.stick_btn_c]
+button_id = "stick_btn_c"
+name = "Impulso / Boost de Combate"
+keys = ["Tab"]
+
+[programming.m2.cells.stick_btn_d]
+button_id = "stick_btn_d"
+name = "Seleccionar Mayor Amenaza Hostil"
+keys = ["H"]
+
+[programming.m2.cells.stick_pinkie]
+button_id = "stick_pinkie"
+name = "Maniobra Vectorial FA-Off"
+keys = ["Z"]
+
+[programming.m2.cells.stick_flying_pinkie]
+button_id = "stick_flying_pinkie"
+name = "Ciclar Grupo de Armamento"
+keys = ["N"]
+
+[programming.m2.cells.stick_h1_up]
+button_id = "stick_h1_up"
+name = "Energía a Escudos (SYS)"
+keys = ["Up"]
+
+[programming.m2.cells.stick_h1_left]
+button_id = "stick_h1_left"
+name = "Energía a Propulsores (ENG)"
+keys = ["Left"]
+
+[programming.m2.cells.stick_h1_right]
+button_id = "stick_h1_right"
+name = "Energía a Armas (WEP)"
+keys = ["Right"]
+
+[programming.m2.cells.stick_h1_down]
+button_id = "stick_h1_down"
+name = "Restablecer Distribuidor de Energía"
+keys = ["Down"]
+
+[programming.m2.cells.stick_h2_up]
+button_id = "stick_h2_up"
+name = "Ciclar Subsistema Siguiente (Planta de Energía)"
+keys = ["Y"]
+
+[programming.m2.cells.stick_h2_down]
+button_id = "stick_h2_down"
+name = "Ciclar Subsistema Anterior"
+keys = ["LShift", "Y"]
+
+[programming.m2.cells.stick_h2_right]
+button_id = "stick_h2_right"
+name = "Siguiente Contacto Hostil"
+keys = ["G"]
+
+[programming.m2.cells.stick_h2_left]
+button_id = "stick_h2_left"
+name = "Contacto Hostil Anterior"
+keys = ["LShift", "G"]
+
+[programming.m2.cells.thr_btn_e]
+button_id = "thr_btn_e"
+name = "Zona Azul de Giro Óptimo (50% Throttle)"
+keys = ["LCtrl", "5"]
+
+[programming.m2.cells.thr_sw_7]
+button_id = "thr_sw_7"
+name = "Lanzador de Señuelos (Chaff Launcher)"
+keys = ["C"]
+
+[programming.m2.cells.thr_sw_8]
+button_id = "thr_sw_8"
+name = "Eyector Térmico (Deploy Heat Sink)"
+keys = ["V"]
+
+[programming.m2.cells.thr_sw_9]
+button_id = "thr_sw_9"
+name = "Batería de Escudos (Shield Cell Bank)"
+keys = ["B"]
+
+[programming.m2.cells.thr_sw_10]
+button_id = "thr_sw_10"
+name = "Contramedidas Electrónicas (ECM)"
+keys = ["LCtrl", "C"]
+
+[programming.m2.cells.thr_sw_11]
+button_id = "thr_sw_11"
+name = "Navegación Silenciosa (Silent Running)"
+keys = ["CapsLock"]
+
+[programming.m2.cells.thr_sw_12]
+button_id = "thr_sw_12"
+name = "Neutralizador de Campo de Cierre (Shutdown Field)"
+keys = ["LCtrl", "F"]
+
+[programming.m2.cells.thr_h3_up]
+button_id = "thr_h3_up"
+name = "Orden Caza SLF: Atacar mi Objetivo"
+keys = ["LAlt", "1"]
+
+[programming.m2.cells.thr_h3_down]
+button_id = "thr_h3_down"
+name = "Orden Caza SLF: Regresar a Bahía"
+keys = ["LAlt", "4"]
+
+[programming.m2.cells.thr_h3_left]
+button_id = "thr_h3_left"
+name = "Orden Caza SLF: Postura Defensiva"
+keys = ["LAlt", "2"]
+
+[programming.m2.cells.thr_h3_right]
+button_id = "thr_h3_right"
+name = "Orden Caza SLF: Mantener Formación"
+keys = ["LAlt", "3"]
+
+[programming.m2.cells.thr_sld]
+button_id = "thr_sld"
+name = "Desplegar / Retraer Puntos de Anclaje"
+keys = ["U"]
+
+# =============================================================================
+# MODO S1: ATERRIZAJE, MINERÍA Y OPERACIONES PLANETARIAS / SRV
+# =============================================================================
+
+[programming.s1.cells.stick_trigger]
+button_id = "stick_trigger"
+name = "Láser de Minería / Escáner de Composición"
+keys = ["Space"]
+
+[programming.s1.cells.stick_btn_a]
+button_id = "stick_btn_a"
+name = "Lanzador de Drones Prospector / Colector"
+keys = ["W"]
+
+[programming.s1.cells.stick_btn_b]
+button_id = "stick_btn_b"
+name = "Seleccionar Fragmento Mineral / Objetivo"
+keys = ["T"]
+
+[programming.s1.cells.stick_btn_c]
+button_id = "stick_btn_c"
+name = "Propulsores Verticales SRV / Salto"
+keys = ["Tab"]
+
+[programming.s1.cells.stick_btn_d]
+button_id = "stick_btn_d"
+name = "Alternar Torreta SRV (Turret Mode)"
+keys = ["U"]
+
+[programming.s1.cells.stick_pinkie]
+button_id = "stick_pinkie"
+name = "Freno de Mano SRV (Handbrake)"
+keys = ["X"]
+
+[programming.s1.cells.stick_flying_pinkie]
+button_id = "stick_flying_pinkie"
+name = "Alternar Modo de Cabina (Análisis / Combate)"
+keys = ["M"]
+
+[programming.s1.cells.stick_h1_up]
+button_id = "stick_h1_up"
+name = "Distribuidor SYS / Escudos"
+keys = ["Up"]
+
+[programming.s1.cells.stick_h1_left]
+button_id = "stick_h1_left"
+name = "Distribuidor ENG / Motores"
+keys = ["Left"]
+
+[programming.s1.cells.stick_h1_right]
+button_id = "stick_h1_right"
+name = "Distribuidor WEP / Láseres de Minería"
+keys = ["Right"]
+
+[programming.s1.cells.stick_h1_down]
+button_id = "stick_h1_down"
+name = "Distribuidor RST / Equilibrar"
+keys = ["Down"]
+
+[programming.s1.cells.thr_sw_1]
+button_id = "thr_sw_1"
+name = "Escáner de Espectro Completo (FSS)"
+keys = ["LCtrl", "F1"]
+
+[programming.s1.cells.thr_sw_2]
+button_id = "thr_sw_2"
+name = "Escáner de Superficie Detallado (DSS)"
+keys = ["LCtrl", "F2"]
+
+[programming.s1.cells.thr_sw_3]
+button_id = "thr_sw_3"
+name = "Tren de Aterrizaje"
+keys = ["L"]
+
+[programming.s1.cells.thr_sw_4]
+button_id = "thr_sw_4"
+name = "Gancho de Carga / Cargo Scoop"
+keys = ["Home"]
+
+[programming.s1.cells.thr_sw_5]
+button_id = "thr_sw_5"
+name = "Faros de Nave / SRV ( Cortas / Largas )"
+keys = ["Insert"]
+
+[programming.s1.cells.thr_sw_6]
+button_id = "thr_sw_6"
+name = "Visión Nocturna Planetaria"
+keys = ["Delete"]
+
+[programming.s1.cells.thr_sw_7]
+button_id = "thr_sw_7"
+name = "Llamar / Despedir Nave Orbital (Recall Ship)"
+keys = ["LCtrl", "R"]
+
+[programming.s1.cells.thr_sw_8]
+button_id = "thr_sw_8"
+name = "Solicitar Permiso de Aterrizaje Rápido"
+keys = ["LCtrl", "D"]
+
+[programming.s1.cells.thr_sld]
+button_id = "thr_sld"
+name = "Desplegar / Retraer Herramientas de Minería"
+keys = ["U"]
