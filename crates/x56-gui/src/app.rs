@@ -4,7 +4,7 @@
 //! con navegación de 4 subsistemas y tarjeta telemétrica inferior, Dock de acciones
 //! tácticas y CentralPanel).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use eframe::egui::{self, CornerRadius, Frame, Margin, RichText, Sense, Stroke, Ui, Vec2};
 use x56_core::{
@@ -73,6 +73,14 @@ pub struct X56App {
 
 impl Default for X56App {
     fn default() -> Self {
+        let default_profile = if Path::new("examples/elite_dangerous_profile.toml").exists() {
+            "examples/elite_dangerous_profile.toml"
+        } else if Path::new("examples/combat_profile.toml").exists() {
+            "examples/combat_profile.toml"
+        } else {
+            "examples/default_profile.toml"
+        };
+
         let mut app = Self {
             active_subsystem: ActiveSubsystem::Curves,
             curves_tab: CurvesTab::default(),
@@ -84,8 +92,8 @@ impl Default for X56App {
             button_monitor: ButtonMonitor::new(),
             stick_detected: false,
             throttle_detected: false,
-            active_profile_name: "SPACE_SIM_STARCITIZEN".into(),
-            profile_path_buf: "examples/combat_profile.toml".into(),
+            active_profile_name: "ELITE_DANGEROUS".into(),
+            profile_path_buf: default_profile.into(),
             show_profile_dialog: false,
             profile_dialog_mode: ProfileDialogMode::Load,
             show_live_test_modal: false,
@@ -93,6 +101,9 @@ impl Default for X56App {
             file_dialog_rx: None,
         };
         app.refresh_hardware_status();
+        if Path::new(&app.profile_path_buf).exists() {
+            app.load_profile_from_disk();
+        }
         app
     }
 }

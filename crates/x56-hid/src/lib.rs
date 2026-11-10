@@ -322,6 +322,58 @@ impl X56Device {
         Ok(())
     }
 
+    /// Aplica iluminación LED RGB a Stick y Throttle en un único pase de enumeración HID,
+    /// abriendo ambos dispositivos y enviando [`PacketRgb`] y [`PacketCommit`].
+    ///
+    /// Devuelve `(stick_ok, throttle_ok)` indicando qué dispositivos confirmaron la recepción.
+    pub fn set_rgb_unified(
+        stick_color: Option<RgbColor>,
+        throttle_color: Option<RgbColor>,
+    ) -> Result<(bool, bool), HidTransportError> {
+        let api = HidApi::new()?;
+        let mut stick_ok = false;
+        let mut throttle_ok = false;
+
+        for info in api.device_list() {
+            if let Some(desc) = X56Descriptor::from_device_info(info) {
+                match desc.kind {
+                    DeviceKind::Stick => {
+                        if let Some(color) = stick_color {
+                            if !stick_ok {
+                                if let Ok(dev) = api.open_path(desc.path.as_c_str()) {
+                                    let rgb_pkt = PacketRgb::new(color).to_bytes();
+                                    let commit_pkt = PacketCommit.to_bytes();
+                                    if dev.send_feature_report(&rgb_pkt).is_ok()
+                                        && dev.send_feature_report(&commit_pkt).is_ok()
+                                    {
+                                        stick_ok = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    DeviceKind::Throttle => {
+                        if let Some(color) = throttle_color {
+                            if !throttle_ok {
+                                if let Ok(dev) = api.open_path(desc.path.as_c_str()) {
+                                    let rgb_pkt = PacketRgb::new(color).to_bytes();
+                                    let commit_pkt = PacketCommit.to_bytes();
+                                    if dev.send_feature_report(&rgb_pkt).is_ok()
+                                        && dev.send_feature_report(&commit_pkt).is_ok()
+                                    {
+                                        throttle_ok = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok((stick_ok, throttle_ok))
+    }
+
     /// Obtiene la configuración actual de un eje (`axis_id`).
     ///
     /// Envía primero [`PacketAxisQuery`] (Report `0x0b`, subcomando `0x02`) para seleccionar

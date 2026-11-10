@@ -11,6 +11,7 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::AsRawFd;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -789,7 +790,6 @@ struct MonitorState {
     fallback_stick_rgb: Option<String>,
     fallback_throttle_rgb: Option<String>,
     events: VecDeque<TriggeredCommandEvent>,
-    force_rgb_update: bool,
 }
 
 struct Shared {
@@ -808,7 +808,9 @@ impl Shared {
 /// Monitor en segundo plano (50 Hz) de los botones del X56 con inyección opcional de teclas.
 pub struct ButtonMonitor {
     shared: Arc<Shared>,
+    rgb_tx: mpsc::Sender<RgbDispatchCommand>,
     handle: Option<JoinHandle<()>>,
+    rgb_handle: Option<JoinHandle<()>>,
 }
 
 impl Default for ButtonMonitor {
@@ -818,7 +820,7 @@ impl Default for ButtonMonitor {
 }
 
 impl ButtonMonitor {
-    /// Crea el monitor, el teclado virtual (si `/dev/uinput` lo permite) y lanza el hilo.
+    /// Crea el monitor, el teclado virtual (si `/dev/uinput` lo permite) y lanza los hilos.
     pub fn new() -> Self {
         let keyboard = VirtualKeyboard::create().ok();
         let shared = Arc::new(Shared {
@@ -828,22 +830,35 @@ impl ButtonMonitor {
                 fallback_stick_rgb: None,
                 fallback_throttle_rgb: None,
                 events: VecDeque::new(),
-                force_rgb_update: true,
             }),
             active: AtomicBool::new(false),
             uinput: AtomicBool::new(keyboard.is_some()),
             stop: AtomicBool::new(false),
         });
 
+        // Hilo dedicado desacoplado para iluminación RGB atómica y reintentos transaccionales
+        let (rgb_tx, rgb_rx) = mpsc::channel();
+        let rgb_dispatcher = RgbDispatcher::new(rgb_rx, Arc::clone(&shared));
+        let rgb_handle = thread::Builder::new()
+            .name("x56-rgb-dispatcher".into())
+            .spawn(move || rgb_dispatcher.run())
+            .ok();
+
+        // Hilo de botones evdev a 50 Hz puro (cero bloqueo por USB HID)
         let worker_shared = Arc::clone(&shared);
-        let mut worker = Worker::new(worker_shared, keyboard);
+        let mut worker = Worker::new(worker_shared, keyboard, rgb_tx.clone());
         worker.tick();
         let handle = thread::Builder::new()
             .name("x56-button-monitor".into())
             .spawn(move || worker.run())
             .ok();
 
-        Self { shared, handle }
+        Self {
+            shared,
+            rgb_tx,
+            handle,
+            rgb_handle,
+        }
     }
 
     /// Estado actual de botones, modo y `SLD`.
@@ -853,17 +868,21 @@ impl ButtonMonitor {
 
     /// Define colores de iluminación de reserva para cuando un modo no especifique su propio RGB.
     pub fn set_fallback_rgb(&self, stick_rgb: Option<String>, throttle_rgb: Option<String>) {
-        let mut st = self.shared.lock();
-        st.fallback_stick_rgb = stick_rgb;
-        st.fallback_throttle_rgb = throttle_rgb;
-        st.force_rgb_update = true;
+        {
+            let mut st = self.shared.lock();
+            st.fallback_stick_rgb = stick_rgb;
+            st.fallback_throttle_rgb = throttle_rgb;
+        }
+        let _ = self.rgb_tx.send(RgbDispatchCommand::ForceUpdate);
     }
 
     /// Reemplaza el perfil de programación usado para resolver comandos y actualiza la iluminación.
     pub fn set_profile(&self, profile: ProgrammingProfile) {
-        let mut st = self.shared.lock();
-        st.profile = profile;
-        st.force_rgb_update = true;
+        {
+            let mut st = self.shared.lock();
+            st.profile = profile;
+        }
+        let _ = self.rgb_tx.send(RgbDispatchCommand::ForceUpdate);
     }
 
     /// Perfil de programación vigente.
@@ -895,7 +914,11 @@ impl ButtonMonitor {
 impl Drop for ButtonMonitor {
     fn drop(&mut self) {
         self.shared.stop.store(true, Ordering::SeqCst);
+        let _ = self.rgb_tx.send(RgbDispatchCommand::Shutdown);
         if let Some(h) = self.handle.take() {
+            let _ = h.join();
+        }
+        if let Some(h) = self.rgb_handle.take() {
             let _ = h.join();
         }
     }
@@ -1059,15 +1082,19 @@ struct Worker {
     throttle_desc: Vec<ButtonDescriptor>,
     prev_pressed: HashSet<String>,
     mode: ModeSlot,
-    prev_applied_mode: Option<ModeSlot>,
-    last_applied_stick_color: Option<RgbColor>,
-    last_applied_throttle_color: Option<RgbColor>,
+    candidate_mode: Option<ModeSlot>,
+    candidate_mode_since: Instant,
+    rgb_tx: mpsc::Sender<RgbDispatchCommand>,
     last_scan: Instant,
     last_keyboard_try: Instant,
 }
 
 impl Worker {
-    fn new(shared: Arc<Shared>, keyboard: Option<VirtualKeyboard>) -> Self {
+    fn new(
+        shared: Arc<Shared>,
+        keyboard: Option<VirtualKeyboard>,
+        rgb_tx: mpsc::Sender<RgbDispatchCommand>,
+    ) -> Self {
         let now = Instant::now();
         Self {
             shared,
@@ -1078,9 +1105,9 @@ impl Worker {
             throttle_desc: catalog_for_device(DeviceKind::Throttle),
             prev_pressed: HashSet::new(),
             mode: ModeSlot::default(),
-            prev_applied_mode: None,
-            last_applied_stick_color: None,
-            last_applied_throttle_color: None,
+            candidate_mode: None,
+            candidate_mode_since: now,
+            rgb_tx,
             // Fuerza un escaneo inmediato.
             last_scan: now.checked_sub(RESCAN_INTERVAL).unwrap_or(now),
             last_keyboard_try: now,
@@ -1123,13 +1150,33 @@ impl Worker {
         if let Some(node) = self.throttle.as_mut() {
             match node.read(false) {
                 Ok(raw) => {
-                    if test_bit(&raw.keys, EVDEV_MODE_M1) {
-                        self.mode = ModeSlot::M1;
+                    let raw_mode = if test_bit(&raw.keys, EVDEV_MODE_M1) {
+                        Some(ModeSlot::M1)
                     } else if test_bit(&raw.keys, EVDEV_MODE_M2) {
-                        self.mode = ModeSlot::M2;
+                        Some(ModeSlot::M2)
                     } else if test_bit(&raw.keys, EVDEV_MODE_S1) {
-                        self.mode = ModeSlot::S1;
+                        Some(ModeSlot::S1)
+                    } else {
+                        None
+                    };
+
+                    if let Some(m) = raw_mode {
+                        if self.candidate_mode.is_none() {
+                            self.candidate_mode = Some(m);
+                            self.candidate_mode_since = Instant::now();
+                            self.mode = m;
+                            let _ = self.rgb_tx.send(RgbDispatchCommand::ModeChanged(m));
+                        } else if self.candidate_mode != Some(m) {
+                            self.candidate_mode = Some(m);
+                            self.candidate_mode_since = Instant::now();
+                        } else if self.candidate_mode_since.elapsed() >= Duration::from_millis(50)
+                            && self.mode != m
+                        {
+                            self.mode = m;
+                            let _ = self.rgb_tx.send(RgbDispatchCommand::ModeChanged(m));
+                        }
                     }
+
                     sld = test_bit(&raw.keys, EVDEV_SLD);
                     let ids = pressed_ids(&self.throttle_desc, &raw);
                     if node.primed {
@@ -1228,55 +1275,144 @@ impl Worker {
             }
             st.events.push_back(event);
         }
+    }
+}
 
-        // Comprobar y despachar actualización de color LED RGB por modo
-        let (should_update_rgb, target_stick_color, target_throttle_color) = {
-            let mut st = self.shared.lock();
-            let force = st.force_rgb_update;
-            st.force_rgb_update = false;
+/// Comandos despachados al hilo dedicado de sincronización RGB.
+enum RgbDispatchCommand {
+    ModeChanged(ModeSlot),
+    ForceUpdate,
+    Shutdown,
+}
 
-            let mode_changed = self.prev_applied_mode != Some(mode);
-            if mode_changed || force {
-                let s_str = st
-                    .profile
-                    .rgb_for_mode(mode, DeviceKind::Stick)
-                    .map(str::to_string)
-                    .or_else(|| st.fallback_stick_rgb.clone());
-                let t_str = st
-                    .profile
-                    .rgb_for_mode(mode, DeviceKind::Throttle)
-                    .map(str::to_string)
-                    .or_else(|| st.fallback_throttle_rgb.clone());
+/// Hilo dedicado e independiente para el despacho de iluminación LED RGB.
+///
+/// Implementa reintentos transaccionales y comunicación atómica unificada
+/// mediante [`X56Device::set_rgb_unified`] para evitar congelamientos en evdev.
+struct RgbDispatcher {
+    rx: mpsc::Receiver<RgbDispatchCommand>,
+    shared: Arc<Shared>,
+    current_mode: ModeSlot,
+    applied_stick_color: Option<RgbColor>,
+    applied_throttle_color: Option<RgbColor>,
+}
 
-                let s_col = s_str.and_then(|s| parse_color(&s).ok());
-                let t_col = t_str.and_then(|t| parse_color(&t).ok());
+impl RgbDispatcher {
+    fn new(rx: mpsc::Receiver<RgbDispatchCommand>, shared: Arc<Shared>) -> Self {
+        Self {
+            rx,
+            shared,
+            current_mode: ModeSlot::default(),
+            applied_stick_color: None,
+            applied_throttle_color: None,
+        }
+    }
 
-                (true, s_col, t_col)
-            } else {
-                (false, None, None)
+    fn run(mut self) {
+        while !self.shared.stop.load(Ordering::SeqCst) {
+            let cmd = match self.rx.recv_timeout(Duration::from_millis(200)) {
+                Ok(cmd) => cmd,
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    self.reconcile_colors(false);
+                    continue;
+                }
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            };
+
+            match cmd {
+                RgbDispatchCommand::ModeChanged(mode) => {
+                    self.current_mode = mode;
+                    // Drenar comandos subsiguientes rápidos si la perilla se giró rápido
+                    while let Ok(newer_cmd) = self.rx.try_recv() {
+                        if let RgbDispatchCommand::ModeChanged(newer_mode) = newer_cmd {
+                            self.current_mode = newer_mode;
+                        }
+                    }
+                    self.reconcile_colors(true);
+                }
+                RgbDispatchCommand::ForceUpdate => {
+                    self.applied_stick_color = None;
+                    self.applied_throttle_color = None;
+                    self.reconcile_colors(true);
+                }
+                RgbDispatchCommand::Shutdown => break,
             }
+        }
+    }
+
+    fn reconcile_colors(&mut self, retry: bool) {
+        let (target_stick, target_throttle) = {
+            let st = self.shared.lock();
+            let mode = self.current_mode;
+            let s_str = st
+                .profile
+                .rgb_for_mode(mode, DeviceKind::Stick)
+                .map(str::to_string)
+                .or_else(|| st.fallback_stick_rgb.clone());
+            let t_str = st
+                .profile
+                .rgb_for_mode(mode, DeviceKind::Throttle)
+                .map(str::to_string)
+                .or_else(|| st.fallback_throttle_rgb.clone());
+
+            let s_col = s_str.and_then(|s| parse_color(&s).ok());
+            let t_col = t_str.and_then(|t| parse_color(&t).ok());
+            (s_col, t_col)
         };
 
-        if should_update_rgb {
-            self.prev_applied_mode = Some(mode);
+        if self.applied_stick_color == target_stick
+            && self.applied_throttle_color == target_throttle
+        {
+            return;
+        }
 
-            if let Some(color) = target_stick_color {
-                if self.last_applied_stick_color != Some(color) {
-                    if let Ok(dev) = X56Device::open(DeviceKind::Stick) {
-                        if dev.set_rgb(color).is_ok() {
-                            self.last_applied_stick_color = Some(color);
-                        }
-                    }
+        if target_stick.is_none() {
+            self.applied_stick_color = None;
+        }
+        if target_throttle.is_none() {
+            self.applied_throttle_color = None;
+        }
+
+        let max_attempts = if retry { 4 } else { 1 };
+        for attempt in 0..max_attempts {
+            if self.shared.stop.load(Ordering::SeqCst) {
+                break;
+            }
+
+            let stick_to_send = if self.applied_stick_color != target_stick {
+                target_stick
+            } else {
+                None
+            };
+            let throttle_to_send = if self.applied_throttle_color != target_throttle {
+                target_throttle
+            } else {
+                None
+            };
+
+            if stick_to_send.is_none() && throttle_to_send.is_none() {
+                break;
+            }
+
+            if let Ok((stick_ok, throttle_ok)) =
+                X56Device::set_rgb_unified(stick_to_send, throttle_to_send)
+            {
+                if stick_ok {
+                    self.applied_stick_color = target_stick;
+                }
+                if throttle_ok {
+                    self.applied_throttle_color = target_throttle;
                 }
             }
-            if let Some(color) = target_throttle_color {
-                if self.last_applied_throttle_color != Some(color) {
-                    if let Ok(dev) = X56Device::open(DeviceKind::Throttle) {
-                        if dev.set_rgb(color).is_ok() {
-                            self.last_applied_throttle_color = Some(color);
-                        }
-                    }
-                }
+
+            if self.applied_stick_color == target_stick
+                && self.applied_throttle_color == target_throttle
+            {
+                break;
+            }
+
+            if attempt + 1 < max_attempts {
+                thread::sleep(Duration::from_millis(35));
             }
         }
     }
