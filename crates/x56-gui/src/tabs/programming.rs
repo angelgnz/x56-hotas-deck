@@ -1040,7 +1040,6 @@ impl ProgrammingTab {
     /// Dibuja la silueta técnica del Stick en el mapa vectorial según la distribución física.
     fn draw_vector_stick_silhouette(&self, painter: &egui::Painter, rect: egui::Rect) {
         let outline = Stroke::new(1.0, COLOR_OUTLINE_VARIANT);
-        let accent = Stroke::new(1.2, COLOR_PRIMARY_CONTAINER);
 
         // Cabezal superior del Stick (enmarca B, Witch, A, POV y Castle)
         let head_rect = egui::Rect::from_min_max(
@@ -1109,49 +1108,7 @@ impl ProgrammingTab {
                 rect.min.y + rect.height() * 0.79,
             ),
         );
-        painter.rect_filled(shaft_rect, 4.0, COLOR_SURFACE_CONTAINER);
         painter.rect_stroke(shaft_rect, 4.0, outline, egui::StrokeKind::Inside);
-
-        // Cuello de muelle con anillo de color (Spring ring)
-        let center_ring = egui::pos2(
-            rect.min.x + rect.width() * 0.50,
-            rect.min.y + rect.height() * 0.82,
-        );
-        painter.circle_stroke(
-            center_ring,
-            rect.width() * 0.13,
-            Stroke::new(1.0, COLOR_OUTLINE_VARIANT),
-        );
-        painter.circle_stroke(
-            center_ring,
-            rect.width() * 0.07,
-            Stroke::new(1.5, COLOR_SPRING_GREEN),
-        );
-
-        // Base táctica inferior
-        let base_rect = egui::Rect::from_min_max(
-            egui::pos2(
-                rect.min.x + rect.width() * 0.14,
-                rect.min.y + rect.height() * 0.85,
-            ),
-            egui::pos2(
-                rect.min.x + rect.width() * 0.86,
-                rect.min.y + rect.height() * 0.96,
-            ),
-        );
-        painter.rect_stroke(base_rect, 6.0, accent, egui::StrokeKind::Inside);
-
-        // Marcas de cuadrante
-        painter.text(
-            egui::pos2(
-                rect.min.x + rect.width() * 0.50,
-                rect.min.y + rect.height() * 0.905,
-            ),
-            egui::Align2::CENTER_CENTER,
-            "RHINO BASE // SPRING: GREEN 47mm",
-            egui::FontId::monospace(8.5),
-            COLOR_OUTLINE,
-        );
     }
 
     /// Dibuja la silueta técnica del Throttle en el mapa vectorial.
