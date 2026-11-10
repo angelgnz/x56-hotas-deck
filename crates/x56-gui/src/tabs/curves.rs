@@ -228,41 +228,58 @@ impl CurvesTab {
                 self.render_axis_selection_subbar(ui);
                 ui.add_space(10.0);
 
-                // 3. Grid Avionics: 8 columnas izquierda (~66%) / 4 columnas derecha (~34%)
+                // 3. Grid Avionics: 2 columnas en pantallas anchas (>= 820px), o apilado vertical (< 820px)
                 let total_width = ui.available_width();
-                let gap = 12.0;
-                let left_width = ((total_width - gap) * (8.0 / 12.0)).max(380.0);
-                let right_width = (total_width - gap - left_width).max(260.0);
+                if total_width >= 820.0 {
+                    let gap = 12.0;
+                    let left_width = ((total_width - gap) * 0.62).max(360.0);
+                    let right_width = total_width - gap - left_width;
 
-                ui.horizontal_top(|ui| {
-                    ui.spacing_mut().item_spacing.x = gap;
+                    ui.horizontal_top(|ui| {
+                        ui.spacing_mut().item_spacing.x = gap;
 
-                    // COLUMNA IZQUIERDA (8 COLS)
-                    ui.allocate_ui_with_layout(
-                        Vec2::new(left_width, ui.available_height()),
-                        egui::Layout::top_down(egui::Align::Min),
-                        |ui| {
-                            self.render_transfer_curve_section(ui, &live_state);
-                            ui.add_space(10.0);
-                            self.render_telemetry_cards(ui, &live_state);
-                            ui.add_space(10.0);
-                            self.render_gimbal_and_secondary_axes(ui, &live_state);
-                        },
-                    );
+                        // COLUMNA IZQUIERDA (Transfer curve, telemetría, gimbal)
+                        ui.allocate_ui_with_layout(
+                            Vec2::new(left_width, ui.available_height()),
+                            egui::Layout::top_down(egui::Align::Min),
+                            |ui| {
+                                self.render_transfer_curve_section(ui, &live_state);
+                                ui.add_space(10.0);
+                                self.render_telemetry_cards(ui, &live_state);
+                                ui.add_space(10.0);
+                                self.render_gimbal_and_secondary_axes(ui, &live_state);
+                            },
+                        );
 
-                    // COLUMNA DERECHA (4 COLS)
-                    ui.allocate_ui_with_layout(
-                        Vec2::new(right_width, ui.available_height()),
-                        egui::Layout::top_down(egui::Align::Min),
-                        |ui| {
-                            self.render_curve_type_selector(ui);
-                            ui.add_space(10.0);
-                            self.render_axis_parameters_card(ui);
-                            ui.add_space(10.0);
-                            self.render_physical_springs_card(ui);
-                        },
-                    );
-                });
+                        // COLUMNA DERECHA (Selector tipo curva, parámetros deadband/expo, muelles)
+                        ui.allocate_ui_with_layout(
+                            Vec2::new(right_width, ui.available_height()),
+                            egui::Layout::top_down(egui::Align::Min),
+                            |ui| {
+                                self.render_curve_type_selector(ui);
+                                ui.add_space(10.0);
+                                self.render_axis_parameters_card(ui);
+                                ui.add_space(10.0);
+                                self.render_physical_springs_card(ui);
+                            },
+                        );
+                    });
+                } else {
+                    // Modo apilado vertical para pantallas compactas (< 820px)
+                    self.render_transfer_curve_section(ui, &live_state);
+                    ui.add_space(10.0);
+                    self.render_telemetry_cards(ui, &live_state);
+                    ui.add_space(10.0);
+                    self.render_gimbal_and_secondary_axes(ui, &live_state);
+                    ui.add_space(12.0);
+                    ui.separator();
+                    ui.add_space(12.0);
+                    self.render_curve_type_selector(ui);
+                    ui.add_space(10.0);
+                    self.render_axis_parameters_card(ui);
+                    ui.add_space(10.0);
+                    self.render_physical_springs_card(ui);
+                }
             });
     }
 
@@ -442,8 +459,8 @@ impl CurvesTab {
             ui.add_space(6.0);
 
             theme::sunken_frame().show(ui, |ui| {
-                let canvas_width = ui.available_width().max(320.0);
-                let canvas_height = 295.0;
+                let canvas_width = ui.available_width();
+                let canvas_height = (canvas_width * 0.52).clamp(210.0, 300.0);
                 let (response, painter) =
                     ui.allocate_painter(Vec2::new(canvas_width, canvas_height), Sense::hover());
                 let rect = response.rect;
@@ -1414,7 +1431,7 @@ fn render_bipolar_bar(ui: &mut Ui, label: &str, value: f64, fill_col: Color32, m
 
             ui.add_space(4.0);
 
-            let bar_w = ui.available_width().max(120.0);
+            let bar_w = ui.available_width().max(60.0);
             let (rect, _) = ui.allocate_exact_size(Vec2::new(bar_w, 12.0), Sense::hover());
             let painter = ui.painter();
 
@@ -1444,7 +1461,7 @@ fn render_compact_dual_bar(ui: &mut Ui, axis_lbl: &str, value: f64, col: Color32
                 .size(9.5)
                 .monospace(),
         );
-        let bar_w = (ui.available_width() - 48.0).max(80.0);
+        let bar_w = (ui.available_width() - 48.0).max(40.0);
         let (rect, _) = ui.allocate_exact_size(Vec2::new(bar_w, 8.0), Sense::hover());
         let painter = ui.painter();
         painter.rect_filled(rect, 2.0, COLOR_SURFACE_CONTAINER);

@@ -191,73 +191,110 @@ impl ProgrammingTab {
             self.status_message = None;
         }
 
-        // 5. Layout Táctico de 2 Columnas (Columna Izquierda 5 cols / Derecha 7 cols) o Solo Celdas
+        // 5. Layout Táctico: 2 Columnas en pantallas amplias (>= 850px) o Apilado Responsivo (< 850px)
         let total_w = ui.available_width();
 
         if self.show_diagram_view {
-            let left_w = (total_w * 0.41).clamp(410.0, 520.0);
-            let right_w = (total_w - left_w - 12.0).max(300.0);
+            if total_w >= 850.0 {
+                let left_w = (total_w * 0.42).clamp(340.0, 500.0);
+                let right_w = total_w - left_w - 12.0;
 
-            ui.horizontal_top(|ui| {
-                // ================================================================
-                // COLUMNA IZQUIERDA (5 COLS): Monitor, Mapa Vectorial 2D, POV Hat
-                // ================================================================
-                ui.allocate_ui_with_layout(
-                    Vec2::new(left_w, ui.available_height() - 48.0),
-                    egui::Layout::top_down(egui::Align::Min),
-                    |ui| {
-                        egui::ScrollArea::vertical()
-                            .id_salt("left_col_scroll")
-                            .auto_shrink([false, false])
-                            .show(ui, |ui| {
-                                // A. Monitor de detección en vivo (EVDEV Hook)
-                                self.render_evdev_hook_card(ui);
-                                ui.add_space(8.0);
+                ui.horizontal_top(|ui| {
+                    // ================================================================
+                    // COLUMNA IZQUIERDA: Monitor, Mapa Vectorial 2D, POV Hat
+                    // ================================================================
+                    ui.allocate_ui_with_layout(
+                        Vec2::new(left_w, ui.available_height() - 48.0),
+                        egui::Layout::top_down(egui::Align::Min),
+                        |ui| {
+                            egui::ScrollArea::vertical()
+                                .id_salt("left_col_scroll")
+                                .auto_shrink([false, false])
+                                .show(ui, |ui| {
+                                    // A. Monitor de detección en vivo (EVDEV Hook)
+                                    self.render_evdev_hook_card(ui);
+                                    ui.add_space(8.0);
 
-                                // B. Mapa Vectorial de Entradas X-56 2D
-                                self.render_vector_map_card(ui, &snapshot);
-                                ui.add_space(8.0);
+                                    // B. Mapa Vectorial de Entradas X-56 2D
+                                    self.render_vector_map_card(ui, &snapshot);
+                                    ui.add_space(8.0);
 
-                                // C. POV Hat 1 Live Matrix (Brújula octogonal)
-                                self.render_pov_compass_card(ui, &snapshot);
-                                ui.add_space(8.0);
+                                    // C. POV Hat 1 Live Matrix (Brújula octogonal)
+                                    self.render_pov_compass_card(ui, &snapshot);
+                                    ui.add_space(8.0);
 
-                                // D. Botones de acción rápida de macros
-                                self.render_quick_macro_actions(ui);
-                                ui.add_space(6.0);
-                            });
-                    },
-                );
+                                    // D. Botones de acción rápida de macros
+                                    self.render_quick_macro_actions(ui);
+                                    ui.add_space(6.0);
+                                });
+                        },
+                    );
 
-                ui.add_space(4.0);
-                ui.separator();
-                ui.add_space(4.0);
+                    ui.add_space(4.0);
+                    ui.separator();
+                    ui.add_space(4.0);
 
-                // ================================================================
-                // COLUMNA DERECHA (7 COLS): Buscador, Estadísticas, Filtros y Mapeos
-                // ================================================================
-                ui.allocate_ui_with_layout(
-                    Vec2::new(right_w, ui.available_height() - 48.0),
-                    egui::Layout::top_down(egui::Align::Min),
-                    |ui| {
-                        // A. Buscador táctico y estadísticas telemétricas
+                    // ================================================================
+                    // COLUMNA DERECHA: Buscador, Estadísticas, Filtros y Mapeos
+                    // ================================================================
+                    ui.allocate_ui_with_layout(
+                        Vec2::new(right_w, ui.available_height() - 48.0),
+                        egui::Layout::top_down(egui::Align::Min),
+                        |ui| {
+                            // A. Buscador táctico y estadísticas telemétricas
+                            self.render_search_and_stats(ui);
+                            ui.add_space(6.0);
+
+                            // B. Pills de filtro por categoría
+                            self.render_filter_pills(ui);
+                            ui.add_space(6.0);
+
+                            // C. Filas de mapeo tácticas en tarjetas
+                            egui::ScrollArea::vertical()
+                                .id_salt("mapping_rows_scroll")
+                                .auto_shrink([false, false])
+                                .show(ui, |ui| {
+                                    self.render_mapping_cards(ui, monitor, &snapshot);
+                                });
+                        },
+                    );
+                });
+            } else {
+                // Modo Apilado Responsivo para pantallas compactas (< 850px)
+                egui::ScrollArea::vertical()
+                    .id_salt("programming_stacked_scroll")
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        // Monitor de detección en vivo (EVDEV Hook)
+                        self.render_evdev_hook_card(ui);
+                        ui.add_space(8.0);
+
+                        // Mapa Vectorial de Entradas X-56 2D
+                        self.render_vector_map_card(ui, &snapshot);
+                        ui.add_space(8.0);
+
+                        // POV Hat 1 Live Matrix (Brújula octogonal)
+                        self.render_pov_compass_card(ui, &snapshot);
+                        ui.add_space(8.0);
+
+                        // Botones de acción rápida de macros
+                        self.render_quick_macro_actions(ui);
+                        ui.add_space(10.0);
+                        ui.separator();
+                        ui.add_space(10.0);
+
+                        // Buscador táctico y estadísticas telemétricas
                         self.render_search_and_stats(ui);
                         ui.add_space(6.0);
 
-                        // B. Pills de filtro por categoría
+                        // Pills de filtro por categoría
                         self.render_filter_pills(ui);
                         ui.add_space(6.0);
 
-                        // C. Filas de mapeo tácticas en tarjetas
-                        egui::ScrollArea::vertical()
-                            .id_salt("mapping_rows_scroll")
-                            .auto_shrink([false, false])
-                            .show(ui, |ui| {
-                                self.render_mapping_cards(ui, monitor, &snapshot);
-                            });
-                    },
-                );
-            });
+                        // Filas de mapeo tácticas en tarjetas
+                        self.render_mapping_cards(ui, monitor, &snapshot);
+                    });
+            }
         } else {
             // Modo Solo Celdas (ancho completo)
             ui.allocate_ui_with_layout(
@@ -412,7 +449,7 @@ impl ProgrammingTab {
         snapshot: &LiveButtonsSnapshot,
     ) {
         theme::header_frame().show(ui, |ui| {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 // Switcher de Dispositivo
                 let is_stick = self.selected_device == DeviceKind::Stick;
                 if tactical_button(ui, "🕹️ X-56 RHINO STICK (JOYSTICK)", is_stick, false).clicked()
@@ -733,7 +770,8 @@ impl ProgrammingTab {
             ui.add_space(4.0);
 
             // Canvas de dibujo vectorial con egui::Painter
-            let canvas_size = Vec2::new(ui.available_width(), 380.0);
+            let canvas_height = (ui.available_width() * 0.72).clamp(280.0, 420.0);
+            let canvas_size = Vec2::new(ui.available_width(), canvas_height);
             let (response, painter) = ui.allocate_painter(canvas_size, egui::Sense::click());
             let rect = response.rect;
 
@@ -1367,16 +1405,17 @@ impl ProgrammingTab {
     // ========================================================================
 
     fn render_search_and_stats(&mut self, ui: &mut Ui) {
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             // Buscador táctico
             theme::sunken_frame()
                 .inner_margin(egui::Margin::symmetric(8, 4))
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.label(RichText::new("🔍").size(12.0));
+                        let search_w = (ui.available_width() - 40.0).clamp(140.0, 240.0);
                         let edit = egui::TextEdit::singleline(&mut self.search_query)
-                            .hint_text("Buscar botón, código evdev (ej. 0x0120) o comando...")
-                            .desired_width(240.0);
+                            .hint_text("Buscar botón, código evdev...")
+                            .desired_width(search_w);
                         ui.add(edit);
                         if !self.search_query.is_empty() && ui.small_button("✖").clicked() {
                             self.search_query.clear();

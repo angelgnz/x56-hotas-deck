@@ -66,6 +66,7 @@ pub struct X56App {
     pub profile_dialog_mode: ProfileDialogMode,
     pub show_live_test_modal: bool,
     pub top_banner_message: Option<(String, bool)>,
+    pub sidebar_collapsed: bool,
 
     // Canal asíncrono para explorador de archivos nativo (rfd)
     pub file_dialog_rx: Option<std::sync::mpsc::Receiver<(ProfileDialogMode, Option<PathBuf>)>>,
@@ -98,6 +99,7 @@ impl Default for X56App {
             profile_dialog_mode: ProfileDialogMode::Load,
             show_live_test_modal: false,
             top_banner_message: None,
+            sidebar_collapsed: false,
             file_dialog_rx: None,
         };
         app.refresh_hardware_status();
@@ -318,65 +320,108 @@ impl X56App {
     /// pill telemétrico "/dev/hidraw0 & hidraw1 | 1000Hz POLLING",
     /// badge "ACTIVE PROFILE: SPACE_SIM_STARCITIZEN" y avatar.
     fn render_header_bar(&mut self, ui: &mut Ui) {
+        let screen_w = ui
+            .ctx()
+            .input(|i| i.raw.screen_rect)
+            .map(|r| r.width())
+            .unwrap_or(1200.0);
+
         ui.horizontal_centered(|ui| {
-            // Título principal con icono de vuelo
+            // Botón de alternar / colapsar barra lateral para pantallas compactas
+            let toggle_label = if self.sidebar_collapsed { "☰" } else { "◀" };
+            let toggle_tooltip = if self.sidebar_collapsed {
+                "Expandir navegación lateral"
+            } else {
+                "Colapsar navegación lateral para maximizar espacio de trabajo"
+            };
+            if ui
+                .button(RichText::new(toggle_label).size(12.0).monospace().strong())
+                .on_hover_text(toggle_tooltip)
+                .clicked()
+            {
+                self.sidebar_collapsed = !self.sidebar_collapsed;
+            }
+
+            ui.add_space(4.0);
+
+            // Título principal adaptativo con icono de vuelo
+            let app_title = if screen_w < 680.0 {
+                "✈ X-56"
+            } else if screen_w < 950.0 {
+                "✈ X-56 RHINO"
+            } else {
+                "✈ X-56 RHINO // RUST-EVDEV"
+            };
+
             ui.label(
-                RichText::new("✈ X-56 RHINO // RUST-EVDEV")
+                RichText::new(app_title)
                     .color(COLOR_PRIMARY)
-                    .size(13.5)
+                    .size(13.0)
                     .strong()
                     .monospace(),
             );
 
-            ui.add_space(10.0);
-
-            // Pill telemétrico "/dev/hidraw0 & hidraw1 | 1000Hz POLLING"
-            Frame::new()
-                .fill(COLOR_SURFACE_LOW)
-                .stroke(Stroke::new(1.0, COLOR_OUTLINE_VARIANT))
-                .corner_radius(CornerRadius::same(4))
-                .inner_margin(Margin::symmetric(8, 4))
-                .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        let (dot_rect, _) =
-                            ui.allocate_exact_size(Vec2::new(8.0, 8.0), Sense::hover());
-                        ui.painter().circle_filled(
-                            dot_rect.center(),
-                            3.5,
-                            COLOR_TERTIARY_CONTAINER,
-                        );
-                        ui.label(
-                            RichText::new("/dev/hidraw0 & hidraw1 | 1000Hz POLLING")
-                                .color(COLOR_ON_SURFACE_VARIANT)
-                                .size(10.5)
-                                .strong()
-                                .monospace(),
-                        );
-                    });
-                });
-
-            // Derecha: Avatar táctico y Badge ACTIVE PROFILE
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                // Avatar de piloto
+            // Pill telemétrico "/dev/hidraw0 & hidraw1 | 1000Hz POLLING" solo si hay suficiente espacio (>= 860px)
+            if screen_w >= 860.0 {
+                ui.add_space(8.0);
                 Frame::new()
-                    .fill(COLOR_SURFACE_HIGH)
-                    .stroke(Stroke::new(1.2, COLOR_PRIMARY_CONTAINER))
-                    .corner_radius(CornerRadius::same(14))
-                    .inner_margin(Margin::symmetric(7, 4))
+                    .fill(COLOR_SURFACE_LOW)
+                    .stroke(Stroke::new(1.0, COLOR_OUTLINE_VARIANT))
+                    .corner_radius(CornerRadius::same(4))
+                    .inner_margin(Margin::symmetric(8, 4))
                     .show(ui, |ui| {
-                        ui.label(
-                            RichText::new("👨‍✈️ PLT")
-                                .color(COLOR_PRIMARY)
-                                .size(10.5)
-                                .strong()
-                                .monospace(),
-                        );
+                        ui.horizontal(|ui| {
+                            let (dot_rect, _) =
+                                ui.allocate_exact_size(Vec2::new(8.0, 8.0), Sense::hover());
+                            ui.painter().circle_filled(
+                                dot_rect.center(),
+                                3.5,
+                                COLOR_TERTIARY_CONTAINER,
+                            );
+                            let poll_str = if screen_w >= 1150.0 {
+                                "/dev/hidraw0 & hidraw1 | 1000Hz POLLING"
+                            } else {
+                                "/dev/hidraw0,1 | 1kHz"
+                            };
+                            ui.label(
+                                RichText::new(poll_str)
+                                    .color(COLOR_ON_SURFACE_VARIANT)
+                                    .size(10.5)
+                                    .strong()
+                                    .monospace(),
+                            );
+                        });
                     });
+            }
 
-                ui.add_space(6.0);
+            // Derecha: Avatar táctico, botones rápidos y Badge ACTIVE PROFILE
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if screen_w >= 700.0 {
+                    // Avatar de piloto
+                    Frame::new()
+                        .fill(COLOR_SURFACE_HIGH)
+                        .stroke(Stroke::new(1.2, COLOR_PRIMARY_CONTAINER))
+                        .corner_radius(CornerRadius::same(14))
+                        .inner_margin(Margin::symmetric(7, 4))
+                        .show(ui, |ui| {
+                            ui.label(
+                                RichText::new("👨‍✈️ PLT")
+                                    .color(COLOR_PRIMARY)
+                                    .size(10.5)
+                                    .strong()
+                                    .monospace(),
+                            );
+                        });
+                    ui.add_space(6.0);
+                }
 
                 // Botón rápido de Guardar con explorador nativo
-                if theme::tactical_button(ui, "💾 GUARDAR", false, false)
+                let save_lbl = if screen_w < 780.0 {
+                    "💾"
+                } else {
+                    "💾 GUARDAR"
+                };
+                if theme::tactical_button(ui, save_lbl, false, false)
                     .on_hover_text(
                         "Guardar perfil actual en archivo TOML mediante el explorador nativo",
                     )
@@ -388,7 +433,12 @@ impl X56App {
                 ui.add_space(4.0);
 
                 // Botón rápido de Cargar con explorador nativo
-                if theme::tactical_button(ui, "📂 CARGAR", false, false)
+                let load_lbl = if screen_w < 780.0 {
+                    "📂"
+                } else {
+                    "📂 CARGAR"
+                };
+                if theme::tactical_button(ui, load_lbl, false, false)
                     .on_hover_text("Abrir explorador de archivos para cargar un perfil TOML")
                     .clicked()
                 {
@@ -398,11 +448,15 @@ impl X56App {
                 ui.add_space(6.0);
 
                 // Badge "ACTIVE PROFILE: SPACE_SIM_STARCITIZEN"
-                let prof_badge_text = format!("ACTIVE PROFILE: {}", self.active_profile_name);
+                let prof_badge_text = if screen_w < 900.0 {
+                    format!("P: {}", self.active_profile_name)
+                } else {
+                    format!("ACTIVE PROFILE: {}", self.active_profile_name)
+                };
                 let prof_btn = egui::Button::new(
                     RichText::new(prof_badge_text)
                         .color(COLOR_PRIMARY_CONTAINER)
-                        .size(10.5)
+                        .size(10.0)
                         .strong()
                         .monospace(),
                 )
@@ -422,11 +476,105 @@ impl X56App {
         });
     }
 
-    /// 2. Sidebar izquierda fija (256px ancho).
+    /// Sidebar colapsada en modo icono (52px de ancho) para pantallas compactas.
+    fn render_collapsed_sidebar(&mut self, ui: &mut Ui) {
+        let snap = self.button_monitor.snapshot();
+        if self.programming_tab.follow_hardware_mode {
+            self.programming_tab.selected_mode = snap.active_mode;
+        }
+
+        ui.vertical_centered(|ui| {
+            ui.add_space(4.0);
+            let nav_items = [
+                (
+                    ActiveSubsystem::Curves,
+                    "📈",
+                    "Ejes y Curvas\nHALL 16-BIT & TRANSFER CURVES",
+                ),
+                (
+                    ActiveSubsystem::Mapping,
+                    "🎮",
+                    "Botones y Mapeo\nUINPUT MATRIX // M1-M2-S1",
+                ),
+                (
+                    ActiveSubsystem::RgbCalibrate,
+                    "💡",
+                    "Iluminación RGB & Calibración\nLED PWM & HALL ZERO",
+                ),
+                (
+                    ActiveSubsystem::Profiles,
+                    "🗂",
+                    "Perfiles & Exportación\nTOML PROFILES & DOCTOR",
+                ),
+            ];
+
+            for (sub, icon, tooltip) in nav_items {
+                let is_active = self.active_subsystem == sub;
+                let bg = if is_active {
+                    COLOR_SURFACE_HIGH
+                } else {
+                    COLOR_SURFACE_CONTAINER
+                };
+                let border = if is_active {
+                    Stroke::new(1.5, COLOR_PRIMARY_CONTAINER)
+                } else {
+                    Stroke::new(1.0, COLOR_OUTLINE_VARIANT)
+                };
+
+                let btn = egui::Button::new(RichText::new(icon).size(16.0))
+                    .fill(bg)
+                    .stroke(border)
+                    .corner_radius(CornerRadius::same(6));
+
+                if ui
+                    .add_sized(Vec2::new(38.0, 38.0), btn)
+                    .on_hover_text(tooltip)
+                    .clicked()
+                {
+                    self.active_subsystem = sub;
+                    if sub == ActiveSubsystem::Profiles {
+                        self.doctor_tab.refresh();
+                    }
+                }
+
+                ui.add_space(6.0);
+            }
+
+            ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
+                // Indicador de modo
+                let mode_str = snap.active_mode.as_str();
+                let mode_btn = egui::Button::new(
+                    RichText::new(mode_str)
+                        .color(COLOR_ON_PRIMARY_CONTAINER)
+                        .size(9.0)
+                        .strong()
+                        .monospace(),
+                )
+                .fill(COLOR_PRIMARY_CONTAINER)
+                .corner_radius(CornerRadius::same(4));
+                ui.add_sized(Vec2::new(36.0, 20.0), mode_btn)
+                    .on_hover_text(format!("Modo de hardware actual: {mode_str}"));
+
+                ui.add_space(6.0);
+
+                // Punto uinput neon
+                let (dot_r, _) = ui.allocate_exact_size(Vec2::new(10.0, 10.0), Sense::hover());
+                ui.painter()
+                    .circle_filled(dot_r.center(), 4.0, COLOR_TERTIARY_CONTAINER);
+            });
+        });
+    }
+
+    /// 2. Sidebar izquierda responsiva.
     ///
     /// Subsystem Navigation con los 4 subsistemas aprobados y tarjeta inferior
     /// con UINPUT DAEMON: ONLINE, MODE SWITCH (M1/M2/S1) y LATENCY: 0.94 ms.
     fn render_sidebar(&mut self, ui: &mut Ui) {
+        if self.sidebar_collapsed {
+            self.render_collapsed_sidebar(ui);
+            return;
+        }
+
         let snap = self.button_monitor.snapshot();
         if self.programming_tab.follow_hardware_mode {
             self.programming_tab.selected_mode = snap.active_mode;
@@ -634,45 +782,67 @@ impl X56App {
     ///
     /// "MODAL TEST EN VIVO", "RECALIBRAR CENTRO CERO", "REVERTIR CAMBIOS", "APLICAR A UINPUT // GUARDAR".
     fn render_bottom_dock(&mut self, ui: &mut Ui) {
+        let screen_w = ui
+            .ctx()
+            .input(|i| i.raw.screen_rect)
+            .map(|r| r.width())
+            .unwrap_or(1200.0);
+
         ui.horizontal_centered(|ui| {
-            // Estado / Mensaje informativo a la izquierda
-            if let Some((ref msg, is_err)) = self.top_banner_message {
-                let col = if is_err {
-                    COLOR_ERROR
+            // Estado / Mensaje informativo a la izquierda (oculto en pantallas muy estrechas si hay colisión)
+            if screen_w >= 650.0 {
+                if let Some((ref msg, is_err)) = self.top_banner_message {
+                    let col = if is_err {
+                        COLOR_ERROR
+                    } else {
+                        COLOR_TERTIARY_CONTAINER
+                    };
+                    ui.label(
+                        RichText::new(format!("▸ {msg}"))
+                            .color(col)
+                            .size(11.0)
+                            .monospace(),
+                    );
+                } else if let Some((ref msg, is_err)) = self.curves_tab.status_message {
+                    let col = if is_err {
+                        COLOR_ERROR
+                    } else {
+                        COLOR_TERTIARY_FIXED_DIM
+                    };
+                    ui.label(
+                        RichText::new(format!("▸ {msg}"))
+                            .color(col)
+                            .size(11.0)
+                            .monospace(),
+                    );
                 } else {
-                    COLOR_TERTIARY_CONTAINER
-                };
-                ui.label(
-                    RichText::new(format!("▸ {msg}"))
-                        .color(col)
-                        .size(11.0)
-                        .monospace(),
-                );
-            } else if let Some((ref msg, is_err)) = self.curves_tab.status_message {
-                let col = if is_err {
-                    COLOR_ERROR
-                } else {
-                    COLOR_TERTIARY_FIXED_DIM
-                };
-                ui.label(
-                    RichText::new(format!("▸ {msg}"))
-                        .color(col)
-                        .size(11.0)
-                        .monospace(),
-                );
-            } else {
-                ui.label(
-                    RichText::new("▸ TELEMETRÍA LISTA // USB HID INTERFACE 02")
-                        .color(COLOR_ON_SURFACE_VARIANT)
-                        .size(10.5)
-                        .monospace(),
-                );
+                    let tele_str = if screen_w >= 900.0 {
+                        "▸ TELEMETRÍA LISTA // USB HID INTERFACE 02"
+                    } else {
+                        "▸ USB HID OK"
+                    };
+                    ui.label(
+                        RichText::new(tele_str)
+                            .color(COLOR_ON_SURFACE_VARIANT)
+                            .size(10.5)
+                            .monospace(),
+                    );
+                }
             }
 
-            // Botones de acción táctica a la derecha
+            // Botones de acción táctica a la derecha adaptativos
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 // 4. APLICAR A UINPUT // GUARDAR (acento primario)
-                if theme::tactical_button(ui, "💾 APLICAR A UINPUT // GUARDAR", false, true)
+                let apply_lbl = if screen_w < 720.0 {
+                    "💾"
+                } else if screen_w < 1100.0 {
+                    "💾 APLICAR"
+                } else {
+                    "💾 APLICAR A UINPUT // GUARDAR"
+                };
+
+                if theme::tactical_button(ui, apply_lbl, false, true)
+                    .on_hover_text("Aplicar configuración actual a uinput y guardar perfil")
                     .clicked()
                 {
                     self.curves_tab.apply_to_hardware();
@@ -685,7 +855,18 @@ impl X56App {
                 ui.add_space(6.0);
 
                 // 3. REVERTIR CAMBIOS
-                if theme::tactical_button(ui, "↺ REVERTIR CAMBIOS", false, false).clicked() {
+                let revert_lbl = if screen_w < 720.0 {
+                    "↺"
+                } else if screen_w < 1100.0 {
+                    "↺ REVERTIR"
+                } else {
+                    "↺ REVERTIR CAMBIOS"
+                };
+
+                if theme::tactical_button(ui, revert_lbl, false, false)
+                    .on_hover_text("Revertir cambios a los valores del hardware")
+                    .clicked()
+                {
                     self.curves_tab.reset_current_axis();
                     self.curves_tab.read_from_hardware();
                     self.top_banner_message = Some((
@@ -697,7 +878,17 @@ impl X56App {
                 ui.add_space(6.0);
 
                 // 2. RECALIBRAR CENTRO CERO
-                if theme::tactical_button(ui, "🎯 RECALIBRAR CENTRO CERO", false, false).clicked()
+                let recal_lbl = if screen_w < 720.0 {
+                    "🎯"
+                } else if screen_w < 1100.0 {
+                    "🎯 CALIBRAR"
+                } else {
+                    "🎯 RECALIBRAR CENTRO CERO"
+                };
+
+                if theme::tactical_button(ui, recal_lbl, false, false)
+                    .on_hover_text("Muestrear y recalibrar centro magnético Hall")
+                    .clicked()
                 {
                     self.calibrate_tab.execute_calibration(true);
                     self.curves_tab.read_from_hardware();
@@ -710,13 +901,17 @@ impl X56App {
                 ui.add_space(6.0);
 
                 // 1. MODAL TEST EN VIVO
-                if theme::tactical_button(
-                    ui,
-                    "⚡ MODAL TEST EN VIVO",
-                    self.show_live_test_modal,
-                    false,
-                )
-                .clicked()
+                let test_lbl = if screen_w < 720.0 {
+                    "⚡"
+                } else if screen_w < 1100.0 {
+                    "⚡ TEST"
+                } else {
+                    "⚡ MODAL TEST EN VIVO"
+                };
+
+                if theme::tactical_button(ui, test_lbl, self.show_live_test_modal, false)
+                    .on_hover_text("Abrir ventana modal de telemetría y pruebas en vivo")
+                    .clicked()
                 {
                     self.show_live_test_modal = !self.show_live_test_modal;
                     self.programming_tab.show_test_window = self.show_live_test_modal;
@@ -1021,9 +1216,22 @@ impl eframe::App for X56App {
                 self.render_bottom_dock(ui);
             });
 
-        // 3. Sidebar izquierda fija (256px de ancho)
+        // 3. Sidebar izquierda responsiva / colapsable
+        let screen_w = ui
+            .ctx()
+            .input(|i| i.raw.screen_rect)
+            .map(|r| r.width())
+            .unwrap_or(1200.0);
+        let sidebar_w = if self.sidebar_collapsed {
+            54.0
+        } else if screen_w < 1100.0 {
+            200.0
+        } else {
+            240.0
+        };
+
         egui::Panel::left("avionics_sidebar")
-            .exact_size(256.0)
+            .exact_size(sidebar_w)
             .resizable(false)
             .frame(theme::sidebar_frame())
             .show(ui, |ui| {
