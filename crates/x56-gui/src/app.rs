@@ -66,6 +66,9 @@ pub struct X56App {
     pub profile_dialog_mode: ProfileDialogMode,
     pub show_live_test_modal: bool,
     pub top_banner_message: Option<(String, bool)>,
+
+    // Canal asíncrono para explorador de archivos nativo (rfd)
+    pub file_dialog_rx: Option<std::sync::mpsc::Receiver<(ProfileDialogMode, Option<PathBuf>)>>,
 }
 
 impl Default for X56App {
@@ -87,6 +90,7 @@ impl Default for X56App {
             profile_dialog_mode: ProfileDialogMode::Load,
             show_live_test_modal: false,
             top_banner_message: None,
+            file_dialog_rx: None,
         };
         app.refresh_hardware_status();
         app
@@ -209,6 +213,94 @@ impl X56App {
         }
     }
 
+    /// Lanza un explorador de archivos nativo del sistema operativo en un hilo secundario
+    /// para no congelar ni retrasar el renderizado a 30+ FPS de egui.
+    pub fn spawn_file_dialog(&mut self, mode: ProfileDialogMode) {
+        if self.file_dialog_rx.is_some() {
+            return; // Ya hay un diálogo nativo en curso
+        }
+
+        let current_path = PathBuf::from(&self.profile_path_buf);
+        let start_dir = if current_path.is_file() {
+            current_path.parent().map(|p| p.to_path_buf())
+        } else if current_path.is_dir() {
+            Some(current_path.clone())
+        } else {
+            std::env::current_dir()
+                .ok()
+                .map(|d| d.join("examples"))
+                .filter(|p| p.exists())
+                .or_else(|| std::env::current_dir().ok())
+        };
+
+        let default_name = current_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(String::from)
+            .unwrap_or_else(|| format!("{}.toml", self.active_profile_name.to_lowercase()));
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.file_dialog_rx = Some(rx);
+
+        std::thread::spawn(move || {
+            let mut dialog = rfd::FileDialog::new()
+                .add_filter("Perfiles TOML (*.toml)", &["toml"])
+                .add_filter("Todos los archivos (*.*)", &["*"]);
+
+            if let Some(dir) = start_dir {
+                dialog = dialog.set_directory(dir);
+            }
+
+            let result = match mode {
+                ProfileDialogMode::Load => {
+                    dialog = dialog.set_title("Seleccionar Perfil TOML de X56");
+                    dialog.pick_file()
+                }
+                ProfileDialogMode::Save => {
+                    dialog = dialog
+                        .set_title("Guardar Perfil TOML de X56")
+                        .set_file_name(&default_name);
+                    dialog.save_file()
+                }
+            };
+            let _ = tx.send((mode, result));
+        });
+    }
+
+    /// Procesa de forma no bloqueante cualquier resultado pendiente del diálogo nativo.
+    pub fn poll_file_dialog(&mut self) {
+        let Some(rx) = self.file_dialog_rx.as_ref() else {
+            return;
+        };
+
+        match rx.try_recv() {
+            Ok((mode, Some(path))) => {
+                self.file_dialog_rx = None;
+                match mode {
+                    ProfileDialogMode::Load => {
+                        self.profile_path_buf = path.display().to_string();
+                        self.load_profile_from_disk();
+                    }
+                    ProfileDialogMode::Save => {
+                        let mut p = path.display().to_string();
+                        if !p.ends_with(".toml") {
+                            p.push_str(".toml");
+                        }
+                        self.profile_path_buf = p;
+                        self.save_current_profile();
+                    }
+                }
+            }
+            Ok((_, None)) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                // Diálogo cancelado por el usuario o cerrado sin selección
+                self.file_dialog_rx = None;
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                // El explorador de archivos sigue abierto por el usuario; la UI continúa a 30+ FPS
+            }
+        }
+    }
+
     /// 1. HeaderBar superior fija (48px de alto).
     ///
     /// Título "X-56 RHINO // RUST-EVDEV" con icono de vuelo,
@@ -272,6 +364,28 @@ impl X56App {
 
                 ui.add_space(6.0);
 
+                // Botón rápido de Guardar con explorador nativo
+                if theme::tactical_button(ui, "💾 GUARDAR", false, false)
+                    .on_hover_text(
+                        "Guardar perfil actual en archivo TOML mediante el explorador nativo",
+                    )
+                    .clicked()
+                {
+                    self.spawn_file_dialog(ProfileDialogMode::Save);
+                }
+
+                ui.add_space(4.0);
+
+                // Botón rápido de Cargar con explorador nativo
+                if theme::tactical_button(ui, "📂 CARGAR", false, false)
+                    .on_hover_text("Abrir explorador de archivos para cargar un perfil TOML")
+                    .clicked()
+                {
+                    self.spawn_file_dialog(ProfileDialogMode::Load);
+                }
+
+                ui.add_space(6.0);
+
                 // Badge "ACTIVE PROFILE: SPACE_SIM_STARCITIZEN"
                 let prof_badge_text = format!("ACTIVE PROFILE: {}", self.active_profile_name);
                 let prof_btn = egui::Button::new(
@@ -287,7 +401,7 @@ impl X56App {
 
                 if ui
                     .add(prof_btn)
-                    .on_hover_text("Haz clic para cargar o guardar perfil TOML")
+                    .on_hover_text("Haz clic para abrir el diálogo detallado de perfiles")
                     .clicked()
                 {
                     self.profile_dialog_mode = ProfileDialogMode::Load;
@@ -648,6 +762,9 @@ impl X56App {
                                 .monospace(),
                         );
                         ui.text_edit_singleline(&mut self.profile_path_buf);
+                        if theme::tactical_button(ui, "📁 EXPLORAR...", false, false).clicked() {
+                            self.spawn_file_dialog(ProfileDialogMode::Load);
+                        }
                     });
 
                     ui.add_space(8.0);
@@ -663,6 +780,15 @@ impl X56App {
                             .clicked()
                         {
                             self.save_current_profile();
+                        }
+
+                        if theme::tactical_button(ui, "💾 GUARDAR COMO...", false, false)
+                            .on_hover_text(
+                                "Guardar perfil en nueva ubicación con el explorador de archivos",
+                            )
+                            .clicked()
+                        {
+                            self.spawn_file_dialog(ProfileDialogMode::Save);
                         }
 
                         if theme::tactical_button(
@@ -728,7 +854,15 @@ impl X56App {
                         .color(COLOR_ON_SURFACE_VARIANT)
                         .size(11.0),
                 );
-                ui.text_edit_singleline(&mut self.profile_path_buf);
+                ui.horizontal(|ui| {
+                    ui.text_edit_singleline(&mut self.profile_path_buf);
+                    if theme::tactical_button(ui, "📁 EXPLORAR...", false, false)
+                        .on_hover_text("Abrir explorador de archivos nativo del sistema")
+                        .clicked()
+                    {
+                        self.spawn_file_dialog(self.profile_dialog_mode);
+                    }
+                });
 
                 ui.add_space(10.0);
                 ui.horizontal(|ui| {
@@ -747,9 +881,12 @@ impl X56App {
                         }
                     }
 
-                    if theme::tactical_button(ui, "💾 GUARDAR COMO...", false, false).clicked() {
+                    if theme::tactical_button(ui, "💾 GUARDAR COMO...", false, false)
+                        .on_hover_text("Guardar con nuevo nombre o ubicación en el explorador")
+                        .clicked()
+                    {
                         self.profile_dialog_mode = ProfileDialogMode::Save;
-                        self.save_current_profile();
+                        self.spawn_file_dialog(ProfileDialogMode::Save);
                     }
 
                     if theme::tactical_button(ui, "✖ CANCELAR", false, false).clicked() {
@@ -851,6 +988,9 @@ impl X56App {
 
 impl eframe::App for X56App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // Procesar cualquier selección del explorador de archivos nativo
+        self.poll_file_dialog();
+
         // Redibujar continuo a ~30 fps para telemetría en vivo fluida
         ui.ctx()
             .request_repaint_after(std::time::Duration::from_millis(33));
