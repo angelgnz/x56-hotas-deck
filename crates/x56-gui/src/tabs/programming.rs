@@ -211,23 +211,26 @@ impl ProgrammingTab {
         if self.show_diagram_view {
             if total_w >= 850.0 {
                 let gap = 12.0;
-                let left_w = (total_w * 0.35).clamp(310.0, 390.0);
-                let right_w = (total_w - left_w - gap - 6.0).max(260.0);
+                let col_w = ((total_w - gap) * 0.5).max(240.0);
+                let left_w = col_w;
 
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = gap;
 
                     // ================================================================
-                    // COLUMNA IZQUIERDA: Monitor, Mapa Vectorial 2D, POV Hat
+                    // COLUMNA IZQUIERDA (50%): Monitor, Mapa Vectorial 2D, POV Hat
                     // ================================================================
                     ui.allocate_ui_with_layout(
                         Vec2::new(left_w, ui.available_height() - 48.0),
                         egui::Layout::top_down(egui::Align::Min),
                         |ui| {
+                            ui.set_width(left_w);
                             egui::ScrollArea::vertical()
                                 .id_salt("left_col_scroll")
+                                .max_width(left_w)
                                 .auto_shrink([false, false])
                                 .show(ui, |ui| {
+                                    ui.set_width(ui.available_width());
                                     // A. Monitor de detección en vivo (EVDEV Hook)
                                     self.render_evdev_hook_card(ui);
                                     ui.add_space(8.0);
@@ -248,12 +251,14 @@ impl ProgrammingTab {
                     );
 
                     // ================================================================
-                    // COLUMNA DERECHA: Buscador, Estadísticas, Filtros y Mapeos
+                    // COLUMNA DERECHA (50%): Buscador, Estadísticas, Filtros y Mapeos
                     // ================================================================
+                    let right_w = ui.available_width().max(240.0);
                     ui.allocate_ui_with_layout(
                         Vec2::new(right_w, ui.available_height() - 48.0),
                         egui::Layout::top_down(egui::Align::Min),
                         |ui| {
+                            ui.set_width(right_w);
                             // A. Buscador táctico y estadísticas telemétricas
                             self.render_search_and_stats(ui);
                             ui.add_space(6.0);
@@ -265,8 +270,10 @@ impl ProgrammingTab {
                             // C. Filas de mapeo tácticas en tarjetas
                             egui::ScrollArea::vertical()
                                 .id_salt("mapping_rows_scroll")
+                                .max_width(right_w)
                                 .auto_shrink([false, false])
                                 .show(ui, |ui| {
+                                    ui.set_width(ui.available_width());
                                     self.render_mapping_cards(ui, monitor, &snapshot);
                                 });
                         },
@@ -276,8 +283,10 @@ impl ProgrammingTab {
                 // Modo Apilado Responsivo para pantallas compactas (< 850px)
                 egui::ScrollArea::vertical()
                     .id_salt("programming_stacked_scroll")
+                    .max_width(total_w)
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
+                        ui.set_width(ui.available_width());
                         // Monitor de detección en vivo (EVDEV Hook)
                         self.render_evdev_hook_card(ui);
                         ui.add_space(8.0);
@@ -314,14 +323,17 @@ impl ProgrammingTab {
                 Vec2::new(total_w, ui.available_height() - 48.0),
                 egui::Layout::top_down(egui::Align::Min),
                 |ui| {
+                    ui.set_width(total_w);
                     self.render_search_and_stats(ui);
                     ui.add_space(6.0);
                     self.render_filter_pills(ui);
                     ui.add_space(6.0);
                     egui::ScrollArea::vertical()
                         .id_salt("mapping_rows_scroll_full")
+                        .max_width(total_w)
                         .auto_shrink([false, false])
                         .show(ui, |ui| {
+                            ui.set_width(ui.available_width());
                             self.render_mapping_cards(ui, monitor, &snapshot);
                         });
                 },
@@ -626,7 +638,8 @@ impl ProgrammingTab {
 
     fn render_evdev_hook_card(&self, ui: &mut Ui) {
         theme::card_frame().show(ui, |ui| {
-            ui.horizontal(|ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal_wrapped(|ui| {
                 ui.label(
                     RichText::new(format!(
                         "{} MONITOR DE DETECCIÓN EN VIVO (EVDEV HOOK)",
@@ -637,16 +650,15 @@ impl ProgrammingTab {
                     .strong()
                     .monospace(),
                 );
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    telemetry_badge(ui, "HOOK", "LISTENING 1000Hz", COLOR_TERTIARY_CONTAINER);
-                });
+                telemetry_badge(ui, "HOOK", "LISTENING 1000Hz", COLOR_TERTIARY_CONTAINER);
             });
 
             ui.add_space(4.0);
 
             // Fila: Evento detectado
             theme::sunken_frame().show(ui, |ui| {
-                ui.horizontal(|ui| {
+                ui.set_width(ui.available_width());
+                ui.horizontal_wrapped(|ui| {
                     ui.label(
                         RichText::new("EVENTO:")
                             .color(COLOR_OUTLINE)
@@ -671,23 +683,21 @@ impl ProgrammingTab {
                     );
 
                     if self.currently_pressed_count > 1 {
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            let tip = format!(
-                                "Entradas físicas simultáneas ({}):\n{}",
-                                self.currently_pressed_count, self.active_pressed_summary
-                            );
-                            ui.label(
-                                RichText::new(format!(
-                                    "● {} ACTIVOS",
-                                    self.currently_pressed_count
-                                ))
-                                .color(COLOR_WARNING_AMBER)
-                                .size(9.5)
-                                .monospace()
-                                .strong(),
-                            )
-                            .on_hover_text(tip);
-                        });
+                        let tip = format!(
+                            "Entradas físicas simultáneas ({}):\n{}",
+                            self.currently_pressed_count, self.active_pressed_summary
+                        );
+                        ui.label(
+                            RichText::new(format!(
+                                "● {} ACTIVOS",
+                                self.currently_pressed_count
+                            ))
+                            .color(COLOR_WARNING_AMBER)
+                            .size(9.5)
+                            .monospace()
+                            .strong(),
+                        )
+                        .on_hover_text(tip);
                     }
                 });
             });
@@ -767,6 +777,7 @@ impl ProgrammingTab {
 
     fn render_vector_map_card(&mut self, ui: &mut Ui, snapshot: &LiveButtonsSnapshot) {
         theme::card_frame().show(ui, |ui| {
+            ui.set_width(ui.available_width());
             let title = match self.selected_device {
                 DeviceKind::Stick => {
                     format!(
@@ -782,7 +793,7 @@ impl ProgrammingTab {
                 }
             };
 
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label(
                     RichText::new(title)
                         .color(COLOR_PRIMARY)
@@ -1238,7 +1249,8 @@ impl ProgrammingTab {
 
     fn render_pov_compass_card(&self, ui: &mut Ui, snapshot: &LiveButtonsSnapshot) {
         theme::card_frame().show(ui, |ui| {
-            ui.horizontal(|ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal_wrapped(|ui| {
                 ui.label(
                     RichText::new(format!(
                         "{} POV HAT 1 LIVE MATRIX // 8-WAY COMPASS",
@@ -1376,6 +1388,7 @@ impl ProgrammingTab {
 
     fn render_quick_macro_actions(&mut self, ui: &mut Ui) {
         theme::card_frame().show(ui, |ui| {
+            ui.set_width(ui.available_width());
             ui.label(
                 RichText::new(format!(
                     "{} ACCIONES RÁPIDAS DE MACROS // EVDEV",
@@ -1686,22 +1699,17 @@ impl ProgrammingTab {
             COLOR_SURFACE_LOW
         };
 
-        let max_row_w = ui.available_width();
-
         let frame_resp = egui::Frame::new()
             .fill(card_bg)
             .stroke(border_stroke)
             .corner_radius(egui::CornerRadius::same(6))
             .inner_margin(egui::Margin::symmetric(10, 8))
             .show(ui, |ui| {
-                let inner_max_w = (max_row_w - 24.0).max(0.0);
-                ui.set_max_width(inner_max_w);
+                ui.set_width(ui.available_width());
 
                 if is_editing {
                     self.render_inline_edit_controls(ui, monitor, btn);
                 } else {
-                    let card_w = ui.available_width();
-
                     // Badge de mapeo uinput destacado con fondo azul o cian
                     let (mapped_text, mapped_bg, mapped_fg) = if let Some(ref c) = cell_opt {
                         if c.is_assigned() {
@@ -1776,28 +1784,13 @@ impl ProgrammingTab {
 
                     ui.add_space(4.0);
 
-                    // Fila 3: Metadatos a la izquierda y botones de acción (Test, Editar, Limpiar)
-                    // bajados responsivamente para que nunca se desborden ni queden cortados
-                    if card_w >= 480.0 {
-                        ui.horizontal(|ui| {
-                            ui.set_max_width(card_w);
-                            self.render_row_metadata(ui, &cell_opt, &default_info);
-
-                            ui.with_layout(
-                                egui::Layout::right_to_left(egui::Align::Center),
-                                |ui| {
-                                    self.render_row_actions(ui, monitor, btn, &cell_opt, true);
-                                },
-                            );
-                        });
-                    } else {
-                        // En anchos compactos (< 480px), metadatos en Fila 3 y acciones en Fila 4
-                        self.render_row_metadata(ui, &cell_opt, &default_info);
-                        ui.add_space(3.0);
-                        ui.horizontal_wrapped(|ui| {
-                            self.render_row_actions_left_to_right(ui, monitor, btn, &cell_opt);
-                        });
-                    }
+                    // Fila 3 y 4: Metadatos y botones de acción (Test, Editar, Limpiar)
+                    // usando horizontal_wrapped sin right_to_left para que nunca empujen el ancho de la tarjeta
+                    self.render_row_metadata(ui, &cell_opt, &default_info);
+                    ui.add_space(3.0);
+                    ui.horizontal_wrapped(|ui| {
+                        self.render_row_actions_left_to_right(ui, monitor, btn, &cell_opt);
+                    });
                 }
             });
 
@@ -1836,92 +1829,7 @@ impl ProgrammingTab {
         });
     }
 
-    /// Botones de acción para cada fila (ordenados de derecha a izquierda).
-    fn render_row_actions(
-        &mut self,
-        ui: &mut Ui,
-        monitor: &ButtonMonitor,
-        btn: &ButtonDescriptor,
-        cell_opt: &Option<CommandCell>,
-        is_dropped_down: bool,
-    ) {
-        // En right_to_left, el primer elemento añadido queda más a la derecha.
-        // 1. Limpiar
-        if cell_opt.as_ref().is_some_and(|c| c.is_assigned()) {
-            let clean_label = if is_dropped_down {
-                format!("{} LIMPIAR", icons::TRASH)
-            } else {
-                icons::TRASH.to_string()
-            };
-            if ui
-                .button(
-                    RichText::new(clean_label)
-                        .color(COLOR_ERROR)
-                        .size(10.0)
-                        .monospace(),
-                )
-                .on_hover_text("Limpiar asignación uinput de este botón")
-                .clicked()
-            {
-                self.profile.remove_cell(self.selected_mode, &btn.id);
-                monitor.set_profile(self.profile.clone());
-                self.status_message =
-                    Some((format!("ASIGNACIÓN ELIMINADA // {}", btn.label), false));
-            }
-            ui.add_space(3.0);
-        }
-
-        // 2. Editar
-        let edit_label = if is_dropped_down {
-            format!("{} EDITAR", icons::PENCIL)
-        } else {
-            "EDITAR".to_string()
-        };
-        if tactical_button(ui, &edit_label, false, false)
-            .on_hover_text("Editar asignación de teclas y comando")
-            .clicked()
-        {
-            self.editing_button_id = Some(btn.id.clone());
-            if let Some(ref c) = cell_opt {
-                self.pending_name = c.name.clone();
-                self.pending_keys = c.keys.clone();
-            } else {
-                let default_info = default_mapping_for(&btn.id);
-                self.pending_name = default_info.action.to_string();
-                self.pending_keys = vec![default_info.key_display.replace(['[', ']'], "")];
-            }
-        }
-
-        ui.add_space(3.0);
-
-        // 3. Test
-        let test_label = if is_dropped_down {
-            format!("{} TEST", icons::ZAP)
-        } else {
-            "TEST".to_string()
-        };
-        if ui
-            .button(
-                RichText::new(test_label)
-                    .color(COLOR_TERTIARY_CONTAINER)
-                    .size(10.0)
-                    .monospace(),
-            )
-            .on_hover_text("Simular pulsación para verificar uinput")
-            .clicked()
-        {
-            self.last_detected_button = Some(format!("{} // {}", btn.id.to_uppercase(), btn.label));
-            self.last_hex_code = if btn.evdev_code != 0 {
-                format!("{:#06x}", btn.evdev_code)
-            } else {
-                "0x0120".to_string()
-            };
-            self.last_state_down = true;
-            self.status_message = Some((format!("TEST SIMULADO: {}", btn.label), false));
-        }
-    }
-
-    /// Botones de acción de izquierda a derecha para anchos muy reducidos (< 400px).
+    /// Botones de acción de izquierda a derecha con salto de línea seguro.
     fn render_row_actions_left_to_right(
         &mut self,
         ui: &mut Ui,
@@ -2065,120 +1973,60 @@ impl ProgrammingTab {
 
             ui.add_space(4.0);
 
-            // Campo de nombre y botones de confirmación responsivos
-            if card_w >= 480.0 {
-                ui.horizontal(|ui| {
-                    ui.label(
-                        RichText::new("ACCIÓN:")
-                            .color(COLOR_OUTLINE)
-                            .size(10.0)
+            // Campo de nombre y botones de confirmación con horizontal_wrapped seguro
+            ui.horizontal_wrapped(|ui| {
+                ui.label(
+                    RichText::new("ACCIÓN:")
+                        .color(COLOR_OUTLINE)
+                        .size(10.0)
+                        .monospace(),
+                );
+                let edit_w = (card_w - 80.0).clamp(120.0, 220.0);
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.pending_name)
+                        .desired_width(edit_w)
+                        .hint_text("Nombre de comando"),
+                );
+
+                let confirm_lbl = format!("{} CONFIRMAR MAPEO", icons::CHECK);
+                if tactical_button(ui, &confirm_lbl, false, true).clicked() {
+                    let name_final = if self.pending_name.trim().is_empty() {
+                        btn.label.to_string()
+                    } else {
+                        self.pending_name.trim().to_string()
+                    };
+
+                    let cell = CommandCell {
+                        button_id: btn.id.clone(),
+                        name: name_final,
+                        keys: self.pending_keys.clone(),
+                    };
+
+                    self.profile.set_cell(self.selected_mode, cell);
+                    monitor.set_profile(self.profile.clone());
+                    self.status_message =
+                        Some((format!("MAPEO CONFIRMADO PARA {}", btn.label), false));
+
+                    self.editing_button_id = None;
+                    self.pending_keys.clear();
+                    self.pending_name.clear();
+                }
+
+                let cancel_lbl = format!("{} CANCELAR", icons::X);
+                if ui
+                    .button(
+                        RichText::new(cancel_lbl)
+                            .color(COLOR_ERROR)
+                            .size(10.5)
                             .monospace(),
-                    );
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.pending_name)
-                            .desired_width((card_w * 0.35).clamp(120.0, 180.0))
-                            .hint_text("Nombre de comando"),
-                    );
-
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let cancel_lbl = format!("{} CANCELAR", icons::X);
-                        if ui
-                            .button(
-                                RichText::new(cancel_lbl)
-                                    .color(COLOR_ERROR)
-                                    .size(10.5)
-                                    .monospace(),
-                            )
-                            .clicked()
-                        {
-                            self.editing_button_id = None;
-                            self.pending_keys.clear();
-                            self.pending_name.clear();
-                        }
-
-                        let confirm_lbl = format!("{} CONFIRMAR MAPEO", icons::CHECK);
-                        if tactical_button(ui, &confirm_lbl, false, true).clicked() {
-                            let name_final = if self.pending_name.trim().is_empty() {
-                                btn.label.to_string()
-                            } else {
-                                self.pending_name.trim().to_string()
-                            };
-
-                            let cell = CommandCell {
-                                button_id: btn.id.clone(),
-                                name: name_final,
-                                keys: self.pending_keys.clone(),
-                            };
-
-                            self.profile.set_cell(self.selected_mode, cell);
-                            monitor.set_profile(self.profile.clone());
-                            self.status_message =
-                                Some((format!("MAPEO CONFIRMADO PARA {}", btn.label), false));
-
-                            self.editing_button_id = None;
-                            self.pending_keys.clear();
-                            self.pending_name.clear();
-                        }
-                    });
-                });
-            } else {
-                ui.horizontal(|ui| {
-                    ui.label(
-                        RichText::new("ACCIÓN:")
-                            .color(COLOR_OUTLINE)
-                            .size(10.0)
-                            .monospace(),
-                    );
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.pending_name)
-                            .desired_width(ui.available_width() - 8.0)
-                            .hint_text("Nombre de comando"),
-                    );
-                });
-
-                ui.add_space(4.0);
-
-                ui.horizontal_wrapped(|ui| {
-                    let confirm_lbl = format!("{} CONFIRMAR MAPEO", icons::CHECK);
-                    if tactical_button(ui, &confirm_lbl, false, true).clicked() {
-                        let name_final = if self.pending_name.trim().is_empty() {
-                            btn.label.to_string()
-                        } else {
-                            self.pending_name.trim().to_string()
-                        };
-
-                        let cell = CommandCell {
-                            button_id: btn.id.clone(),
-                            name: name_final,
-                            keys: self.pending_keys.clone(),
-                        };
-
-                        self.profile.set_cell(self.selected_mode, cell);
-                        monitor.set_profile(self.profile.clone());
-                        self.status_message =
-                            Some((format!("MAPEO CONFIRMADO PARA {}", btn.label), false));
-
-                        self.editing_button_id = None;
-                        self.pending_keys.clear();
-                        self.pending_name.clear();
-                    }
-
-                    let cancel_lbl = format!("{} CANCELAR", icons::X);
-                    if ui
-                        .button(
-                            RichText::new(cancel_lbl)
-                                .color(COLOR_ERROR)
-                                .size(10.5)
-                                .monospace(),
-                        )
-                        .clicked()
-                    {
-                        self.editing_button_id = None;
-                        self.pending_keys.clear();
-                        self.pending_name.clear();
-                    }
-                });
-            }
+                    )
+                    .clicked()
+                {
+                    self.editing_button_id = None;
+                    self.pending_keys.clear();
+                    self.pending_name.clear();
+                }
+            });
         });
     }
 
