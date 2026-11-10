@@ -252,29 +252,73 @@ pub fn dock_frame() -> Frame {
 // ============================================================================
 
 /// Dibuja un pill o badge informativo telemétrico monoespaciado.
+/// Calcula su tamaño exacto antes de reservar espacio para que `horizontal_wrapped`
+/// haga salto de línea limpiamente sin desbordar jamás el borde derecho de su contenedor.
 pub fn telemetry_badge(ui: &mut Ui, label: &str, value: &str, val_color: Color32) {
-    Frame::new()
-        .fill(COLOR_SURFACE_LOWEST)
-        .stroke(Stroke::new(1.0, COLOR_OUTLINE_VARIANT))
-        .corner_radius(CornerRadius::same(4))
-        .inner_margin(Margin::symmetric(6, 3))
-        .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(
-                    RichText::new(label)
-                        .color(COLOR_OUTLINE)
-                        .size(10.0)
-                        .monospace(),
-                );
-                ui.label(
-                    RichText::new(value)
-                        .color(val_color)
-                        .size(11.0)
-                        .strong()
-                        .monospace(),
-                );
-            });
-        });
+    let label_galley = ui.painter().layout_no_wrap(
+        label.to_owned(),
+        egui::FontId::monospace(10.0),
+        COLOR_OUTLINE,
+    );
+    let value_galley =
+        ui.painter()
+            .layout_no_wrap(value.to_owned(), egui::FontId::monospace(10.5), val_color);
+
+    let pad_x = 6.0;
+    let pad_y = 3.5;
+    let inner_gap = 4.0;
+    let content_w = label_galley.size().x + inner_gap + value_galley.size().x;
+    let content_h = label_galley.size().y.max(value_galley.size().y);
+    let total_size = egui::Vec2::new(content_w + pad_x * 2.0, content_h + pad_y * 2.0);
+
+    let (rect, _) = ui.allocate_exact_size(total_size, egui::Sense::hover());
+    if ui.is_rect_visible(rect) {
+        let painter = ui.painter();
+        painter.rect_filled(rect, CornerRadius::same(4), COLOR_SURFACE_LOWEST);
+        painter.rect_stroke(
+            rect,
+            CornerRadius::same(4),
+            Stroke::new(1.0, COLOR_OUTLINE_VARIANT),
+            egui::StrokeKind::Inside,
+        );
+
+        let label_pos = egui::Pos2::new(
+            rect.min.x + pad_x,
+            rect.center().y - label_galley.size().y * 0.5,
+        );
+        let value_pos = egui::Pos2::new(
+            label_pos.x + label_galley.size().x + inner_gap,
+            rect.center().y - value_galley.size().y * 0.5,
+        );
+
+        painter.galley(label_pos, label_galley, COLOR_OUTLINE);
+        painter.galley(value_pos, value_galley, val_color);
+    }
+}
+
+/// Dibuja un badge de estado con contorno coloreado que envuelve atómicamente en `horizontal_wrapped`.
+pub fn outline_badge(ui: &mut Ui, text: &str, text_color: Color32, border_color: Color32) {
+    let galley =
+        ui.painter()
+            .layout_no_wrap(text.to_owned(), egui::FontId::monospace(10.0), text_color);
+
+    let pad_x = 8.0;
+    let pad_y = 3.5;
+    let total_size = egui::Vec2::new(galley.size().x + pad_x * 2.0, galley.size().y + pad_y * 2.0);
+
+    let (rect, _) = ui.allocate_exact_size(total_size, egui::Sense::hover());
+    if ui.is_rect_visible(rect) {
+        let painter = ui.painter();
+        painter.rect_filled(rect, CornerRadius::same(4), COLOR_SURFACE_LOWEST);
+        painter.rect_stroke(
+            rect,
+            CornerRadius::same(4),
+            Stroke::new(1.0, border_color),
+            egui::StrokeKind::Inside,
+        );
+        let pos = egui::Pos2::new(rect.min.x + pad_x, rect.center().y - galley.size().y * 0.5);
+        painter.galley(pos, galley, text_color);
+    }
 }
 
 /// Botón táctico con acento de color opcional.

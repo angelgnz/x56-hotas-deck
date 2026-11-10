@@ -216,34 +216,48 @@ impl CurvesTab {
     }
 
     pub fn ui(&mut self, ui: &mut Ui, poller: &LiveInputPoller) {
+        let viewport_w = ui.available_width();
+        ui.set_max_width(viewport_w);
+
         let live_state = poller.get_state();
 
+        // 1. Top Hardware & Subsystem Telemetry Bar (fija arriba, ajustada al ancho real)
+        self.render_hardware_telemetry_bar(ui);
+        ui.add_space(6.0);
+
+        // 2. Axis Selection Sub-Bar (fija arriba, ajustada al ancho real)
+        self.render_axis_selection_subbar(ui);
+        ui.add_space(8.0);
+
+        // Decisión de breakpoint sobre el ancho del contenedor exterior para evitar oscilación por scrollbar
+        let two_col_mode = viewport_w >= 840.0;
+
+        // 3. Cuerpo desplazable con ancho máximo bloqueado al viewport
         egui::ScrollArea::vertical()
+            .id_salt("curves_body_scroll")
+            .max_width(viewport_w)
             .auto_shrink([false, false])
             .show(ui, |ui| {
-                // 1. Top Hardware & Subsystem Telemetry Bar
-                self.render_hardware_telemetry_bar(ui);
-                ui.add_space(8.0);
+                let body_w = ui.available_width().min(viewport_w);
+                ui.set_max_width(body_w);
+                ui.set_width(body_w);
 
-                // 2. Axis Selection Sub-Bar
-                self.render_axis_selection_subbar(ui);
-                ui.add_space(10.0);
-
-                // 3. Grid Avionics: 2 columnas en pantallas anchas (>= 780px), o apilado vertical (< 780px)
-                let total_width = ui.available_width();
-                if total_width >= 780.0 {
+                if two_col_mode {
                     let gap = 12.0;
-                    let right_width = (total_width * 0.40).clamp(320.0, 480.0);
-                    let left_width = total_width - gap - right_width;
+                    let avail_cols = (body_w - gap).max(400.0);
+                    let left_width = (avail_cols * 0.56).floor();
+                    let right_width = (avail_cols - left_width).floor();
 
                     ui.horizontal_top(|ui| {
                         ui.spacing_mut().item_spacing.x = gap;
 
                         // COLUMNA IZQUIERDA (Transfer curve, telemetría, gimbal)
                         ui.allocate_ui_with_layout(
-                            Vec2::new(left_width, ui.available_height()),
+                            Vec2::new(left_width, 10.0),
                             egui::Layout::top_down(egui::Align::Min),
                             |ui| {
+                                ui.set_max_width(left_width);
+                                ui.set_width(left_width);
                                 self.render_transfer_curve_section(ui, &live_state);
                                 ui.add_space(10.0);
                                 self.render_telemetry_cards(ui, &live_state);
@@ -254,9 +268,11 @@ impl CurvesTab {
 
                         // COLUMNA DERECHA (Selector tipo curva, parámetros deadband/expo, muelles)
                         ui.allocate_ui_with_layout(
-                            Vec2::new(right_width, ui.available_height()),
+                            Vec2::new(right_width, 10.0),
                             egui::Layout::top_down(egui::Align::Min),
                             |ui| {
+                                ui.set_max_width(right_width);
+                                ui.set_width(right_width);
                                 self.render_curve_type_selector(ui);
                                 ui.add_space(10.0);
                                 self.render_axis_parameters_card(ui);
@@ -266,7 +282,7 @@ impl CurvesTab {
                         );
                     });
                 } else {
-                    // Modo apilado vertical para pantallas compactas (< 780px)
+                    // Modo apilado vertical para pantallas compactas (< 840px)
                     self.render_transfer_curve_section(ui, &live_state);
                     ui.add_space(10.0);
                     self.render_telemetry_cards(ui, &live_state);
@@ -288,17 +304,21 @@ impl CurvesTab {
     /// Selector STICK // RHINO [VID:0738 PID:2215] / DUAL THROTTLE [VID:0738 PID:2216],
     /// badge ADC 16-BIT HALL SENSOR (65536 STEPS), JITTER 0.08ms, NODE /dev/hidraw0, EEPROM SYNCED.
     fn render_hardware_telemetry_bar(&mut self, ui: &mut Ui) {
+        let outer_w = ui.available_width();
         theme::card_frame()
             .inner_margin(Margin::symmetric(12, 8))
             .show(ui, |ui| {
-                let avail_w = ui.available_width();
+                let inner_w = (outer_w - 26.0).max(100.0);
+                ui.set_max_width(inner_w);
+                ui.set_width(inner_w);
+
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing = Vec2::new(8.0, 6.0);
 
                     let is_stick = self.selected_device == DeviceKind::Stick;
-                    let stick_lbl = if avail_w >= 850.0 {
+                    let stick_lbl = if inner_w >= 920.0 {
                         format!("{} STICK // RHINO [VID:0738 PID:2215]", icons::JOYSTICK)
-                    } else if avail_w >= 560.0 {
+                    } else if inner_w >= 580.0 {
                         format!("{} STICK // RHINO", icons::JOYSTICK)
                     } else {
                         format!("{} STICK", icons::JOYSTICK)
@@ -312,9 +332,9 @@ impl CurvesTab {
                     }
 
                     let is_throttle = self.selected_device == DeviceKind::Throttle;
-                    let thr_lbl = if avail_w >= 850.0 {
+                    let thr_lbl = if inner_w >= 920.0 {
                         format!("{} DUAL THROTTLE [VID:0738 PID:2216]", icons::SLIDERS)
-                    } else if avail_w >= 560.0 {
+                    } else if inner_w >= 580.0 {
                         format!("{} DUAL THROTTLE", icons::SLIDERS)
                     } else {
                         format!("{} THROTTLE", icons::SLIDERS)
@@ -327,12 +347,12 @@ impl CurvesTab {
                         self.read_from_hardware();
                     }
 
-                    ui.separator();
-
-                    let adc_val = if avail_w >= 640.0 {
+                    let adc_val = if inner_w >= 760.0 {
                         "16-BIT HALL SENSOR (65536 STEPS)"
+                    } else if inner_w >= 520.0 {
+                        "16-BIT HALL (65536)"
                     } else {
-                        "16-BIT (65k STEPS)"
+                        "16-BIT"
                     };
                     theme::telemetry_badge(ui, "ADC:", adc_val, COLOR_PRIMARY_CONTAINER);
                     theme::telemetry_badge(ui, "JITTER:", "0.08ms", COLOR_TERTIARY_CONTAINER);
@@ -343,31 +363,25 @@ impl CurvesTab {
                     };
                     theme::telemetry_badge(ui, "NODE:", node_str, COLOR_ON_SURFACE);
 
-                    let (sync_label, sync_col) = if self.eeprom_synced {
-                        (
+                    let (sync_label, sync_col) = match (self.eeprom_synced, inner_w >= 520.0) {
+                        (true, true) => (
                             format!("{} EEPROM SYNCED", icons::CIRCLE_CHECK),
                             COLOR_TERTIARY_FIXED_DIM,
-                        )
-                    } else {
-                        (
+                        ),
+                        (true, false) => (
+                            format!("{} SYNCED", icons::CIRCLE_CHECK),
+                            COLOR_TERTIARY_FIXED_DIM,
+                        ),
+                        (false, true) => (
                             format!("{} EEPROM MODIFIED", icons::CIRCLE_ALERT),
                             COLOR_WARNING_AMBER,
-                        )
+                        ),
+                        (false, false) => (
+                            format!("{} MODIFIED", icons::CIRCLE_ALERT),
+                            COLOR_WARNING_AMBER,
+                        ),
                     };
-                    Frame::new()
-                        .fill(COLOR_SURFACE_LOWEST)
-                        .stroke(Stroke::new(1.0, sync_col))
-                        .corner_radius(CornerRadius::same(4))
-                        .inner_margin(Margin::symmetric(8, 3))
-                        .show(ui, |ui| {
-                            ui.label(
-                                RichText::new(sync_label)
-                                    .color(sync_col)
-                                    .size(10.5)
-                                    .strong()
-                                    .monospace(),
-                            );
-                        });
+                    theme::outline_badge(ui, &sync_label, sync_col, sync_col);
                 });
             });
     }
@@ -376,9 +390,14 @@ impl CurvesTab {
     /// EJE ACTIVO con pills para Eje X (Roll), Eje Y (Pitch), Timón Z (Yaw), Ministick X, Ministick Y,
     /// y badge "POLYNOMIAL: CUBIC-HERMITE".
     fn render_axis_selection_subbar(&mut self, ui: &mut Ui) {
+        let outer_w = ui.available_width();
         theme::card_frame()
             .inner_margin(Margin::symmetric(12, 7))
             .show(ui, |ui| {
+                let inner_w = (outer_w - 26.0).max(100.0);
+                ui.set_max_width(inner_w);
+                ui.set_width(inner_w);
+
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing = Vec2::new(6.0, 6.0);
                     ui.label(
@@ -389,21 +408,37 @@ impl CurvesTab {
                             .monospace(),
                     );
 
-                    let axes: &[(u8, &str)] = match self.selected_device {
-                        DeviceKind::Stick => &[
+                    let compact = inner_w < 580.0;
+                    let axes: &[(u8, &str)] = match (self.selected_device, compact) {
+                        (DeviceKind::Stick, false) => &[
                             (0x30, "Eje X (Roll)"),
                             (0x31, "Eje Y (Pitch)"),
                             (0x35, "Timón Z (Yaw)"),
                             (AXIS_MINISTICK_X, "Ministick X"),
                             (AXIS_MINISTICK_Y, "Ministick Y"),
                         ],
-                        DeviceKind::Throttle => &[
+                        (DeviceKind::Stick, true) => &[
+                            (0x30, "Eje X"),
+                            (0x31, "Eje Y"),
+                            (0x35, "Timón Z"),
+                            (AXIS_MINISTICK_X, "Mini X"),
+                            (AXIS_MINISTICK_Y, "Mini Y"),
+                        ],
+                        (DeviceKind::Throttle, false) => &[
                             (0x30, "Throttle Left"),
                             (0x31, "Throttle Right"),
                             (0x32, "Rotary 1 (F)"),
                             (0x35, "Rotary 2 (G)"),
                             (0x37, "Rotary 3"),
                             (0x36, "Rotary 4"),
+                        ],
+                        (DeviceKind::Throttle, true) => &[
+                            (0x30, "Thr L"),
+                            (0x31, "Thr R"),
+                            (0x32, "Rot 1"),
+                            (0x35, "Rot 2"),
+                            (0x37, "Rot 3"),
+                            (0x36, "Rot 4"),
                         ],
                     };
 
@@ -417,20 +452,12 @@ impl CurvesTab {
                         }
                     }
 
-                    Frame::new()
-                        .fill(COLOR_SURFACE_LOWEST)
-                        .stroke(Stroke::new(1.0, COLOR_PRIMARY_CONTAINER))
-                        .corner_radius(CornerRadius::same(4))
-                        .inner_margin(Margin::symmetric(8, 3))
-                        .show(ui, |ui| {
-                            ui.label(
-                                RichText::new(self.params.curve_type.polynomial_badge())
-                                    .color(COLOR_PRIMARY_FIXED)
-                                    .size(10.5)
-                                    .strong()
-                                    .monospace(),
-                            );
-                        });
+                    theme::outline_badge(
+                        ui,
+                        self.params.curve_type.polynomial_badge(),
+                        COLOR_PRIMARY_FIXED,
+                        COLOR_PRIMARY_CONTAINER,
+                    );
                 });
             });
     }
@@ -441,17 +468,21 @@ impl CurvesTab {
     /// línea diagonal 1:1 punteada, crosshair de fósforo verde con etiqueta "IN: +XX.X%"
     /// sincronizado con la entrada de hardware real.
     fn render_transfer_curve_section(&mut self, ui: &mut Ui, live_state: &LiveAxesState) {
+        let outer_w = ui.available_width();
         theme::card_frame().show(ui, |ui| {
+            let inner_w = (outer_w - 26.0).max(120.0);
+            ui.set_max_width(inner_w);
+            ui.set_width(inner_w);
+
             // Encabezado del bloque HUD
-            let avail_w = ui.available_width();
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing = Vec2::new(8.0, 4.0);
-                let title = if avail_w >= 520.0 {
+                let title = if inner_w >= 520.0 {
                     format!(
                         "{} RESPUESTA DE TRANSFERENCIA (TRANSFER CURVE)",
                         icons::ACTIVITY
                     )
-                } else if avail_w >= 360.0 {
+                } else if inner_w >= 340.0 {
                     format!("{} CURVA DE TRANSFERENCIA", icons::ACTIVITY)
                 } else {
                     format!("{} CURVA", icons::ACTIVITY)
@@ -480,11 +511,13 @@ impl CurvesTab {
             ui.add_space(6.0);
 
             theme::sunken_frame().show(ui, |ui| {
-                let canvas_width = ui.available_width();
-                let canvas_height = (canvas_width * 0.52).clamp(210.0, 300.0);
+                let canvas_width = (inner_w - 22.0).max(100.0);
+                ui.set_max_width(canvas_width);
+                let canvas_height = (canvas_width * 0.50).clamp(185.0, 290.0);
                 let (response, painter) =
                     ui.allocate_painter(Vec2::new(canvas_width, canvas_height), Sense::hover());
                 let rect = response.rect;
+                let painter = painter.with_clip_rect(rect);
 
                 // Fondo profundo #090e16
                 painter.rect_filled(rect, 4.0, COLOR_SURFACE_LOWEST);
@@ -805,66 +838,89 @@ impl CurvesTab {
 
     fn render_single_telemetry_card(
         ui: &mut Ui,
+        col_w: f32,
         title: &str,
         main_val: &str,
         sub_val: &str,
         val_col: Color32,
     ) {
+        ui.set_max_width(col_w);
         theme::card_frame()
             .inner_margin(Margin::symmetric(10, 8))
             .show(ui, |ui| {
-                ui.label(
-                    RichText::new(title)
-                        .color(COLOR_OUTLINE)
-                        .size(9.5)
-                        .strong()
-                        .monospace(),
+                let inner_w = (col_w - 22.0).max(40.0);
+                ui.set_max_width(inner_w);
+                ui.set_width(inner_w);
+
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(title)
+                            .color(COLOR_OUTLINE)
+                            .size(9.5)
+                            .strong()
+                            .monospace(),
+                    )
+                    .truncate(),
                 );
                 ui.add_space(3.0);
-                ui.label(
-                    RichText::new(main_val)
-                        .color(val_col)
-                        .size(14.0)
-                        .strong()
-                        .monospace(),
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(main_val)
+                            .color(val_col)
+                            .size(if inner_w >= 130.0 { 13.5 } else { 11.5 })
+                            .strong()
+                            .monospace(),
+                    )
+                    .truncate(),
                 );
                 ui.add_space(2.0);
-                ui.label(
-                    RichText::new(sub_val)
-                        .color(COLOR_ON_SURFACE_VARIANT)
-                        .size(9.5)
-                        .monospace(),
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(sub_val)
+                            .color(COLOR_ON_SURFACE_VARIANT)
+                            .size(9.0)
+                            .monospace(),
+                    )
+                    .truncate(),
                 );
             });
     }
 
     /// 4 tarjetas telemétricas inferiores:
     /// RAW ADC (HEX / LSB), DEFLEXIÓN FÍSICA (NORM), SALIDA PROCESADA (UINPUT), TASA DE COMPRESIÓN.
-    /// Se adaptan fluidamente a 4 columnas (>= 640px), rejilla 2x2 (>= 320px) o 1 columna (< 320px).
+    /// Se adaptan fluidamente a 4 columnas (>= 680px), rejilla 2x2 (>= 280px) o 1 columna (< 280px).
     fn render_telemetry_cards(&self, ui: &mut Ui, live_state: &LiveAxesState) {
         let (live_in, raw_adc) = self.current_live_input(live_state);
         let live_out = self.params.evaluate(live_in);
         let comp_rate = self.params.compression_rate(live_in);
 
         let avail_w = ui.available_width();
-        let is_wide = avail_w >= 820.0;
+        let use_four_cols = avail_w >= 680.0;
+        let col_w = if use_four_cols {
+            ((avail_w - 24.0) / 4.0).floor().max(80.0)
+        } else if avail_w >= 280.0 {
+            ((avail_w - 8.0) * 0.5).floor().max(80.0)
+        } else {
+            avail_w.max(80.0)
+        };
+        let is_wide_card = col_w >= 175.0;
 
-        let title_0 = if is_wide {
+        let title_0 = if is_wide_card {
             "RAW ADC (HEX / LSB)"
         } else {
             "RAW ADC"
         };
-        let title_1 = if is_wide {
+        let title_1 = if is_wide_card {
             "DEFLEXIÓN FÍSICA (NORM)"
         } else {
             "DEFLEXIÓN (NORM)"
         };
-        let title_2 = if is_wide {
+        let title_2 = if is_wide_card {
             "SALIDA PROCESADA (UINPUT)"
         } else {
             "SALIDA UINPUT"
         };
-        let title_3 = if is_wide {
+        let title_3 = if is_wide_card {
             "TASA DE COMPRESIÓN"
         } else {
             "COMPRESIÓN"
@@ -897,11 +953,13 @@ impl CurvesTab {
             ),
         ];
 
-        if avail_w >= 640.0 {
+        if use_four_cols {
             ui.columns(4, |cols| {
                 for (idx, (title, main_val, sub_val, val_col)) in cards.iter().enumerate() {
+                    let c_w = cols[idx].available_width().min(col_w);
                     Self::render_single_telemetry_card(
                         &mut cols[idx],
+                        c_w,
                         title,
                         main_val,
                         sub_val,
@@ -909,10 +967,13 @@ impl CurvesTab {
                     );
                 }
             });
-        } else if avail_w >= 320.0 {
+        } else if avail_w >= 280.0 {
             ui.columns(2, |cols| {
+                let c0_w = cols[0].available_width().min(col_w);
+                let c1_w = cols[1].available_width().min(col_w);
                 Self::render_single_telemetry_card(
                     &mut cols[0],
+                    c0_w,
                     cards[0].0,
                     &cards[0].1,
                     &cards[0].2,
@@ -920,6 +981,7 @@ impl CurvesTab {
                 );
                 Self::render_single_telemetry_card(
                     &mut cols[1],
+                    c1_w,
                     cards[1].0,
                     &cards[1].1,
                     &cards[1].2,
@@ -928,8 +990,11 @@ impl CurvesTab {
             });
             ui.add_space(6.0);
             ui.columns(2, |cols| {
+                let c0_w = cols[0].available_width().min(col_w);
+                let c1_w = cols[1].available_width().min(col_w);
                 Self::render_single_telemetry_card(
                     &mut cols[0],
+                    c0_w,
                     cards[2].0,
                     &cards[2].1,
                     &cards[2].2,
@@ -937,6 +1002,7 @@ impl CurvesTab {
                 );
                 Self::render_single_telemetry_card(
                     &mut cols[1],
+                    c1_w,
                     cards[3].0,
                     &cards[3].1,
                     &cards[3].2,
@@ -945,7 +1011,7 @@ impl CurvesTab {
             });
         } else {
             for (title, main_val, sub_val, val_col) in &cards {
-                Self::render_single_telemetry_card(ui, title, main_val, sub_val, *val_col);
+                Self::render_single_telemetry_card(ui, col_w, title, main_val, sub_val, *val_col);
                 ui.add_space(6.0);
             }
         }
@@ -1025,27 +1091,37 @@ impl CurvesTab {
                     live_state.stick_x, live_state.stick_y, vect_mag
                 )
             };
-            ui.label(
-                RichText::new(coord_lbl)
-                    .color(COLOR_TERTIARY_CONTAINER)
-                    .size(9.0)
-                    .strong()
-                    .monospace(),
+            ui.add(
+                egui::Label::new(
+                    RichText::new(coord_lbl)
+                        .color(COLOR_TERTIARY_CONTAINER)
+                        .size(9.0)
+                        .strong()
+                        .monospace(),
+                )
+                .truncate(),
             );
         });
     }
 
     /// Medidores secundarios: Timón Z, Ministick analógico y POV Hat 1.
     fn render_secondary_meters(&self, ui: &mut Ui, live_state: &LiveAxesState, container_w: f32) {
+        ui.set_max_width(container_w);
+        ui.set_width(container_w);
+
         ui.vertical(|ui| {
+            ui.set_max_width(container_w);
+            let sub_inner_w = (container_w - 22.0).max(60.0);
+
             // 1. Timón Z (Twist) bipolar con centro cero
-            let rudder_lbl = if container_w >= 320.0 {
+            let rudder_lbl = if sub_inner_w >= 260.0 {
                 "TIMÓN Z (TWIST // RUDDER YAW)"
             } else {
                 "TIMÓN Z (YAW)"
             };
             render_bipolar_bar(
                 ui,
+                container_w,
                 rudder_lbl,
                 live_state.stick_z,
                 COLOR_PRIMARY_CONTAINER,
@@ -1055,7 +1131,7 @@ impl CurvesTab {
             ui.add_space(8.0);
 
             // 2. Mini-stick analógico (Slew X / Y) con barras duales
-            let ministick_lbl = if container_w >= 320.0 {
+            let ministick_lbl = if sub_inner_w >= 250.0 {
                 "MINI-STICK ANALÓGICO (SLEW X/Y)"
             } else {
                 "MINI-STICK (SLEW)"
@@ -1066,6 +1142,9 @@ impl CurvesTab {
                 .corner_radius(CornerRadius::same(6))
                 .inner_margin(Margin::symmetric(10, 8))
                 .show(ui, |ui| {
+                    ui.set_max_width(sub_inner_w);
+                    ui.set_width(sub_inner_w);
+
                     ui.horizontal_wrapped(|ui| {
                         ui.spacing_mut().item_spacing = Vec2::new(6.0, 2.0);
                         ui.label(
@@ -1088,6 +1167,7 @@ impl CurvesTab {
                     ui.add_space(4.0);
                     render_compact_dual_bar(
                         ui,
+                        sub_inner_w,
                         "SLEW X",
                         live_state.ministick_x,
                         COLOR_WARNING_AMBER,
@@ -1095,6 +1175,7 @@ impl CurvesTab {
                     ui.add_space(3.0);
                     render_compact_dual_bar(
                         ui,
+                        sub_inner_w,
                         "SLEW Y",
                         live_state.ministick_y,
                         COLOR_WARNING_AMBER,
@@ -1104,7 +1185,7 @@ impl CurvesTab {
             ui.add_space(8.0);
 
             // 3. POV Hat 1 con modo
-            let pov_lbl = if container_w >= 320.0 {
+            let pov_lbl = if sub_inner_w >= 260.0 {
                 "POV HAT 1 (8-WAY DIRECTIONAL)"
             } else {
                 "POV HAT 1"
@@ -1115,6 +1196,9 @@ impl CurvesTab {
                 .corner_radius(CornerRadius::same(6))
                 .inner_margin(Margin::symmetric(10, 8))
                 .show(ui, |ui| {
+                    ui.set_max_width(sub_inner_w);
+                    ui.set_width(sub_inner_w);
+
                     ui.horizontal_wrapped(|ui| {
                         ui.spacing_mut().item_spacing = Vec2::new(6.0, 4.0);
                         ui.label(
@@ -1137,18 +1221,22 @@ impl CurvesTab {
     }
 
     /// "MONITOR GIMBAL 2D & EJES SECUNDARIOS EN VIVO":
-    /// Adapta el Gimbal radar y medidores secundarios lado a lado (>= 440px) o apilados (< 440px).
+    /// Adapta el Gimbal radar y medidores secundarios lado a lado (>= 430px) o apilados (< 430px).
     fn render_gimbal_and_secondary_axes(&self, ui: &mut Ui, live_state: &LiveAxesState) {
+        let outer_w = ui.available_width();
         theme::card_frame().show(ui, |ui| {
-            let avail_w = ui.available_width();
+            let inner_w = (outer_w - 26.0).max(120.0);
+            ui.set_max_width(inner_w);
+            ui.set_width(inner_w);
+
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing = Vec2::new(8.0, 4.0);
-                let title = if avail_w >= 500.0 {
+                let title = if inner_w >= 480.0 {
                     format!(
                         "{} MONITOR GIMBAL 2D & EJES SECUNDARIOS EN VIVO",
                         icons::ACTIVITY
                     )
-                } else if avail_w >= 360.0 {
+                } else if inner_w >= 320.0 {
                     format!("{} GIMBAL 2D & EJES SECUNDARIOS", icons::ACTIVITY)
                 } else {
                     format!("{} GIMBAL 2D", icons::ACTIVITY)
@@ -1170,22 +1258,24 @@ impl CurvesTab {
 
             ui.add_space(8.0);
 
-            if avail_w >= 440.0 {
+            if inner_w >= 430.0 {
                 let gap = 12.0;
-                let box_size = 186.0f32.min((avail_w - gap) * 0.44);
-                let right_w = avail_w - gap - box_size;
+                let box_size = (inner_w * 0.36).clamp(140.0, 186.0).floor();
+                let right_w = (inner_w - gap - box_size).max(180.0).floor();
 
                 ui.horizontal_top(|ui| {
+                    ui.spacing_mut().item_spacing.x = gap;
                     ui.allocate_ui_with_layout(
-                        Vec2::new(box_size, ui.available_height()),
+                        Vec2::new(box_size, 10.0),
                         egui::Layout::top_down(egui::Align::Center),
                         |ui| {
+                            ui.set_max_width(box_size);
+                            ui.set_width(box_size);
                             self.render_gimbal_radar(ui, box_size, live_state);
                         },
                     );
-                    ui.add_space(gap);
                     ui.allocate_ui_with_layout(
-                        Vec2::new(right_w, ui.available_height()),
+                        Vec2::new(right_w, 10.0),
                         egui::Layout::top_down(egui::Align::Min),
                         |ui| {
                             self.render_secondary_meters(ui, live_state, right_w);
@@ -1193,17 +1283,22 @@ impl CurvesTab {
                     );
                 });
             } else {
-                let box_size = 186.0f32.min(avail_w - 24.0);
+                let box_size = (inner_w - 16.0).clamp(120.0, 180.0).floor();
                 self.render_gimbal_radar(ui, box_size, live_state);
                 ui.add_space(10.0);
-                self.render_secondary_meters(ui, live_state, avail_w);
+                self.render_secondary_meters(ui, live_state, inner_w);
             }
         });
     }
 
     /// TIPO DE CURVATURA: 4 botones (Lineal 1:1, S-Curve, Exponencial, Bézier libre).
     fn render_curve_type_selector(&mut self, ui: &mut Ui) {
+        let outer_w = ui.available_width();
         theme::card_frame().show(ui, |ui| {
+            let inner_w = (outer_w - 26.0).max(100.0);
+            ui.set_max_width(inner_w);
+            ui.set_width(inner_w);
+
             ui.label(
                 RichText::new(format!("{} TIPO DE CURVATURA", icons::SLIDERS_HORIZONTAL))
                     .color(COLOR_PRIMARY)
@@ -1213,14 +1308,32 @@ impl CurvesTab {
             );
             ui.add_space(6.0);
 
-            let avail_w = ui.available_width();
-            if avail_w >= 240.0 {
+            let use_short_labels = inner_w < 330.0;
+            let short_label = |ct: CurveType| -> &'static str {
+                match ct {
+                    CurveType::Linear => "Lineal (1:1)",
+                    CurveType::SCurve => "Curva-S",
+                    CurveType::Exponential => "Exponencial",
+                    CurveType::Bezier => "Bézier",
+                }
+            };
+
+            if inner_w >= 240.0 {
+                let col_w = ((inner_w - 8.0) * 0.5).floor().max(80.0);
                 ui.columns(2, |cols| {
+                    cols[0].set_max_width(col_w);
+                    cols[1].set_max_width(col_w);
                     for (idx, ct) in CurveType::ALL.iter().enumerate() {
                         let col_idx = idx % 2;
                         let is_active = self.params.curve_type == *ct;
+                        let lbl = if use_short_labels {
+                            short_label(*ct)
+                        } else {
+                            ct.label()
+                        };
                         cols[col_idx].vertical_centered_justified(|ui| {
-                            if theme::tactical_button(ui, ct.label(), is_active, false).clicked() {
+                            ui.set_max_width(col_w);
+                            if theme::tactical_button(ui, lbl, is_active, false).clicked() {
                                 self.params.set_curve_type(*ct);
                                 self.eeprom_synced = false;
                             }
@@ -1234,7 +1347,8 @@ impl CurvesTab {
                 for ct in CurveType::ALL {
                     let is_active = self.params.curve_type == ct;
                     ui.vertical_centered_justified(|ui| {
-                        if theme::tactical_button(ui, ct.label(), is_active, false).clicked() {
+                        ui.set_max_width(inner_w);
+                        if theme::tactical_button(ui, short_label(ct), is_active, false).clicked() {
                             self.params.set_curve_type(ct);
                             self.eeprom_synced = false;
                         }
@@ -1250,7 +1364,13 @@ impl CurvesTab {
     /// Curvatura/Sensibilidad Expo (1.00-3.00), Saturación Externa (70-100%),
     /// y switch toggle "Invertir Dirección de Eje".
     fn render_axis_parameters_card(&mut self, ui: &mut Ui) {
+        let outer_w = ui.available_width();
         theme::card_frame().show(ui, |ui| {
+            let inner_w = (outer_w - 26.0).max(100.0);
+            ui.set_max_width(inner_w);
+            ui.set_width(inner_w);
+            ui.spacing_mut().slider_width = inner_w;
+
             ui.label(
                 RichText::new(format!("{} PARÁMETROS DEL EJE", icons::SETTINGS))
                     .color(COLOR_PRIMARY)
@@ -1260,14 +1380,19 @@ impl CurvesTab {
             );
             ui.add_space(8.0);
 
+            let compact = inner_w < 280.0;
+
             // 1. Zona Muerta Central (Deadband 0-25%)
             let mut db_pct = self.params.deadband_pct();
             ui.horizontal(|ui| {
-                ui.label(
-                    RichText::new("Zona Muerta Central (Deadband)")
-                        .color(COLOR_ON_SURFACE)
-                        .size(11.0),
-                );
+                ui.set_max_width(inner_w);
+                ui.set_width(inner_w);
+                let lbl = if compact {
+                    "Zona Muerta (DZ)"
+                } else {
+                    "Zona Muerta Central (Deadband)"
+                };
+                ui.label(RichText::new(lbl).color(COLOR_ON_SURFACE).size(11.0));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(
                         RichText::new(format!("{:.1}%", db_pct))
@@ -1295,11 +1420,14 @@ impl CurvesTab {
             // 2. Curvatura / Sensibilidad Expo (1.00 - 3.00)
             let mut expo = self.params.expo_factor();
             ui.horizontal(|ui| {
-                ui.label(
-                    RichText::new("Curvatura / Sensibilidad Expo")
-                        .color(COLOR_ON_SURFACE)
-                        .size(11.0),
-                );
+                ui.set_max_width(inner_w);
+                ui.set_width(inner_w);
+                let lbl = if compact {
+                    "Sensibilidad Expo"
+                } else {
+                    "Curvatura / Sensibilidad Expo"
+                };
+                ui.label(RichText::new(lbl).color(COLOR_ON_SURFACE).size(11.0));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(
                         RichText::new(format!("{:.2}", expo))
@@ -1327,11 +1455,14 @@ impl CurvesTab {
             // 3. Saturación Externa (70-100%)
             let mut sat_pct = self.params.saturation_pct();
             ui.horizontal(|ui| {
-                ui.label(
-                    RichText::new("Saturación Externa (Outer Clamp)")
-                        .color(COLOR_ON_SURFACE)
-                        .size(11.0),
-                );
+                ui.set_max_width(inner_w);
+                ui.set_width(inner_w);
+                let lbl = if compact {
+                    "Saturación Externa"
+                } else {
+                    "Saturación Externa (Outer Clamp)"
+                };
+                ui.label(RichText::new(lbl).color(COLOR_ON_SURFACE).size(11.0));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(
                         RichText::new(format!("{:.1}%", sat_pct))
@@ -1363,9 +1494,13 @@ impl CurvesTab {
                         .size(10.5)
                         .monospace(),
                 );
-                let avail_w = ui.available_width();
-                if avail_w >= 280.0 {
+                if inner_w >= 280.0 {
+                    let sub_col_w = ((inner_w - 8.0) * 0.5).floor().max(60.0);
                     ui.columns(2, |cols| {
+                        cols[0].set_max_width(sub_col_w);
+                        cols[0].spacing_mut().slider_width = (sub_col_w - 70.0).max(40.0);
+                        cols[1].set_max_width(sub_col_w);
+                        cols[1].spacing_mut().slider_width = (sub_col_w - 70.0).max(40.0);
                         if cols[0]
                             .add(
                                 egui::Slider::new(&mut self.params.bezier_p1[1], 0.0..=1.0)
@@ -1386,6 +1521,7 @@ impl CurvesTab {
                         }
                     });
                 } else {
+                    ui.spacing_mut().slider_width = (inner_w - 70.0).max(40.0);
                     if ui
                         .add(egui::Slider::new(&mut self.params.bezier_p1[1], 0.0..=1.0).text("P1"))
                         .changed()
@@ -1408,10 +1544,17 @@ impl CurvesTab {
 
             // 4. Switch toggle "Invertir Dirección de Eje"
             ui.horizontal(|ui| {
+                ui.set_max_width(inner_w);
+                ui.set_width(inner_w);
+                let inv_lbl = if compact {
+                    "Invertir Eje"
+                } else {
+                    "Invertir Dirección de Eje"
+                };
                 ui.label(
-                    RichText::new("Invertir Dirección de Eje")
+                    RichText::new(inv_lbl)
                         .color(COLOR_ON_SURFACE)
-                        .size(11.5)
+                        .size(11.0)
                         .strong(),
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -1433,10 +1576,22 @@ impl CurvesTab {
     /// Tarjetas interactivas para Rojo (52mm), Verde (47mm - Instalado con checkmark),
     /// Amarillo (42mm), Azul (36mm). Se guarda en DeviceProfile.spring.
     fn render_physical_springs_card(&mut self, ui: &mut Ui) {
+        let outer_w = ui.available_width();
         theme::card_frame().show(ui, |ui| {
+            let inner_w = (outer_w - 26.0).max(100.0);
+            ui.set_max_width(inner_w);
+            ui.set_width(inner_w);
+
             ui.horizontal(|ui| {
+                ui.set_max_width(inner_w);
+                ui.set_width(inner_w);
+                let title_lbl = if inner_w >= 280.0 {
+                    format!("{} MUELLES FÍSICOS (X-56 SPRING)", icons::WRENCH)
+                } else {
+                    format!("{} MUELLES FÍSICOS", icons::WRENCH)
+                };
                 ui.label(
-                    RichText::new(format!("{} MUELLES FÍSICOS (X-56 SPRING)", icons::WRENCH))
+                    RichText::new(title_lbl)
                         .color(COLOR_PRIMARY)
                         .size(12.0)
                         .strong()
@@ -1461,6 +1616,8 @@ impl CurvesTab {
                 PhysicalSpring::Blue36mm,
             ];
 
+            let row_w = (inner_w - 22.0).max(80.0);
+
             for spring in springs {
                 let is_installed = self.installed_spring == spring;
                 let border_col = if is_installed {
@@ -1483,38 +1640,57 @@ impl CurvesTab {
                     .corner_radius(CornerRadius::same(6))
                     .inner_margin(Margin::symmetric(10, 7))
                     .show(ui, |ui| {
+                        ui.set_max_width(row_w);
+                        ui.set_width(row_w);
+
                         ui.horizontal(|ui| {
+                            ui.set_max_width(row_w);
+                            ui.set_width(row_w);
+
                             // Indicador cromático del muelle
                             let (dot_rect, _) =
-                                ui.allocate_exact_size(Vec2::new(10.0, 22.0), Sense::hover());
+                                ui.allocate_exact_size(Vec2::new(10.0, 24.0), Sense::hover());
                             ui.painter().rect_filled(dot_rect, 3.0, spring.color());
 
-                            ui.vertical(|ui| {
-                                ui.horizontal_wrapped(|ui| {
-                                    ui.spacing_mut().item_spacing = Vec2::new(6.0, 2.0);
-                                    ui.label(
-                                        RichText::new(spring.label())
-                                            .color(spring.color())
-                                            .size(11.0)
-                                            .strong()
-                                            .monospace(),
-                                    );
-                                    if is_installed {
+                            // Columna de texto con ancho reservado para que el botón siempre sea visible
+                            let btn_reserve = 68.0;
+                            let text_col_w = (ui.available_width() - btn_reserve).max(50.0);
+                            ui.allocate_ui_with_layout(
+                                Vec2::new(text_col_w, 26.0),
+                                egui::Layout::top_down(egui::Align::Min),
+                                |ui| {
+                                    ui.set_max_width(text_col_w);
+                                    ui.horizontal(|ui| {
                                         ui.label(
-                                            RichText::new(format!("{} INSTALADO", icons::CHECK))
-                                                .color(COLOR_TERTIARY_CONTAINER)
-                                                .size(10.0)
+                                            RichText::new(spring.label())
+                                                .color(spring.color())
+                                                .size(11.0)
                                                 .strong()
                                                 .monospace(),
                                         );
-                                    }
-                                });
-                                ui.label(
-                                    RichText::new(spring.desc())
-                                        .color(COLOR_ON_SURFACE_VARIANT)
-                                        .size(10.0),
-                                );
-                            });
+                                        if is_installed && text_col_w >= 120.0 {
+                                            ui.label(
+                                                RichText::new(format!(
+                                                    "{} INSTALADO",
+                                                    icons::CHECK
+                                                ))
+                                                .color(COLOR_TERTIARY_CONTAINER)
+                                                .size(9.5)
+                                                .strong()
+                                                .monospace(),
+                                            );
+                                        }
+                                    });
+                                    ui.add(
+                                        egui::Label::new(
+                                            RichText::new(spring.desc())
+                                                .color(COLOR_ON_SURFACE_VARIANT)
+                                                .size(9.5),
+                                        )
+                                        .truncate(),
+                                    );
+                                },
+                            );
 
                             ui.with_layout(
                                 egui::Layout::right_to_left(egui::Align::Center),
@@ -1583,14 +1759,26 @@ fn draw_dashed_line(
 }
 
 /// Medidor bipolar con centro cero para Timón Z (Twist).
-fn render_bipolar_bar(ui: &mut Ui, label: &str, value: f64, fill_col: Color32, mode_tag: &str) {
+fn render_bipolar_bar(
+    ui: &mut Ui,
+    container_w: f32,
+    label: &str,
+    value: f64,
+    fill_col: Color32,
+    mode_tag: &str,
+) {
+    let sub_inner_w = (container_w - 22.0).max(60.0);
     Frame::new()
         .fill(COLOR_SURFACE_LOWEST)
         .stroke(Stroke::new(1.0, COLOR_OUTLINE_VARIANT))
         .corner_radius(CornerRadius::same(6))
         .inner_margin(Margin::symmetric(10, 8))
         .show(ui, |ui| {
-            ui.horizontal(|ui| {
+            ui.set_max_width(sub_inner_w);
+            ui.set_width(sub_inner_w);
+
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = Vec2::new(6.0, 2.0);
                 ui.label(
                     RichText::new(label)
                         .color(COLOR_ON_SURFACE)
@@ -1598,27 +1786,26 @@ fn render_bipolar_bar(ui: &mut Ui, label: &str, value: f64, fill_col: Color32, m
                         .strong()
                         .monospace(),
                 );
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(
-                        RichText::new(format!("{:+.1}%", value * 100.0))
-                            .color(fill_col)
-                            .size(11.0)
-                            .strong()
-                            .monospace(),
-                    );
+                ui.label(
+                    RichText::new(format!("{:+.1}%", value * 100.0))
+                        .color(fill_col)
+                        .size(11.0)
+                        .strong()
+                        .monospace(),
+                );
+                if sub_inner_w >= 260.0 {
                     ui.label(
                         RichText::new(mode_tag)
                             .color(COLOR_OUTLINE)
                             .size(9.0)
                             .monospace(),
                     );
-                });
+                }
             });
 
             ui.add_space(4.0);
 
-            let bar_w = ui.available_width().max(60.0);
-            let (rect, _) = ui.allocate_exact_size(Vec2::new(bar_w, 12.0), Sense::hover());
+            let (rect, _) = ui.allocate_exact_size(Vec2::new(sub_inner_w, 12.0), Sense::hover());
             let painter = ui.painter();
 
             painter.rect_filled(rect, 3.0, COLOR_SURFACE_CONTAINER);
@@ -1639,15 +1826,16 @@ fn render_bipolar_bar(ui: &mut Ui, label: &str, value: f64, fill_col: Color32, m
 }
 
 /// Barra horizontal compacta con centro cero para los ejes del Mini-stick.
-fn render_compact_dual_bar(ui: &mut Ui, axis_lbl: &str, value: f64, col: Color32) {
+fn render_compact_dual_bar(ui: &mut Ui, row_w: f32, axis_lbl: &str, value: f64, col: Color32) {
     ui.horizontal(|ui| {
+        ui.set_max_width(row_w);
         ui.label(
             RichText::new(axis_lbl)
                 .color(COLOR_OUTLINE)
                 .size(9.5)
                 .monospace(),
         );
-        let bar_w = (ui.available_width() - 48.0).max(40.0);
+        let bar_w = (ui.available_width() - 52.0).max(24.0);
         let (rect, _) = ui.allocate_exact_size(Vec2::new(bar_w, 8.0), Sense::hover());
         let painter = ui.painter();
         painter.rect_filled(rect, 2.0, COLOR_SURFACE_CONTAINER);
