@@ -122,23 +122,24 @@ impl X56App {
             .any(|d| d.kind == x56_core::DeviceKind::Throttle);
     }
 
-    /// Guarda el perfil completo actual en `self.profile_path_buf`, incluyendo `DeviceProfile.spring`.
+    /// Guarda el perfil completo actual en `self.profile_path_buf`, incluyendo `DeviceProfile.spring`
+    /// y la iluminación RGB configurada por cada modo (`M1`, `M2`, `S1`) y dispositivo.
     pub fn save_current_profile(&mut self) {
         let path = PathBuf::from(&self.profile_path_buf);
-        let rgb_hex = {
-            let c = self.rgb_tab.current_rgb_color();
-            format!("#{:02x}{:02x}{:02x}", c.r, c.g, c.b)
-        };
+        self.rgb_tab
+            .ensure_all_modes_have_rgb(&mut self.programming_tab.profile);
+        let stick_rgb_hex = self.rgb_tab.fallback_stick_hex.clone();
+        let throttle_rgb_hex = self.rgb_tab.fallback_throttle_hex.clone();
         let spring_str = self.curves_tab.installed_spring.as_str().to_string();
 
         match ProfileManager::dump_current(
             &self.active_profile_name,
-            Some(&rgb_hex),
-            Some(&rgb_hex),
+            Some(&stick_rgb_hex),
+            Some(&throttle_rgb_hex),
         ) {
             Ok(mut prof) => {
                 let stick_prof = prof.stick.get_or_insert_with(|| DeviceProfile {
-                    rgb: Some(rgb_hex.clone()),
+                    rgb: Some(stick_rgb_hex.clone()),
                     spring: Some(spring_str.clone()),
                     axes: Vec::new(),
                 });
@@ -193,6 +194,13 @@ impl X56App {
                 let fallback_throttle = prof.throttle.as_ref().and_then(|t| t.rgb.clone());
                 self.button_monitor
                     .set_fallback_rgb(fallback_stick, fallback_throttle);
+
+                let active_hw_mode = self.button_monitor.snapshot().active_mode;
+                self.rgb_tab.sync_from_loaded_profile(
+                    &prof,
+                    &self.programming_tab.profile,
+                    active_hw_mode,
+                );
 
                 match ProfileManager::apply(&prof) {
                     Ok(summary) => {
@@ -930,17 +938,26 @@ impl X56App {
 
     /// Subsistema 3: Agrupa Iluminación RGB y Calibrador Hall en diseño Avionics Vector.
     fn render_rgb_calibrate_subsystem(&mut self, ui: &mut Ui) {
+        let mut save_requested = false;
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 theme::card_frame().show(ui, |ui| {
-                    self.rgb_tab.ui(ui);
+                    if self
+                        .rgb_tab
+                        .ui(ui, &mut self.programming_tab.profile, &self.button_monitor)
+                    {
+                        save_requested = true;
+                    }
                 });
                 ui.add_space(12.0);
                 theme::card_frame().show(ui, |ui| {
                     self.calibrate_tab.ui(ui);
                 });
             });
+        if save_requested {
+            self.save_current_profile();
+        }
     }
 
     /// Subsistema 4: Gestión de Perfiles TOML, exportación y Diagnóstico Doctor.
