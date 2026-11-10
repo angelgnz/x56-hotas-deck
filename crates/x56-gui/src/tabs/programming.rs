@@ -733,7 +733,7 @@ impl ProgrammingTab {
             ui.add_space(4.0);
 
             // Canvas de dibujo vectorial con egui::Painter
-            let canvas_size = Vec2::new(ui.available_width(), 350.0);
+            let canvas_size = Vec2::new(ui.available_width(), 380.0);
             let (response, painter) = ui.allocate_painter(canvas_size, egui::Sense::click());
             let rect = response.rect;
 
@@ -1097,18 +1097,18 @@ impl ProgrammingTab {
             COLOR_OUTLINE,
         );
 
-        // Mástil y empuñadura ergonómica (cubre Trigger, C, Pinky y D)
+        // Mástil y empuñadura ergonómica centrada (cubre Trigger, C, Pinky y D)
         let shaft_rect = egui::Rect::from_min_max(
             egui::pos2(
-                rect.min.x + rect.width() * 0.24,
-                rect.min.y + rect.height() * 0.38,
+                rect.min.x + rect.width() * 0.30,
+                rect.min.y + rect.height() * 0.36,
             ),
             egui::pos2(
-                rect.min.x + rect.width() * 0.62,
-                rect.min.y + rect.height() * 0.79,
+                rect.min.x + rect.width() * 0.70,
+                rect.min.y + rect.height() * 0.92,
             ),
         );
-        painter.rect_stroke(shaft_rect, 4.0, outline, egui::StrokeKind::Inside);
+        painter.rect_stroke(shaft_rect, 6.0, outline, egui::StrokeKind::Inside);
     }
 
     /// Dibuja la silueta técnica del Throttle en el mapa vectorial.
@@ -2695,46 +2695,46 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
-            // 6. Sección D: Gatillo Principal (Trigger: cx = 0.508, cy = 0.477)
+            // 6. Sección D: Gatillo Principal (Trigger: cx = 0.500, cy = 0.420)
             SchematicNode {
                 id: "stick_trigger",
                 short_label: "TRG",
                 full_name: "Gatillo Principal (Trigger)",
-                norm_x: 0.508,
-                norm_y: 0.477,
+                norm_x: 0.500,
+                norm_y: 0.420,
                 radius: 12.0,
                 is_rect: true,
                 rect_size: Vec2::new(34.0, 18.0),
             },
-            // 7. Sección B: Botón C (Minipalanca Push: cx = 0.302, cy = 0.612)
+            // 7. Sección B: Botón C (Minipalanca Push: cx = 0.400, cy = 0.560)
             SchematicNode {
                 id: "stick_btn_c",
                 short_label: "C",
                 full_name: "Botón C (Minipalanca Push)",
-                norm_x: 0.302,
-                norm_y: 0.612,
+                norm_x: 0.400,
+                norm_y: 0.560,
                 radius: 11.5,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
-            // 8. Sección F: Palanca Meñique (Pinkie Lever: cx = 0.391, cy = 0.697)
+            // 8. Sección F: Palanca Meñique (Pinkie Lever: cx = 0.500, cy = 0.700)
             SchematicNode {
                 id: "stick_pinkie",
                 short_label: "PNK",
                 full_name: "Palanca Meñique (Pinkie Lever)",
-                norm_x: 0.391,
-                norm_y: 0.697,
+                norm_x: 0.500,
+                norm_y: 0.700,
                 radius: 11.5,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
-            // 9. Sección D: Botón D (Meñique: cx = 0.515, cy = 0.747)
+            // 9. Sección D: Botón D (Meñique: cx = 0.600, cy = 0.840)
             SchematicNode {
                 id: "stick_btn_d",
                 short_label: "D",
                 full_name: "Botón D (Meñique)",
-                norm_x: 0.515,
-                norm_y: 0.747,
+                norm_x: 0.600,
+                norm_y: 0.840,
                 radius: 11.5,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
