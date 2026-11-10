@@ -128,16 +128,26 @@ pub fn configure_theme(ctx: &egui::Context) {
         "lucide".to_owned(),
         std::sync::Arc::new(egui::FontData::from_static(lucide_icons::LUCIDE_FONT_BYTES)),
     );
-    fonts
+    // En Proportional: Ubuntu-Light -> lucide -> Hack (para símbolos matemáticos/geométricos)
+    let prop = fonts
         .families
         .entry(egui::FontFamily::Proportional)
-        .or_default()
-        .push("lucide".to_owned());
-    fonts
+        .or_default();
+    if !prop.contains(&"lucide".to_owned()) {
+        prop.push("lucide".to_owned());
+    }
+    if !prop.contains(&"Hack".to_owned()) {
+        prop.push("Hack".to_owned());
+    }
+
+    // En Monospace: Hack -> lucide -> Ubuntu-Light
+    let mono = fonts
         .families
         .entry(egui::FontFamily::Monospace)
-        .or_default()
-        .push("lucide".to_owned());
+        .or_default();
+    if !mono.contains(&"lucide".to_owned()) {
+        mono.push("lucide".to_owned());
+    }
     ctx.set_fonts(fonts);
 
     let mut visuals = egui::Visuals::dark();

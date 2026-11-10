@@ -93,7 +93,7 @@ impl DoctorTab {
                     if let Some(ref remedy) = check.remedy {
                         ui.colored_label(
                             Color32::from_rgb(255, 180, 80),
-                            format!("  ↳ Solución: {}", remedy),
+                            format!("  {} Solución: {}", icons::CORNER_DOWN_RIGHT, remedy),
                         );
                     }
                 });

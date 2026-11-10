@@ -432,11 +432,14 @@ impl CurvesTab {
             // Encabezado del bloque HUD
             ui.horizontal(|ui| {
                 ui.label(
-                    RichText::new("◈ RESPUESTA DE TRANSFERENCIA (TRANSFER CURVE)")
-                        .color(COLOR_PRIMARY)
-                        .size(12.5)
-                        .strong()
-                        .monospace(),
+                    RichText::new(format!(
+                        "{} RESPUESTA DE TRANSFERENCIA (TRANSFER CURVE)",
+                        icons::ACTIVITY
+                    ))
+                    .color(COLOR_PRIMARY)
+                    .size(12.5)
+                    .strong()
+                    .monospace(),
                 );
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -942,7 +945,7 @@ impl CurvesTab {
                     let (vect_mag, vect_deg) = live_state.gimbal_vector();
                     ui.label(
                         RichText::new(format!(
-                            "X: {:+.3} Y: {:+.3} VECT: {:.3} ∠{:02.0}°",
+                            "X: {:+.3} Y: {:+.3} VECT: {:.3} ({:02.0}°)",
                             live_state.stick_x, live_state.stick_y, vect_mag, vect_deg
                         ))
                         .color(COLOR_TERTIARY_CONTAINER)
@@ -1058,7 +1061,7 @@ impl CurvesTab {
     fn render_curve_type_selector(&mut self, ui: &mut Ui) {
         theme::card_frame().show(ui, |ui| {
             ui.label(
-                RichText::new("◈ TIPO DE CURVATURA")
+                RichText::new(format!("{} TIPO DE CURVATURA", icons::SLIDERS_HORIZONTAL))
                     .color(COLOR_PRIMARY)
                     .size(12.0)
                     .strong()
@@ -1091,7 +1094,7 @@ impl CurvesTab {
     fn render_axis_parameters_card(&mut self, ui: &mut Ui) {
         theme::card_frame().show(ui, |ui| {
             ui.label(
-                RichText::new("◈ PARÁMETROS DEL EJE")
+                RichText::new(format!("{} PARÁMETROS DEL EJE", icons::SETTINGS))
                     .color(COLOR_PRIMARY)
                     .size(12.0)
                     .strong()
@@ -1252,7 +1255,7 @@ impl CurvesTab {
         theme::card_frame().show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(
-                    RichText::new("◈ MUELLES FÍSICOS (X-56 SPRING)")
+                    RichText::new(format!("{} MUELLES FÍSICOS (X-56 SPRING)", icons::WRENCH))
                         .color(COLOR_PRIMARY)
                         .size(12.0)
                         .strong()

@@ -803,7 +803,7 @@ impl X56App {
                         COLOR_TERTIARY_CONTAINER
                     };
                     ui.label(
-                        RichText::new(format!("▸ {msg}"))
+                        RichText::new(format!("{} {msg}", icons::CHEVRON_RIGHT))
                             .color(col)
                             .size(11.0)
                             .monospace(),
@@ -815,16 +815,19 @@ impl X56App {
                         COLOR_TERTIARY_FIXED_DIM
                     };
                     ui.label(
-                        RichText::new(format!("▸ {msg}"))
+                        RichText::new(format!("{} {msg}", icons::CHEVRON_RIGHT))
                             .color(col)
                             .size(11.0)
                             .monospace(),
                     );
                 } else {
                     let tele_str = if screen_w >= 900.0 {
-                        "▸ TELEMETRÍA LISTA // USB HID INTERFACE 02"
+                        format!(
+                            "{} TELEMETRÍA LISTA // USB HID INTERFACE 02",
+                            icons::CHEVRON_RIGHT
+                        )
                     } else {
-                        "▸ USB HID OK"
+                        format!("{} USB HID OK", icons::CHEVRON_RIGHT)
                     };
                     ui.label(
                         RichText::new(tele_str)
@@ -947,11 +950,14 @@ impl X56App {
             .show(ui, |ui| {
                 theme::card_frame().show(ui, |ui| {
                     ui.label(
-                        RichText::new("◈ GESTIÓN DE PERFILES TOML & EXPORTACIÓN")
-                            .color(COLOR_PRIMARY)
-                            .size(13.0)
-                            .strong()
-                            .monospace(),
+                        RichText::new(format!(
+                            "{} GESTIÓN DE PERFILES TOML & EXPORTACIÓN",
+                            icons::FILE_TEXT
+                        ))
+                        .color(COLOR_PRIMARY)
+                        .size(13.0)
+                        .strong()
+                        .monospace(),
                     );
                     ui.add_space(8.0);
 
@@ -1150,7 +1156,7 @@ impl X56App {
                     let (mag, deg) = live_axes.gimbal_vector();
                     ui.label(
                         RichText::new(format!(
-                            "STICK GIMBAL  -> X: {:+.3} | Y: {:+.3} | Z (TWIST): {:+.3} | VECT: {:.3} ∠{:02.0}°",
+                            "STICK GIMBAL  -> X: {:+.3} | Y: {:+.3} | Z (TWIST): {:+.3} | VECT: {:.3} ({:02.0}°)",
                             live_axes.stick_x, live_axes.stick_y, live_axes.stick_z, mag, deg
                         ))
                         .color(COLOR_TERTIARY_CONTAINER)

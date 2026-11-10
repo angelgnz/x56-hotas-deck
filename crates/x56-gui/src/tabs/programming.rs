@@ -182,7 +182,7 @@ impl ProgrammingTab {
             theme::sunken_frame().show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.label(
-                        RichText::new("● TELEMETRÍA //")
+                        RichText::new(format!("{} TELEMETRÍA //", icons::ACTIVITY))
                             .color(col)
                             .size(10.0)
                             .monospace()
@@ -689,7 +689,8 @@ impl ProgrammingTab {
                         );
                         ui.label(
                             RichText::new(format!(
-                                "● {} ACTIVOS",
+                                "{} {} ACTIVOS",
+                                icons::CIRCLE_DOT,
                                 self.currently_pressed_count
                             ))
                             .color(COLOR_WARNING_AMBER)
@@ -1753,7 +1754,7 @@ impl ProgrammingTab {
 
                         if is_physically_pressed {
                             ui.label(
-                                RichText::new("● PULSADO (VAL: 1)")
+                                RichText::new(format!("{} PULSADO (VAL: 1)", icons::CIRCLE_DOT))
                                     .color(COLOR_TERTIARY_CONTAINER)
                                     .size(10.0)
                                     .strong()
@@ -1909,11 +1910,7 @@ impl ProgrammingTab {
         let card_w = ui.available_width();
         ui.vertical(|ui| {
             let time = ui.input(|i| i.time);
-            let cursor = if (time * 2.0).fract() < 0.5 {
-                "▌"
-            } else {
-                " "
-            };
+            let cursor = if (time * 2.0).fract() < 0.5 { "_" } else { " " };
 
             ui.horizontal_wrapped(|ui| {
                 ui.label(

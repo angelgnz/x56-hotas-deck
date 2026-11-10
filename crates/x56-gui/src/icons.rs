@@ -43,8 +43,8 @@ pub const TERMINAL: &str = "\u{e181}";
 pub const PLUS: &str = "\u{e13d}";
 pub const CHECK: &str = "\u{e06c}";
 pub const X: &str = "\u{e1b2}";
-pub const UPLOAD: &str = "\u{e091}";
-pub const DOWNLOAD: &str = "\u{e089}";
+pub const UPLOAD: &str = "\u{e19e}";
+pub const DOWNLOAD: &str = "\u{e0b2}";
 
 // Telemetría, Estados e Indicadores
 pub const ACTIVITY: &str = "\u{e038}";
@@ -67,9 +67,17 @@ pub const FACTORY: &str = "\u{e29f}";
 pub const EYE: &str = "\u{e0ba}";
 pub const EYE_OFF: &str = "\u{e0bb}";
 pub const CHEVRON_LEFT: &str = "\u{e06e}";
+pub const CHEVRON_RIGHT: &str = "\u{e06f}";
+pub const CHEVRON_UP: &str = "\u{e070}";
+pub const CHEVRON_DOWN: &str = "\u{e06d}";
 pub const MENU: &str = "\u{e115}";
 pub const PANEL_LEFT_CLOSE: &str = "\u{e21c}";
 pub const PANEL_LEFT: &str = "\u{e12a}";
+pub const CORNER_DOWN_RIGHT: &str = "\u{e0a2}";
+pub const ARROW_RIGHT: &str = "\u{e049}";
+pub const ARROW_LEFT: &str = "\u{e048}";
+pub const ARROW_UP: &str = "\u{e04a}";
+pub const ARROW_DOWN: &str = "\u{e042}";
 
 // Mapeos Especiales y HOTAS
 pub const PLANE_LANDING: &str = "\u{e3cd}";
