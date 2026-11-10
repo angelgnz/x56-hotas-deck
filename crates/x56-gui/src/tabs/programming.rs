@@ -194,7 +194,7 @@ impl ProgrammingTab {
                             .size(11.0)
                             .monospace(),
                     );
-                    if ui.small_button("✖").clicked() {
+                    if ui.small_button(icons::X).clicked() {
                         dismiss_status = true;
                     }
                 });
@@ -1686,12 +1686,17 @@ impl ProgrammingTab {
             COLOR_SURFACE_LOW
         };
 
+        let max_row_w = ui.available_width();
+
         let frame_resp = egui::Frame::new()
             .fill(card_bg)
             .stroke(border_stroke)
             .corner_radius(egui::CornerRadius::same(6))
             .inner_margin(egui::Margin::symmetric(10, 8))
             .show(ui, |ui| {
+                let inner_max_w = (max_row_w - 24.0).max(0.0);
+                ui.set_max_width(inner_max_w);
+
                 if is_editing {
                     self.render_inline_edit_controls(ui, monitor, btn);
                 } else {
@@ -1773,8 +1778,9 @@ impl ProgrammingTab {
 
                     // Fila 3: Metadatos a la izquierda y botones de acción (Test, Editar, Limpiar)
                     // bajados responsivamente para que nunca se desborden ni queden cortados
-                    if card_w >= 420.0 {
+                    if card_w >= 480.0 {
                         ui.horizontal(|ui| {
+                            ui.set_max_width(card_w);
                             self.render_row_metadata(ui, &cell_opt, &default_info);
 
                             ui.with_layout(
@@ -1785,7 +1791,7 @@ impl ProgrammingTab {
                             );
                         });
                     } else {
-                        // En anchos ultra compactos (< 420px), metadatos en Fila 3 y acciones en Fila 4
+                        // En anchos compactos (< 480px), metadatos en Fila 3 y acciones en Fila 4
                         self.render_row_metadata(ui, &cell_opt, &default_info);
                         ui.add_space(3.0);
                         ui.horizontal_wrapped(|ui| {
@@ -1807,7 +1813,7 @@ impl ProgrammingTab {
         cell_opt: &Option<CommandCell>,
         default_info: &DefaultMappingInfo,
     ) {
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.label(
                 RichText::new(format!(
                     "TIPO: {} // GRUPO: {}",
