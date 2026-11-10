@@ -3,6 +3,8 @@
 use eframe::egui::{self, Color32, Ui};
 use x56_core::{Calibrator, HallCalibrationResult};
 
+use crate::icons;
+
 pub struct CalibrateTab {
     pub samples: usize,
     pub dry_run: bool,
@@ -52,7 +54,10 @@ impl CalibrateTab {
         ui.add_space(8.0);
 
         ui.group(|ui| {
-            ui.label("⚠️ Instrucciones de Seguridad:");
+            ui.label(format!(
+                "{} Instrucciones de Seguridad:",
+                icons::ALERT_TRIANGLE
+            ));
             ui.label(
                 "1. Suelta la palanca por completo y permite que el resorte la centre libremente.",
             );
@@ -74,14 +79,13 @@ impl CalibrateTab {
         ui.add_space(8.0);
 
         ui.horizontal(|ui| {
-            if ui.button("🔬 Muestrear Posición Central").clicked() {
+            let sample_lbl = format!("{} Muestrear Posición Central", icons::CROSSHAIR);
+            if ui.button(sample_lbl).clicked() {
                 self.execute_calibration(true);
             }
 
-            let apply_btn = ui.add_enabled(
-                !self.dry_run,
-                egui::Button::new("💾 Grabar Calibración en la EEPROM"),
-            );
+            let apply_lbl = format!("{} Grabar Calibración en la EEPROM", icons::SAVE);
+            let apply_btn = ui.add_enabled(!self.dry_run, egui::Button::new(apply_lbl));
             if apply_btn.clicked() {
                 self.execute_calibration(false);
             }

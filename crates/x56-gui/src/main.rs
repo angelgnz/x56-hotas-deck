@@ -1,5 +1,6 @@
 mod app;
 mod curve_math;
+pub mod icons;
 mod tabs;
 pub mod theme;
 

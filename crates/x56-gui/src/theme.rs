@@ -122,6 +122,24 @@ impl PhysicalSpring {
 
 /// Aplica el tema visual Avionics Vector al contexto de egui.
 pub fn configure_theme(ctx: &egui::Context) {
+    // Configuración de fuentes vectoriales e iconos Lucide
+    let mut fonts = egui::FontDefinitions::default();
+    fonts.font_data.insert(
+        "lucide".to_owned(),
+        std::sync::Arc::new(egui::FontData::from_static(lucide_icons::LUCIDE_FONT_BYTES)),
+    );
+    fonts
+        .families
+        .entry(egui::FontFamily::Proportional)
+        .or_default()
+        .push("lucide".to_owned());
+    fonts
+        .families
+        .entry(egui::FontFamily::Monospace)
+        .or_default()
+        .push("lucide".to_owned());
+    ctx.set_fonts(fonts);
+
     let mut visuals = egui::Visuals::dark();
 
     // Fondos de paneles y ventanas

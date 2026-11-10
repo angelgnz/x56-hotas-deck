@@ -17,6 +17,7 @@ use x56_core::{
     LiveButtonsSnapshot, ModeSlot, ProgrammingProfile, TriggeredCommandEvent,
 };
 
+use crate::icons;
 use crate::theme::{self, *};
 
 /// Categorías de filtro táctico para el catálogo de botones.
@@ -40,6 +41,17 @@ impl FilterCategory {
             Self::BotonesFrontales => "BOTONES FRONTALES",
             Self::Macros => "MACROS Y SECUENCIAS",
             Self::Shift => "MODIFICADOR SHIFT",
+        }
+    }
+
+    pub fn icon(&self) -> &'static str {
+        match self {
+            Self::Todos => icons::LAYERS,
+            Self::Gatillos => icons::TARGET,
+            Self::Setas => icons::COMPASS,
+            Self::BotonesFrontales => icons::GAMEPAD,
+            Self::Macros => icons::TERMINAL,
+            Self::Shift => icons::SPARKLES,
         }
     }
 }
@@ -453,7 +465,8 @@ impl ProgrammingTab {
             ui.horizontal_wrapped(|ui| {
                 // Switcher de Dispositivo
                 let is_stick = self.selected_device == DeviceKind::Stick;
-                if tactical_button(ui, "🕹️ X-56 RHINO STICK (JOYSTICK)", is_stick, false).clicked()
+                let stick_label = format!("{} X-56 RHINO STICK (JOYSTICK)", icons::JOYSTICK);
+                if tactical_button(ui, &stick_label, is_stick, false).clicked()
                     && !is_stick
                 {
                     self.selected_device = DeviceKind::Stick;
@@ -462,7 +475,8 @@ impl ProgrammingTab {
                 }
 
                 let is_throttle = self.selected_device == DeviceKind::Throttle;
-                if tactical_button(ui, "🚀 X-56 DUAL THROTTLE", is_throttle, false).clicked()
+                let thr_label = format!("{} X-56 DUAL THROTTLE", icons::SLIDERS);
+                if tactical_button(ui, &thr_label, is_throttle, false).clicked()
                     && !is_throttle
                 {
                     self.selected_device = DeviceKind::Throttle;
@@ -474,11 +488,11 @@ impl ProgrammingTab {
 
                 // Botón de Alternancia de Vistas (Dual 5:7 vs Solo Celdas)
                 let view_label = if self.show_diagram_view {
-                    "👁️ VISTAS: DUAL (5:7)"
+                    format!("{} VISTAS: DUAL (5:7)", icons::LAYERS)
                 } else {
-                    "👁️ VISTAS: SOLO CELDAS"
+                    format!("{} VISTAS: SOLO CELDAS", icons::LAYERS)
                 };
-                if tactical_button(ui, view_label, self.show_diagram_view, false)
+                if tactical_button(ui, &view_label, self.show_diagram_view, false)
                     .on_hover_text("Alterna entre la vista combinada con Esquema Vectorial y la vista de Solo Celdas")
                     .clicked()
                 {
@@ -542,9 +556,9 @@ impl ProgrammingTab {
 
                 // Checkbox Sincronización HW
                 let hw_sync_label = if self.follow_hardware_mode {
-                    "🔄 SYNC HW: ON"
+                    format!("{} SYNC HW: ON", icons::ROTATE_CW)
                 } else {
-                    "🔄 SYNC HW: OFF"
+                    format!("{} SYNC HW: OFF", icons::ROTATE_CW)
                 };
                 let hw_sync_col = if self.follow_hardware_mode {
                     COLOR_TERTIARY_CONTAINER
@@ -587,7 +601,7 @@ impl ProgrammingTab {
 
                 theme::sunken_frame().inner_margin(egui::Margin::symmetric(8, 3)).show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new("●").color(dot_col).size(11.0));
+                        ui.label(RichText::new(icons::CIRCLE_DOT).color(dot_col).size(11.0));
                         ui.label(
                             RichText::new(router_text)
                                 .color(COLOR_PRIMARY_FIXED)
@@ -598,7 +612,8 @@ impl ProgrammingTab {
                 });
 
                 // Botón TEST EVDEV LOOP
-                if tactical_button(ui, "⚡ TEST LOOP", false, true).clicked() {
+                let test_loop_lbl = format!("{} TEST LOOP", icons::ZAP);
+                if tactical_button(ui, &test_loop_lbl, false, true).clicked() {
                     self.show_test_window = true;
                 }
             });
@@ -613,11 +628,14 @@ impl ProgrammingTab {
         theme::card_frame().show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(
-                    RichText::new("🛰️ MONITOR DE DETECCIÓN EN VIVO (EVDEV HOOK)")
-                        .color(COLOR_PRIMARY)
-                        .size(11.0)
-                        .strong()
-                        .monospace(),
+                    RichText::new(format!(
+                        "{} MONITOR DE DETECCIÓN EN VIVO (EVDEV HOOK)",
+                        icons::RADIO
+                    ))
+                    .color(COLOR_PRIMARY)
+                    .size(11.0)
+                    .strong()
+                    .monospace(),
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     telemetry_badge(ui, "HOOK", "LISTENING 1000Hz", COLOR_TERTIARY_CONTAINER);
@@ -751,10 +769,16 @@ impl ProgrammingTab {
         theme::card_frame().show(ui, |ui| {
             let title = match self.selected_device {
                 DeviceKind::Stick => {
-                    "MAPA VECTORIAL DE ENTRADAS // X-56 STICK (HOTAS RHINO RUST CORE)"
+                    format!(
+                        "{} MAPA VECTORIAL DE ENTRADAS // X-56 STICK (HOTAS RHINO RUST CORE)",
+                        icons::CROSSHAIR
+                    )
                 }
                 DeviceKind::Throttle => {
-                    "MAPA VECTORIAL DE ENTRADAS // X-56 DUAL THROTTLE (RUST CORE)"
+                    format!(
+                        "{} MAPA VECTORIAL DE ENTRADAS // X-56 DUAL THROTTLE (RUST CORE)",
+                        icons::CROSSHAIR
+                    )
                 }
             };
 
@@ -1216,11 +1240,14 @@ impl ProgrammingTab {
         theme::card_frame().show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(
-                    RichText::new("🧭 POV HAT 1 LIVE MATRIX // 8-WAY COMPASS")
-                        .color(COLOR_PRIMARY)
-                        .size(11.0)
-                        .strong()
-                        .monospace(),
+                    RichText::new(format!(
+                        "{} POV HAT 1 LIVE MATRIX // 8-WAY COMPASS",
+                        icons::COMPASS
+                    ))
+                    .color(COLOR_PRIMARY)
+                    .size(11.0)
+                    .strong()
+                    .monospace(),
                 );
             });
 
@@ -1350,16 +1377,20 @@ impl ProgrammingTab {
     fn render_quick_macro_actions(&mut self, ui: &mut Ui) {
         theme::card_frame().show(ui, |ui| {
             ui.label(
-                RichText::new("⚡ ACCIONES RÁPIDAS DE MACROS // EVDEV")
-                    .color(COLOR_PRIMARY)
-                    .size(11.0)
-                    .strong()
-                    .monospace(),
+                RichText::new(format!(
+                    "{} ACCIONES RÁPIDAS DE MACROS // EVDEV",
+                    icons::ZAP
+                ))
+                .color(COLOR_PRIMARY)
+                .size(11.0)
+                .strong()
+                .monospace(),
             );
             ui.add_space(4.0);
 
             ui.horizontal_wrapped(|ui| {
-                if tactical_button(ui, "⚡ NUEVA MACRO", false, false).clicked() {
+                let new_macro_lbl = format!("{} NUEVA MACRO", icons::PLUS);
+                if tactical_button(ui, &new_macro_lbl, false, false).clicked() {
                     self.status_message = Some((
                         "ASISTENTE DE MACROS TEMPORIZADAS (TIMED COMBOS) INICIALIZADO".to_string(),
                         false,
@@ -1367,11 +1398,11 @@ impl ProgrammingTab {
                 }
 
                 let rec_label = if self.is_recording_macro {
-                    "⏹ DETENER GRABACIÓN"
+                    format!("{} DETENER GRABACIÓN", icons::SQUARE)
                 } else {
-                    "⏺ GRABAR SECUENCIA"
+                    format!("{} GRABAR SECUENCIA", icons::CIRCLE)
                 };
-                if tactical_button(ui, rec_label, self.is_recording_macro, false).clicked() {
+                if tactical_button(ui, &rec_label, self.is_recording_macro, false).clicked() {
                     self.is_recording_macro = !self.is_recording_macro;
                     if self.is_recording_macro {
                         self.macro_record_buffer.clear();
@@ -1390,7 +1421,8 @@ impl ProgrammingTab {
                     }
                 }
 
-                if tactical_button(ui, "🔄 PINKIE SHIFT (x24)", false, false).clicked() {
+                let shift_lbl = format!("{} PINKIE SHIFT (x24)", icons::SPARKLES);
+                if tactical_button(ui, &shift_lbl, false, false).clicked() {
                     self.filter_category = FilterCategory::Shift;
                     self.status_message = Some((
                         "FILTRANDO CAPA DE MODIFICADOR PINKIE SHIFT (24 ASIGNACIONES)".to_string(),
@@ -1412,13 +1444,13 @@ impl ProgrammingTab {
                 .inner_margin(egui::Margin::symmetric(8, 4))
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new("🔍").size(12.0));
+                        ui.label(RichText::new(icons::SEARCH).size(12.0));
                         let search_w = (ui.available_width() - 40.0).clamp(140.0, 240.0);
                         let edit = egui::TextEdit::singleline(&mut self.search_query)
                             .hint_text("Buscar botón, código evdev...")
                             .desired_width(search_w);
                         ui.add(edit);
-                        if !self.search_query.is_empty() && ui.small_button("✖").clicked() {
+                        if !self.search_query.is_empty() && ui.small_button(icons::X).clicked() {
                             self.search_query.clear();
                         }
                     });
@@ -1485,8 +1517,9 @@ impl ProgrammingTab {
                     )
                 };
 
+                let cat_label = format!("{} {}", cat.icon(), cat.label());
                 let btn = egui::Button::new(
-                    RichText::new(cat.label())
+                    RichText::new(cat_label)
                         .size(10.0)
                         .color(fg)
                         .strong()
@@ -1505,7 +1538,7 @@ impl ProgrammingTab {
             if let Some(ref grp) = self.filter_group {
                 ui.separator();
                 let grp_badge = egui::Button::new(
-                    RichText::new(format!("GRUPO: {} ✖", grp))
+                    RichText::new(format!("GRUPO: {} {}", grp, icons::X))
                         .size(10.0)
                         .color(COLOR_PRIMARY_CONTAINER)
                         .strong()
@@ -1810,9 +1843,9 @@ impl ProgrammingTab {
         // 1. Limpiar
         if cell_opt.as_ref().is_some_and(|c| c.is_assigned()) {
             let clean_label = if is_dropped_down {
-                "🗑 LIMPIAR"
+                format!("{} LIMPIAR", icons::TRASH)
             } else {
-                "🗑"
+                icons::TRASH.to_string()
             };
             if ui
                 .button(
@@ -1834,11 +1867,11 @@ impl ProgrammingTab {
 
         // 2. Editar
         let edit_label = if is_dropped_down {
-            "✏ EDITAR"
+            format!("{} EDITAR", icons::PENCIL)
         } else {
-            "EDITAR"
+            "EDITAR".to_string()
         };
-        if tactical_button(ui, edit_label, false, false)
+        if tactical_button(ui, &edit_label, false, false)
             .on_hover_text("Editar asignación de teclas y comando")
             .clicked()
         {
@@ -1856,7 +1889,11 @@ impl ProgrammingTab {
         ui.add_space(3.0);
 
         // 3. Test
-        let test_label = if is_dropped_down { "⚡ TEST" } else { "TEST" };
+        let test_label = if is_dropped_down {
+            format!("{} TEST", icons::ZAP)
+        } else {
+            "TEST".to_string()
+        };
         if ui
             .button(
                 RichText::new(test_label)
@@ -1887,9 +1924,10 @@ impl ProgrammingTab {
         cell_opt: &Option<CommandCell>,
     ) {
         // Test
+        let test_lbl = format!("{} TEST", icons::ZAP);
         if ui
             .button(
-                RichText::new("⚡ TEST")
+                RichText::new(test_lbl)
                     .color(COLOR_TERTIARY_CONTAINER)
                     .size(10.0)
                     .monospace(),
@@ -1910,7 +1948,8 @@ impl ProgrammingTab {
         ui.add_space(4.0);
 
         // Editar
-        if tactical_button(ui, "✏ EDITAR", false, false)
+        let edit_lbl = format!("{} EDITAR", icons::PENCIL);
+        if tactical_button(ui, &edit_lbl, false, false)
             .on_hover_text("Editar asignación de teclas y comando")
             .clicked()
         {
@@ -1927,9 +1966,10 @@ impl ProgrammingTab {
 
         if cell_opt.as_ref().is_some_and(|c| c.is_assigned()) {
             ui.add_space(4.0);
+            let clean_lbl = format!("{} LIMPIAR", icons::TRASH);
             if ui
                 .button(
-                    RichText::new("🗑 LIMPIAR")
+                    RichText::new(clean_lbl)
                         .color(COLOR_ERROR)
                         .size(10.0)
                         .monospace(),
@@ -2035,9 +2075,10 @@ impl ProgrammingTab {
                     );
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let cancel_lbl = format!("{} CANCELAR", icons::X);
                         if ui
                             .button(
-                                RichText::new("✖ CANCELAR")
+                                RichText::new(cancel_lbl)
                                     .color(COLOR_ERROR)
                                     .size(10.5)
                                     .monospace(),
@@ -2049,7 +2090,8 @@ impl ProgrammingTab {
                             self.pending_name.clear();
                         }
 
-                        if tactical_button(ui, "✔ CONFIRMAR MAPEO", false, true).clicked() {
+                        let confirm_lbl = format!("{} CONFIRMAR MAPEO", icons::CHECK);
+                        if tactical_button(ui, &confirm_lbl, false, true).clicked() {
                             let name_final = if self.pending_name.trim().is_empty() {
                                 btn.label.to_string()
                             } else {
@@ -2091,7 +2133,8 @@ impl ProgrammingTab {
                 ui.add_space(4.0);
 
                 ui.horizontal_wrapped(|ui| {
-                    if tactical_button(ui, "✔ CONFIRMAR MAPEO", false, true).clicked() {
+                    let confirm_lbl = format!("{} CONFIRMAR MAPEO", icons::CHECK);
+                    if tactical_button(ui, &confirm_lbl, false, true).clicked() {
                         let name_final = if self.pending_name.trim().is_empty() {
                             btn.label.to_string()
                         } else {
@@ -2114,9 +2157,10 @@ impl ProgrammingTab {
                         self.pending_name.clear();
                     }
 
+                    let cancel_lbl = format!("{} CANCELAR", icons::X);
                     if ui
                         .button(
-                            RichText::new("✖ CANCELAR")
+                            RichText::new(cancel_lbl)
                                 .color(COLOR_ERROR)
                                 .size(10.5)
                                 .monospace(),
@@ -2144,7 +2188,7 @@ impl ProgrammingTab {
                     .inner_margin(egui::Margin::symmetric(8, 4))
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
-                            ui.label(RichText::new("🛡️").size(12.0));
+                            ui.label(RichText::new(icons::SHIELD_CHECK).size(12.0));
                             ui.label(
                                 RichText::new("PROTON & STEAM DECK (udev: 99-logitech-x56.rules)")
                                     .color(COLOR_TERTIARY_CONTAINER)
@@ -2157,7 +2201,8 @@ impl ProgrammingTab {
                 ui.add_space(4.0);
 
                 // Botones de exportación
-                if tactical_button(ui, "📄 EXPORTAR XML", false, false).clicked() {
+                let exp_xml = format!("{} EXPORTAR XML", icons::FILE_CODE);
+                if tactical_button(ui, &exp_xml, false, false).clicked() {
                     let xml = generate_star_citizen_xml(&self.profile);
                     if let Err(e) = std::fs::write("examples/star_citizen_actionmaps.xml", &xml) {
                         self.status_message = Some((format!("Error exportando XML: {e}"), true));
@@ -2169,7 +2214,8 @@ impl ProgrammingTab {
                     }
                 }
 
-                if tactical_button(ui, "💾 EXPORTAR JSON", false, false).clicked() {
+                let exp_json = format!("{} EXPORTAR JSON", icons::FILE_TEXT);
+                if tactical_button(ui, &exp_json, false, false).clicked() {
                     let json = export_programming_json(&self.profile);
                     if let Err(e) = std::fs::write("examples/x56_buttons_config.json", &json) {
                         self.status_message = Some((format!("Error exportando JSON: {e}"), true));
@@ -2184,7 +2230,8 @@ impl ProgrammingTab {
                 ui.separator();
 
                 // Descartar cambios
-                if tactical_button(ui, "✖ DESCARTAR CAMBIOS", false, false).clicked() {
+                let discard_lbl = format!("{} DESCARTAR CAMBIOS", icons::ROTATE_CCW);
+                if tactical_button(ui, &discard_lbl, false, false).clicked() {
                     self.profile = ProgrammingProfile::default();
                     monitor.set_profile(self.profile.clone());
                     self.editing_button_id = None;
@@ -2197,7 +2244,8 @@ impl ProgrammingTab {
                 }
 
                 // Botón primario azul con resplandor
-                if tactical_button(ui, "⚡ ESCRIBIR MAPEO A UINPUT", false, true).clicked() {
+                let apply_uinput = format!("{} ESCRIBIR MAPEO A UINPUT", icons::UPLOAD);
+                if tactical_button(ui, &apply_uinput, false, true).clicked() {
                     monitor.set_profile(self.profile.clone());
                     monitor.set_active(true);
                     self.status_message = Some((
@@ -2228,7 +2276,8 @@ impl ProgrammingTab {
         let mut close_modal = false;
         let mut open = self.show_test_window;
 
-        egui::Window::new("⚡ TEST EVDEV LOOP // MONITOR EN TIEMPO REAL")
+        let win_title = format!("{} TEST EVDEV LOOP // MONITOR EN TIEMPO REAL", icons::ZAP);
+        egui::Window::new(win_title)
             .open(&mut open)
             .collapsible(false)
             .resizable(true)
@@ -2244,9 +2293,10 @@ impl ProgrammingTab {
                                 .strong(),
                         );
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let clean_lbl = format!("{} LIMPIAR LOG", icons::TRASH);
                             if ui
                                 .button(
-                                    RichText::new("🗑 LIMPIAR LOG")
+                                    RichText::new(clean_lbl)
                                         .color(COLOR_ERROR)
                                         .size(10.0)
                                         .monospace(),
@@ -2389,9 +2439,9 @@ impl ProgrammingTab {
                                                     .monospace(),
                                             );
                                             let st = if ev.uinput_emitted {
-                                                "✔ EMITIDO"
+                                                format!("{} EMITIDO", icons::CHECK)
                                             } else {
-                                                "ℹ SIMULADO"
+                                                format!("{} SIMULADO", icons::CIRCLE_DOT)
                                             };
                                             ui.label(
                                                 RichText::new(st)
@@ -2439,42 +2489,42 @@ fn default_mapping_for(id: &str) -> DefaultMappingInfo {
             key_display: "[ESPACIO]",
             map_type: "HOLD",
             group_sc: "SC: WEAPONS",
-            icon: "🎯",
+            icon: icons::CROSSHAIR,
         },
         "stick_btn_a" => DefaultMappingInfo {
             action: "FIJAR BLANCO RETÍCULA (LOCK)",
             key_display: "[T]",
             map_type: "INSTANTÁNEO",
             group_sc: "SC: TARGETING",
-            icon: "🎯",
+            icon: icons::TARGET,
         },
         "stick_btn_b" => DefaultMappingInfo {
             action: "CONTRAMEDIDAS // FLARE",
             key_display: "[R]",
             map_type: "TOGGLE (delay 120ms)",
             group_sc: "SC: SYSTEMS",
-            icon: "🛡️",
+            icon: icons::SHIELD_CHECK,
         },
         "stick_btn_c" => DefaultMappingInfo {
             action: "C-STICK SENSOR SLEW PUSH",
             key_display: "[F3]",
             map_type: "INSTANTÁNEO",
             group_sc: "SC: SENSORS",
-            icon: "🕹️",
+            icon: icons::JOYSTICK,
         },
         "stick_btn_d" => DefaultMappingInfo {
             action: "DESACOPLAR VECTOR (DECOUPLED)",
             key_display: "[V]",
             map_type: "TOGGLE",
             group_sc: "SC: FLIGHT",
-            icon: "🚀",
+            icon: icons::ROCKET,
         },
         "stick_pinkie" => DefaultMappingInfo {
             action: "BOOST // POSTQUEMADOR",
             key_display: "[LSHIFT]",
             map_type: "HOLD",
             group_sc: "SC: FLIGHT",
-            icon: "⚡",
+            icon: icons::ZAP,
         },
         "stick_pov_up" | "stick_pov_right" | "stick_pov_down" | "stick_pov_left" => {
             DefaultMappingInfo {
@@ -2482,7 +2532,7 @@ fn default_mapping_for(id: &str) -> DefaultMappingInfo {
                 key_display: "[POV-LOOK]",
                 map_type: "ANALOG/POV",
                 group_sc: "SC: VIEW",
-                icon: "🧭",
+                icon: icons::COMPASS,
             }
         }
         "stick_h1_up" | "stick_h1_right" | "stick_h1_down" | "stick_h1_left" => {
@@ -2491,7 +2541,7 @@ fn default_mapping_for(id: &str) -> DefaultMappingInfo {
                 key_display: "[P/O/I/U]",
                 map_type: "INSTANTÁNEO",
                 group_sc: "SC: RADAR",
-                icon: "📡",
+                icon: icons::RADIO,
             }
         }
         "stick_h2_up" | "stick_h2_right" | "stick_h2_down" | "stick_h2_left" => {
@@ -2500,7 +2550,7 @@ fn default_mapping_for(id: &str) -> DefaultMappingInfo {
                 key_display: "[F5..F8]",
                 map_type: "INSTANTÁNEO",
                 group_sc: "SC: POWER",
-                icon: "⚡",
+                icon: icons::ZAP,
             }
         }
         "thr_sw_1" => DefaultMappingInfo {
@@ -2508,98 +2558,98 @@ fn default_mapping_for(id: &str) -> DefaultMappingInfo {
             key_display: "[G]",
             map_type: "TOGGLE (anti-accidental)",
             group_sc: "SC: FLIGHT",
-            icon: "🛬",
+            icon: icons::PLANE_LANDING,
         },
         "thr_sw_2" => DefaultMappingInfo {
             action: "RECOGIDA TREN ATERRIZAJE (TGL 1)",
             key_display: "[LALT+G]",
             map_type: "TOGGLE (anti-accidental)",
             group_sc: "SC: FLIGHT",
-            icon: "🛫",
+            icon: icons::PLANE_TAKEOFF,
         },
         "thr_sld" => DefaultMappingInfo {
             action: "AEROFRENOS // SPOILERS (SLD)",
             key_display: "[B]",
             map_type: "HOLD / POSITIONAL",
             group_sc: "SC: FLIGHT",
-            icon: "🛑",
+            icon: icons::OCTAGON_ALERT,
         },
         "thr_btn_e" => DefaultMappingInfo {
             action: "SALTO CUÁNTICO (QUANTUM TRAVEL)",
             key_display: "[B/LALT+B]",
             map_type: "HOLD (spool)",
             group_sc: "SC: NAVIGATION",
-            icon: "🌌",
+            icon: icons::SPARKLES,
         },
         "thr_btn_h" => DefaultMappingInfo {
             action: "MODO MINERÍA // ESCANEO PING",
             key_display: "[M / TAB]",
             map_type: "TOGGLE",
             group_sc: "SC: MINING",
-            icon: "⛏️",
+            icon: icons::PICKAXE,
         },
         "thr_btn_i" => DefaultMappingInfo {
             action: "LUCES EXTERIORES COCKPIT",
             key_display: "[L]",
             map_type: "TOGGLE",
             group_sc: "SC: SYSTEMS",
-            icon: "💡",
+            icon: icons::LIGHTBULB,
         },
         "thr_ministick_push" => DefaultMappingInfo {
             action: "PROPULSORES LATERALES // STRAFE PUSH",
             key_display: "[LCTRL]",
             map_type: "INSTANTÁNEO",
             group_sc: "SC: STRAFE",
-            icon: "🕹️",
+            icon: icons::JOYSTICK,
         },
         "thr_rty_f_push" => DefaultMappingInfo {
             action: "LIMITADOR DE VELOCIDAD PUSH",
             key_display: "[BACKSPACE]",
             map_type: "TOGGLE",
             group_sc: "SC: PROPULSION",
-            icon: "⚙️",
+            icon: icons::SETTINGS,
         },
         "thr_rty_g_push" => DefaultMappingInfo {
             action: "LÁSER DE EXTRACCIÓN PUSH",
             key_display: "[MOUSE1]",
             map_type: "HOLD",
             group_sc: "SC: MINING",
-            icon: "⚙️",
+            icon: icons::SETTINGS,
         },
         "thr_scroll_fwd" => DefaultMappingInfo {
             action: "INCREMENTAR LIMITADOR ACELERACIÓN",
             key_display: "[SCROLL-UP]",
             map_type: "INSTANTÁNEO",
             group_sc: "SC: PROPULSION",
-            icon: "⏫",
+            icon: icons::CHEVRONS_UP,
         },
         "thr_scroll_bck" => DefaultMappingInfo {
             action: "DISMINUIR LIMITADOR ACELERACIÓN",
             key_display: "[SCROLL-DN]",
             map_type: "INSTANTÁNEO",
             group_sc: "SC: PROPULSION",
-            icon: "⏬",
+            icon: icons::CHEVRONS_DOWN,
         },
         "thr_k1_up" => DefaultMappingInfo {
             action: "MODO CRUCERO VELOCIDAD (SCM)",
             key_display: "[C]",
             map_type: "TOGGLE",
             group_sc: "SC: FLIGHT",
-            icon: "🚀",
+            icon: icons::ROCKET,
         },
         "thr_k1_down" => DefaultMappingInfo {
             action: "MODO PRECISIÓN MANIOBRA",
             key_display: "[LALT+C]",
             map_type: "TOGGLE",
             group_sc: "SC: FLIGHT",
-            icon: "🎯",
+            icon: icons::TARGET,
         },
         _ => DefaultMappingInfo {
             action: "ACCIÓN ASIGNABLE HOTAS",
             key_display: "[DIRECT]",
             map_type: "INSTANTÁNEO",
             group_sc: "SC: GENERAL",
-            icon: "🔘",
+            icon: icons::CIRCLE_DOT,
         },
     }
 }

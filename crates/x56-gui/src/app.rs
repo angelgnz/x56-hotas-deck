@@ -12,6 +12,7 @@ use x56_core::{
 };
 
 use crate::curve_math::LiveInputPoller;
+use crate::icons;
 use crate::tabs::calibrate::CalibrateTab;
 use crate::tabs::curves::CurvesTab;
 use crate::tabs::doctor::DoctorTab;
@@ -328,14 +329,18 @@ impl X56App {
 
         ui.horizontal_centered(|ui| {
             // Botón de alternar / colapsar barra lateral para pantallas compactas
-            let toggle_label = if self.sidebar_collapsed { "☰" } else { "◀" };
+            let toggle_label = if self.sidebar_collapsed {
+                icons::MENU
+            } else {
+                icons::PANEL_LEFT_CLOSE
+            };
             let toggle_tooltip = if self.sidebar_collapsed {
                 "Expandir navegación lateral"
             } else {
                 "Colapsar navegación lateral para maximizar espacio de trabajo"
             };
             if ui
-                .button(RichText::new(toggle_label).size(12.0).monospace().strong())
+                .button(RichText::new(toggle_label).size(13.0).monospace().strong())
                 .on_hover_text(toggle_tooltip)
                 .clicked()
             {
@@ -346,11 +351,11 @@ impl X56App {
 
             // Título principal adaptativo con icono de vuelo
             let app_title = if screen_w < 680.0 {
-                "✈ X-56"
+                format!("{} X-56", icons::PLANE)
             } else if screen_w < 950.0 {
-                "✈ X-56 RHINO"
+                format!("{} X-56 RHINO", icons::PLANE)
             } else {
-                "✈ X-56 RHINO // RUST-EVDEV"
+                format!("{} X-56 RHINO // RUST-EVDEV", icons::PLANE)
             };
 
             ui.label(
@@ -405,7 +410,7 @@ impl X56App {
                         .inner_margin(Margin::symmetric(7, 4))
                         .show(ui, |ui| {
                             ui.label(
-                                RichText::new("👨‍✈️ PLT")
+                                RichText::new(format!("{} PLT", icons::PALETTE))
                                     .color(COLOR_PRIMARY)
                                     .size(10.5)
                                     .strong()
@@ -417,11 +422,11 @@ impl X56App {
 
                 // Botón rápido de Guardar con explorador nativo
                 let save_lbl = if screen_w < 780.0 {
-                    "💾"
+                    icons::SAVE.to_string()
                 } else {
-                    "💾 GUARDAR"
+                    format!("{} GUARDAR", icons::SAVE)
                 };
-                if theme::tactical_button(ui, save_lbl, false, false)
+                if theme::tactical_button(ui, &save_lbl, false, false)
                     .on_hover_text(
                         "Guardar perfil actual en archivo TOML mediante el explorador nativo",
                     )
@@ -434,11 +439,11 @@ impl X56App {
 
                 // Botón rápido de Cargar con explorador nativo
                 let load_lbl = if screen_w < 780.0 {
-                    "📂"
+                    icons::FOLDER_OPEN.to_string()
                 } else {
-                    "📂 CARGAR"
+                    format!("{} CARGAR", icons::FOLDER_OPEN)
                 };
-                if theme::tactical_button(ui, load_lbl, false, false)
+                if theme::tactical_button(ui, &load_lbl, false, false)
                     .on_hover_text("Abrir explorador de archivos para cargar un perfil TOML")
                     .clicked()
                 {
@@ -488,22 +493,22 @@ impl X56App {
             let nav_items = [
                 (
                     ActiveSubsystem::Curves,
-                    "📈",
+                    icons::SLIDERS_HORIZONTAL,
                     "Ejes y Curvas\nHALL 16-BIT & TRANSFER CURVES",
                 ),
                 (
                     ActiveSubsystem::Mapping,
-                    "🎮",
+                    icons::GAMEPAD,
                     "Botones y Mapeo\nUINPUT MATRIX // M1-M2-S1",
                 ),
                 (
                     ActiveSubsystem::RgbCalibrate,
-                    "💡",
+                    icons::LIGHTBULB,
                     "Iluminación RGB & Calibración\nLED PWM & HALL ZERO",
                 ),
                 (
                     ActiveSubsystem::Profiles,
-                    "🗂",
+                    icons::BOXES,
                     "Perfiles & Exportación\nTOML PROFILES & DOCTOR",
                 ),
             ];
@@ -593,27 +598,27 @@ impl X56App {
             let nav_items = [
                 (
                     ActiveSubsystem::Curves,
-                    "📈  Ejes y Curvas",
+                    format!("{}  Ejes y Curvas", icons::SLIDERS_HORIZONTAL),
                     "HALL 16-BIT & TRANSFER CURVES",
                 ),
                 (
                     ActiveSubsystem::Mapping,
-                    "🎮  Botones y Mapeo",
+                    format!("{}  Botones y Mapeo", icons::GAMEPAD),
                     "UINPUT MATRIX // M1-M2-S1",
                 ),
                 (
                     ActiveSubsystem::RgbCalibrate,
-                    "💡  Iluminación RGB & Calibración",
+                    format!("{}  Iluminación RGB & Calibración", icons::LIGHTBULB),
                     "LED PWM & HALL CENTER ZERO",
                 ),
                 (
                     ActiveSubsystem::Profiles,
-                    "🗂  Perfiles & Exportación",
+                    format!("{}  Perfiles & Exportación", icons::BOXES),
                     "TOML PROFILES & SYSTEM DOCTOR",
                 ),
             ];
 
-            for (sub, title, subtitle) in nav_items {
+            for (sub, ref title, subtitle) in nav_items {
                 let is_active = self.active_subsystem == sub;
                 let bg = if is_active {
                     COLOR_SURFACE_HIGH
@@ -834,14 +839,14 @@ impl X56App {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 // 4. APLICAR A UINPUT // GUARDAR (acento primario)
                 let apply_lbl = if screen_w < 720.0 {
-                    "💾"
+                    icons::SAVE.to_string()
                 } else if screen_w < 1100.0 {
-                    "💾 APLICAR"
+                    format!("{} APLICAR", icons::SAVE)
                 } else {
-                    "💾 APLICAR A UINPUT // GUARDAR"
+                    format!("{} APLICAR A UINPUT // GUARDAR", icons::SAVE)
                 };
 
-                if theme::tactical_button(ui, apply_lbl, false, true)
+                if theme::tactical_button(ui, &apply_lbl, false, true)
                     .on_hover_text("Aplicar configuración actual a uinput y guardar perfil")
                     .clicked()
                 {
@@ -856,14 +861,14 @@ impl X56App {
 
                 // 3. REVERTIR CAMBIOS
                 let revert_lbl = if screen_w < 720.0 {
-                    "↺"
+                    icons::ROTATE_CCW.to_string()
                 } else if screen_w < 1100.0 {
-                    "↺ REVERTIR"
+                    format!("{} REVERTIR", icons::ROTATE_CCW)
                 } else {
-                    "↺ REVERTIR CAMBIOS"
+                    format!("{} REVERTIR CAMBIOS", icons::ROTATE_CCW)
                 };
 
-                if theme::tactical_button(ui, revert_lbl, false, false)
+                if theme::tactical_button(ui, &revert_lbl, false, false)
                     .on_hover_text("Revertir cambios a los valores del hardware")
                     .clicked()
                 {
@@ -879,14 +884,14 @@ impl X56App {
 
                 // 2. RECALIBRAR CENTRO CERO
                 let recal_lbl = if screen_w < 720.0 {
-                    "🎯"
+                    icons::CROSSHAIR.to_string()
                 } else if screen_w < 1100.0 {
-                    "🎯 CALIBRAR"
+                    format!("{} CALIBRAR", icons::CROSSHAIR)
                 } else {
-                    "🎯 RECALIBRAR CENTRO CERO"
+                    format!("{} RECALIBRAR CENTRO CERO", icons::CROSSHAIR)
                 };
 
-                if theme::tactical_button(ui, recal_lbl, false, false)
+                if theme::tactical_button(ui, &recal_lbl, false, false)
                     .on_hover_text("Muestrear y recalibrar centro magnético Hall")
                     .clicked()
                 {
@@ -902,14 +907,14 @@ impl X56App {
 
                 // 1. MODAL TEST EN VIVO
                 let test_lbl = if screen_w < 720.0 {
-                    "⚡"
+                    icons::PLAY.to_string()
                 } else if screen_w < 1100.0 {
-                    "⚡ TEST"
+                    format!("{} TEST", icons::PLAY)
                 } else {
-                    "⚡ MODAL TEST EN VIVO"
+                    format!("{} MODAL TEST EN VIVO", icons::PLAY)
                 };
 
-                if theme::tactical_button(ui, test_lbl, self.show_live_test_modal, false)
+                if theme::tactical_button(ui, &test_lbl, self.show_live_test_modal, false)
                     .on_hover_text("Abrir ventana modal de telemetría y pruebas en vivo")
                     .clicked()
                 {
@@ -968,7 +973,8 @@ impl X56App {
                                 .monospace(),
                         );
                         ui.text_edit_singleline(&mut self.profile_path_buf);
-                        if theme::tactical_button(ui, "📁 EXPLORAR...", false, false).clicked() {
+                        let exp_btn = format!("{} EXPLORAR...", icons::FOLDER);
+                        if theme::tactical_button(ui, &exp_btn, false, false).clicked() {
                             self.spawn_file_dialog(ProfileDialogMode::Load);
                         }
                     });
@@ -976,19 +982,18 @@ impl X56App {
                     ui.add_space(8.0);
 
                     ui.horizontal_wrapped(|ui| {
-                        if theme::tactical_button(ui, "📂 CARGAR Y APLICAR PERFIL", false, true)
-                            .clicked()
-                        {
+                        let load_btn = format!("{} CARGAR Y APLICAR PERFIL", icons::FOLDER_OPEN);
+                        if theme::tactical_button(ui, &load_btn, false, true).clicked() {
                             self.load_profile_from_disk();
                         }
 
-                        if theme::tactical_button(ui, "💾 EXPORTAR / GUARDAR TOML", false, false)
-                            .clicked()
-                        {
+                        let exp_toml = format!("{} EXPORTAR / GUARDAR TOML", icons::SAVE);
+                        if theme::tactical_button(ui, &exp_toml, false, false).clicked() {
                             self.save_current_profile();
                         }
 
-                        if theme::tactical_button(ui, "💾 GUARDAR COMO...", false, false)
+                        let save_as = format!("{} GUARDAR COMO...", icons::SAVE);
+                        if theme::tactical_button(ui, &save_as, false, false)
                             .on_hover_text(
                                 "Guardar perfil en nueva ubicación con el explorador de archivos",
                             )
@@ -997,14 +1002,8 @@ impl X56App {
                             self.spawn_file_dialog(ProfileDialogMode::Save);
                         }
 
-                        if theme::tactical_button(
-                            ui,
-                            "🏭 RESTAURAR VALORES DE FÁBRICA",
-                            false,
-                            false,
-                        )
-                        .clicked()
-                        {
+                        let reset_btn = format!("{} RESTAURAR VALORES DE FÁBRICA", icons::FACTORY);
+                        if theme::tactical_button(ui, &reset_btn, false, false).clicked() {
                             let _ = ProfileManager::reset_defaults(TargetDevice::All);
                             self.curves_tab.read_from_hardware();
                             self.top_banner_message = Some((
@@ -1062,7 +1061,8 @@ impl X56App {
                 );
                 ui.horizontal(|ui| {
                     ui.text_edit_singleline(&mut self.profile_path_buf);
-                    if theme::tactical_button(ui, "📁 EXPLORAR...", false, false)
+                    let exp_btn = format!("{} EXPLORAR...", icons::FOLDER);
+                    if theme::tactical_button(ui, &exp_btn, false, false)
                         .on_hover_text("Abrir explorador de archivos nativo del sistema")
                         .clicked()
                     {
@@ -1074,20 +1074,21 @@ impl X56App {
                 ui.horizontal(|ui| {
                     match self.profile_dialog_mode {
                         ProfileDialogMode::Save => {
-                            if theme::tactical_button(ui, "💾 GUARDAR", false, true).clicked() {
+                            let save_btn = format!("{} GUARDAR", icons::SAVE);
+                            if theme::tactical_button(ui, &save_btn, false, true).clicked() {
                                 self.save_current_profile();
                             }
                         }
                         ProfileDialogMode::Load => {
-                            if theme::tactical_button(ui, "📂 CARGAR Y APLICAR", false, true)
-                                .clicked()
-                            {
+                            let load_btn = format!("{} CARGAR Y APLICAR", icons::FOLDER_OPEN);
+                            if theme::tactical_button(ui, &load_btn, false, true).clicked() {
                                 self.load_profile_from_disk();
                             }
                         }
                     }
 
-                    if theme::tactical_button(ui, "💾 GUARDAR COMO...", false, false)
+                    let save_as = format!("{} GUARDAR COMO...", icons::SAVE);
+                    if theme::tactical_button(ui, &save_as, false, false)
                         .on_hover_text("Guardar con nuevo nombre o ubicación en el explorador")
                         .clicked()
                     {
@@ -1095,7 +1096,8 @@ impl X56App {
                         self.spawn_file_dialog(ProfileDialogMode::Save);
                     }
 
-                    if theme::tactical_button(ui, "✖ CANCELAR", false, false).clicked() {
+                    let cancel_btn = format!("{} CANCELAR", icons::X);
+                    if theme::tactical_button(ui, &cancel_btn, false, false).clicked() {
                         self.show_profile_dialog = false;
                     }
                 });
@@ -1111,7 +1113,11 @@ impl X56App {
         let snap = self.button_monitor.snapshot();
         let mut open = self.show_live_test_modal;
 
-        egui::Window::new("⚡ MODAL TEST EN VIVO // TELEMETRÍA HOTAS & UINPUT")
+        let win_title = format!(
+            "{} MODAL TEST EN VIVO // TELEMETRÍA HOTAS & UINPUT",
+            icons::ACTIVITY
+        );
+        egui::Window::new(win_title)
             .open(&mut open)
             .collapsible(false)
             .resizable(true)

@@ -3,6 +3,8 @@
 use eframe::egui::{self, Color32, Ui};
 use x56_core::{RgbColor, TargetDevice, X56Manager};
 
+use crate::icons;
+
 pub struct RgbTab {
     pub target: TargetDevice,
     pub color_rgba: [f32; 3], // 0.0 .. 1.0 para egui color picker
@@ -139,7 +141,8 @@ impl RgbTab {
         ));
 
         ui.add_space(10.0);
-        if ui.button("💡 Aplicar Color al Hardware").clicked() {
+        let apply_lbl = format!("{} Aplicar Color al Hardware", icons::PALETTE);
+        if ui.button(apply_lbl).clicked() {
             self.apply_color();
         }
     }

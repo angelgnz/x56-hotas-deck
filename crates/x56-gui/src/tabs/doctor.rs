@@ -3,6 +3,8 @@
 use eframe::egui::{self, Color32, Ui};
 use x56_core::{CheckStatus, Doctor, DoctorReport};
 
+use crate::icons;
+
 pub struct DoctorTab {
     pub report: DoctorReport,
 }
@@ -29,19 +31,26 @@ impl DoctorTab {
         ui.add_space(8.0);
 
         ui.horizontal(|ui| {
-            if ui.button("🔄 Re-analizar Sistema").clicked() {
+            let refresh_lbl = format!("{} Re-analizar Sistema", icons::REFRESH_CW);
+            if ui.button(refresh_lbl).clicked() {
                 self.refresh();
             }
 
             let status_badge = if self.report.is_healthy() {
-                (Color32::from_rgb(40, 160, 40), "✓ SISTEMA 100% OPERATIVO")
+                (
+                    Color32::from_rgb(40, 160, 40),
+                    format!("{} SISTEMA 100% OPERATIVO", icons::CHECK),
+                )
             } else if self.report.fail_count > 0 {
                 (
                     Color32::from_rgb(200, 40, 40),
-                    "✗ SE REQUIEREN ACCIONES CORRECTIVAS",
+                    format!("{} SE REQUIEREN ACCIONES CORRECTIVAS", icons::X),
                 )
             } else {
-                (Color32::from_rgb(200, 150, 20), "! ADVERTENCIAS DETECTADAS")
+                (
+                    Color32::from_rgb(200, 150, 20),
+                    format!("{} ADVERTENCIAS DETECTADAS", icons::ALERT_TRIANGLE),
+                )
             };
 
             ui.colored_label(status_badge.0, status_badge.1);
@@ -58,9 +67,17 @@ impl DoctorTab {
                 ui.group(|ui| {
                     ui.horizontal(|ui| {
                         let (badge_col, tag) = match check.status {
-                            CheckStatus::Ok => (Color32::from_rgb(80, 220, 80), "[OK]"),
-                            CheckStatus::Warn => (Color32::from_rgb(255, 200, 50), "[WARN]"),
-                            CheckStatus::Fail => (Color32::from_rgb(255, 70, 70), "[FAIL]"),
+                            CheckStatus::Ok => (
+                                Color32::from_rgb(80, 220, 80),
+                                format!("{} OK", icons::CHECK),
+                            ),
+                            CheckStatus::Warn => (
+                                Color32::from_rgb(255, 200, 50),
+                                format!("{} WARN", icons::ALERT_TRIANGLE),
+                            ),
+                            CheckStatus::Fail => {
+                                (Color32::from_rgb(255, 70, 70), format!("{} FAIL", icons::X))
+                            }
                         };
 
                         ui.colored_label(badge_col, tag);

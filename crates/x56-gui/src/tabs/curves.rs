@@ -8,6 +8,7 @@ use eframe::egui::{
 use x56_core::{axis_name, AxisConfig, DeviceKind, X56Device, X56Manager};
 
 use crate::curve_math::{CurveParameters, CurveType, LiveAxesState, LiveInputPoller};
+use crate::icons;
 use crate::theme::{
     self, PhysicalSpring, COLOR_ERROR, COLOR_GRID_HUD, COLOR_ON_PRIMARY_CONTAINER,
     COLOR_ON_SURFACE, COLOR_ON_SURFACE_VARIANT, COLOR_OUTLINE, COLOR_OUTLINE_VARIANT,
@@ -292,13 +293,9 @@ impl CurvesTab {
             .show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     let is_stick = self.selected_device == DeviceKind::Stick;
-                    if theme::tactical_button(
-                        ui,
-                        "🕹 STICK // RHINO [VID:0738 PID:2215]",
-                        is_stick,
-                        false,
-                    )
-                    .clicked()
+                    let stick_lbl =
+                        format!("{} STICK // RHINO [VID:0738 PID:2215]", icons::JOYSTICK);
+                    if theme::tactical_button(ui, &stick_lbl, is_stick, false).clicked()
                         && !is_stick
                     {
                         self.selected_device = DeviceKind::Stick;
@@ -307,13 +304,8 @@ impl CurvesTab {
                     }
 
                     let is_throttle = self.selected_device == DeviceKind::Throttle;
-                    if theme::tactical_button(
-                        ui,
-                        "🚀 DUAL THROTTLE [VID:0738 PID:2216]",
-                        is_throttle,
-                        false,
-                    )
-                    .clicked()
+                    let thr_lbl = format!("{} DUAL THROTTLE [VID:0738 PID:2216]", icons::SLIDERS);
+                    if theme::tactical_button(ui, &thr_lbl, is_throttle, false).clicked()
                         && !is_throttle
                     {
                         self.selected_device = DeviceKind::Throttle;
@@ -338,9 +330,15 @@ impl CurvesTab {
                     theme::telemetry_badge(ui, "NODE:", node_str, COLOR_ON_SURFACE);
 
                     let (sync_label, sync_col) = if self.eeprom_synced {
-                        ("● EEPROM SYNCED", COLOR_TERTIARY_FIXED_DIM)
+                        (
+                            format!("{} EEPROM SYNCED", icons::CIRCLE_CHECK),
+                            COLOR_TERTIARY_FIXED_DIM,
+                        )
                     } else {
-                        ("● EEPROM MODIFIED", COLOR_WARNING_AMBER)
+                        (
+                            format!("{} EEPROM MODIFIED", icons::CIRCLE_ALERT),
+                            COLOR_WARNING_AMBER,
+                        )
                     };
                     Frame::new()
                         .fill(COLOR_SURFACE_LOWEST)
@@ -857,15 +855,18 @@ impl CurvesTab {
         theme::card_frame().show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(
-                    RichText::new("◈ MONITOR GIMBAL 2D & EJES SECUNDARIOS EN VIVO")
-                        .color(COLOR_PRIMARY)
-                        .size(12.0)
-                        .strong()
-                        .monospace(),
+                    RichText::new(format!(
+                        "{} MONITOR GIMBAL 2D & EJES SECUNDARIOS EN VIVO",
+                        icons::ACTIVITY
+                    ))
+                    .color(COLOR_PRIMARY)
+                    .size(12.0)
+                    .strong()
+                    .monospace(),
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(
-                        RichText::new("● LIVE TELEMETRY 50/1000Hz")
+                        RichText::new(format!("{} LIVE TELEMETRY 50/1000Hz", icons::RADIO))
                             .color(COLOR_TERTIARY_CONTAINER)
                             .size(10.0)
                             .monospace(),
@@ -1315,7 +1316,7 @@ impl CurvesTab {
                                     );
                                     if is_installed {
                                         ui.label(
-                                            RichText::new("✓ INSTALADO")
+                                            RichText::new(format!("{} INSTALADO", icons::CHECK))
                                                 .color(COLOR_TERTIARY_CONTAINER)
                                                 .size(10.0)
                                                 .strong()
