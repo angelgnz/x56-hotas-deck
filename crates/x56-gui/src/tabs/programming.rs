@@ -2247,13 +2247,6 @@ fn default_mapping_for(id: &str) -> DefaultMappingInfo {
             group_sc: "SC: FLIGHT",
             icon: "⚡",
         },
-        "stick_flying_pinkie" => DefaultMappingInfo {
-            action: "PINKIE SHIFT LAYER MODIFIER",
-            key_display: "[MOD-SHIFT]",
-            map_type: "HOLD",
-            group_sc: "SC: SHIFT LAYER",
-            icon: "🔄",
-        },
         "stick_pov_up" | "stick_pov_right" | "stick_pov_down" | "stick_pov_left" => {
             DefaultMappingInfo {
                 action: "VISTA COCKPIT POV // HEAD LOOK",
@@ -2725,30 +2718,20 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
             SchematicNode {
                 id: "stick_btn_d",
                 short_label: "D",
-                full_name: "Botón D (Pulgar Inferior)",
+                full_name: "Botón D (Meñique)",
                 norm_x: 0.22,
                 norm_y: 0.39,
                 radius: 11.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
-            // Sección F: Pinkie y Flying Pinkie
+            // Sección F: Palanca Meñique (Pinkie Lever)
             SchematicNode {
                 id: "stick_pinkie",
                 short_label: "PNK",
-                full_name: "Botón Meñique (Pinkie)",
+                full_name: "Palanca Meñique (Pinkie Lever)",
                 norm_x: 0.44,
                 norm_y: 0.59,
-                radius: 11.0,
-                is_rect: true,
-                rect_size: Vec2::new(30.0, 16.0),
-            },
-            SchematicNode {
-                id: "stick_flying_pinkie",
-                short_label: "FLY",
-                full_name: "Palanca Meñique (Flying Pinkie)",
-                norm_x: 0.56,
-                norm_y: 0.68,
                 radius: 11.0,
                 is_rect: true,
                 rect_size: Vec2::new(34.0, 16.0),

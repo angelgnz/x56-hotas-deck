@@ -170,8 +170,8 @@ fn stick_catalog() -> Vec<ButtonDescriptor> {
             "Botón C (Minipalanca Push)",
             "B. Minipalanca Analógica",
         ),
-        btn("stick_btn_d", S, 4, "D", "Botón D (Pulgar Inferior)", GD),
-        btn("stick_pinkie", S, 5, "F", "Botón Meñique (Pinkie)", GF),
+        btn("stick_btn_d", S, 4, "D", "Botón D (Meñique)", GD),
+        btn("stick_pinkie", S, 5, "F", "Palanca Meñique (Pinkie)", GF),
     ];
 
     let h1 = [
@@ -192,15 +192,6 @@ fn stick_catalog() -> Vec<ButtonDescriptor> {
     for (i, (id, label)) in h2.into_iter().enumerate() {
         v.push(btn(id, S, 10 + i as u8, "C", label, GC));
     }
-
-    v.push(btn(
-        "stick_flying_pinkie",
-        S,
-        14,
-        "F",
-        "Palanca Meñique (Flying Pinkie)",
-        GF,
-    ));
 
     let pov = [
         ("stick_pov_up", "POV Vista Arriba"),
@@ -1484,7 +1475,7 @@ mod tests {
     #[test]
     fn stick_catalog_matches_spec() {
         let c = catalog_for_device(DeviceKind::Stick);
-        assert_eq!(c.len(), 19);
+        assert_eq!(c.len(), 18);
         assert!(c.iter().all(|d| d.device == DeviceKind::Stick));
         let t = find(&c, "stick_trigger");
         assert_eq!((t.index, t.evdev_code, t.code_label), (0, 0x120, "D"));
@@ -1492,7 +1483,8 @@ mod tests {
         let cb = find(&c, "stick_btn_c");
         assert_eq!((cb.evdev_code, cb.code_label), (0x123, "B"));
         assert_eq!(cb.group, "B. Minipalanca Analógica");
-        assert_eq!(find(&c, "stick_flying_pinkie").evdev_code, 0x12e);
+        let sp = find(&c, "stick_pinkie");
+        assert_eq!((sp.evdev_code, sp.code_label), (0x125, "F"));
         assert_eq!(find(&c, "stick_h1_up").evdev_code, 0x126);
         assert_eq!(find(&c, "stick_h1_left").evdev_code, 0x129);
         assert_eq!(find(&c, "stick_h2_up").evdev_code, 0x12a);
@@ -1528,7 +1520,7 @@ mod tests {
     #[test]
     fn catalog_ids_unique_and_complete() {
         let all = all_button_descriptors();
-        assert_eq!(all.len(), 52);
+        assert_eq!(all.len(), 51);
         let ids: HashSet<_> = all.iter().map(|d| d.id.clone()).collect();
         assert_eq!(ids.len(), all.len());
     }
@@ -1701,5 +1693,16 @@ rgb = "#0088ff"
         let _ = m.uinput_available();
         assert!(m.drain_events().is_empty());
         drop(m);
+    }
+
+    #[test]
+    fn test_live_stick_buttons_no_ghost_press() {
+        let mon = ButtonMonitor::new();
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let snap = mon.snapshot();
+        assert!(
+            !snap.pressed_buttons.contains("stick_flying_pinkie"),
+            "stick_flying_pinkie no debe existir ni detectarse como presionado"
+        );
     }
 }

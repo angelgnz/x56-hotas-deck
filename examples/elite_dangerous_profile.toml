@@ -128,11 +128,6 @@ button_id = "stick_pinkie"
 name = "Alternar Asistencias de Vuelo (FA Off / On)"
 keys = ["Z"]
 
-[programming.m1.cells.stick_flying_pinkie]
-button_id = "stick_flying_pinkie"
-name = "Cambiar Grupo de Fuego (Siguiente)"
-keys = ["N"]
-
 [programming.m1.cells.stick_h1_up]
 button_id = "stick_h1_up"
 name = "Distribuidor SYS / Sistemas"
@@ -271,11 +266,6 @@ button_id = "stick_pinkie"
 name = "Maniobra Vectorial FA-Off"
 keys = ["Z"]
 
-[programming.m2.cells.stick_flying_pinkie]
-button_id = "stick_flying_pinkie"
-name = "Ciclar Grupo de Armamento"
-keys = ["N"]
-
 [programming.m2.cells.stick_h1_up]
 button_id = "stick_h1_up"
 name = "Energía a Escudos (SYS)"
@@ -413,11 +403,6 @@ keys = ["U"]
 button_id = "stick_pinkie"
 name = "Freno de Mano SRV (Handbrake)"
 keys = ["X"]
-
-[programming.s1.cells.stick_flying_pinkie]
-button_id = "stick_flying_pinkie"
-name = "Alternar Modo de Cabina (Análisis / Combate)"
-keys = ["M"]
 
 [programming.s1.cells.stick_h1_up]
 button_id = "stick_h1_up"
