@@ -175,19 +175,19 @@ fn stick_catalog() -> Vec<ButtonDescriptor> {
     ];
 
     let h1 = [
-        ("stick_h1_up", "HAT 1 (Castle) Arriba"),
-        ("stick_h1_right", "HAT 1 (Castle) Derecha"),
-        ("stick_h1_down", "HAT 1 (Castle) Abajo"),
-        ("stick_h1_left", "HAT 1 (Castle) Izquierda"),
+        ("stick_h1_up", "HAT 1 (Witches) Arriba"),
+        ("stick_h1_right", "HAT 1 (Witches) Derecha"),
+        ("stick_h1_down", "HAT 1 (Witches) Abajo"),
+        ("stick_h1_left", "HAT 1 (Witches) Izquierda"),
     ];
     for (i, (id, label)) in h1.into_iter().enumerate() {
         v.push(btn(id, S, 6 + i as u8, "C", label, GC));
     }
     let h2 = [
-        ("stick_h2_up", "HAT 2 (Witches) Arriba"),
-        ("stick_h2_right", "HAT 2 (Witches) Derecha"),
-        ("stick_h2_down", "HAT 2 (Witches) Abajo"),
-        ("stick_h2_left", "HAT 2 (Witches) Izquierda"),
+        ("stick_h2_up", "HAT 2 (Castle) Arriba"),
+        ("stick_h2_right", "HAT 2 (Castle) Derecha"),
+        ("stick_h2_down", "HAT 2 (Castle) Abajo"),
+        ("stick_h2_left", "HAT 2 (Castle) Izquierda"),
     ];
     for (i, (id, label)) in h2.into_iter().enumerate() {
         v.push(btn(id, S, 10 + i as u8, "C", label, GC));
@@ -1485,9 +1485,13 @@ mod tests {
         assert_eq!(cb.group, "B. Minipalanca Analógica");
         let sp = find(&c, "stick_pinkie");
         assert_eq!((sp.evdev_code, sp.code_label), (0x125, "F"));
-        assert_eq!(find(&c, "stick_h1_up").evdev_code, 0x126);
+        let h1u = find(&c, "stick_h1_up");
+        assert_eq!(h1u.evdev_code, 0x126);
+        assert_eq!(h1u.label, "HAT 1 (Witches) Arriba");
         assert_eq!(find(&c, "stick_h1_left").evdev_code, 0x129);
-        assert_eq!(find(&c, "stick_h2_up").evdev_code, 0x12a);
+        let h2u = find(&c, "stick_h2_up");
+        assert_eq!(h2u.evdev_code, 0x12a);
+        assert_eq!(h2u.label, "HAT 2 (Castle) Arriba");
         assert_eq!(find(&c, "stick_h2_left").evdev_code, 0x12d);
         let pov = find(&c, "stick_pov_left");
         assert_eq!((pov.index, pov.evdev_code, pov.code_label), (103, 0, "A"));

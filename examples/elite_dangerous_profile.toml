@@ -130,43 +130,43 @@ keys = ["Z"]
 
 [programming.m1.cells.stick_h1_up]
 button_id = "stick_h1_up"
-name = "Distribuidor SYS / Sistemas"
-keys = ["Up"]
-
-[programming.m1.cells.stick_h1_left]
-button_id = "stick_h1_left"
-name = "Distribuidor ENG / Motores"
-keys = ["Left"]
-
-[programming.m1.cells.stick_h1_right]
-button_id = "stick_h1_right"
-name = "Distribuidor WEP / Armas"
-keys = ["Right"]
-
-[programming.m1.cells.stick_h1_down]
-button_id = "stick_h1_down"
-name = "Distribuidor RST / Equilibrar"
-keys = ["Down"]
-
-[programming.m1.cells.stick_h2_up]
-button_id = "stick_h2_up"
 name = "Panel de Comunicaciones (Arriba)"
 keys = ["2"]
 
-[programming.m1.cells.stick_h2_left]
-button_id = "stick_h2_left"
+[programming.m1.cells.stick_h1_left]
+button_id = "stick_h1_left"
 name = "Panel de Navegación (Izquierda)"
 keys = ["1"]
 
-[programming.m1.cells.stick_h2_right]
-button_id = "stick_h2_right"
+[programming.m1.cells.stick_h1_right]
+button_id = "stick_h1_right"
 name = "Panel Interno / Sistemas (Derecha)"
 keys = ["4"]
 
-[programming.m1.cells.stick_h2_down]
-button_id = "stick_h2_down"
+[programming.m1.cells.stick_h1_down]
+button_id = "stick_h1_down"
 name = "Panel de Rol / SRV / Caza (Abajo)"
 keys = ["3"]
+
+[programming.m1.cells.stick_h2_up]
+button_id = "stick_h2_up"
+name = "Distribuidor SYS / Sistemas"
+keys = ["Up"]
+
+[programming.m1.cells.stick_h2_left]
+button_id = "stick_h2_left"
+name = "Distribuidor ENG / Motores"
+keys = ["Left"]
+
+[programming.m1.cells.stick_h2_right]
+button_id = "stick_h2_right"
+name = "Distribuidor WEP / Armas"
+keys = ["Right"]
+
+[programming.m1.cells.stick_h2_down]
+button_id = "stick_h2_down"
+name = "Distribuidor RST / Equilibrar"
+keys = ["Down"]
 
 [programming.m1.cells.thr_btn_e]
 button_id = "thr_btn_e"
@@ -268,43 +268,43 @@ keys = ["Z"]
 
 [programming.m2.cells.stick_h1_up]
 button_id = "stick_h1_up"
-name = "Energía a Escudos (SYS)"
-keys = ["Up"]
-
-[programming.m2.cells.stick_h1_left]
-button_id = "stick_h1_left"
-name = "Energía a Propulsores (ENG)"
-keys = ["Left"]
-
-[programming.m2.cells.stick_h1_right]
-button_id = "stick_h1_right"
-name = "Energía a Armas (WEP)"
-keys = ["Right"]
-
-[programming.m2.cells.stick_h1_down]
-button_id = "stick_h1_down"
-name = "Restablecer Distribuidor de Energía"
-keys = ["Down"]
-
-[programming.m2.cells.stick_h2_up]
-button_id = "stick_h2_up"
 name = "Ciclar Subsistema Siguiente (Planta de Energía)"
 keys = ["Y"]
 
-[programming.m2.cells.stick_h2_down]
-button_id = "stick_h2_down"
+[programming.m2.cells.stick_h1_down]
+button_id = "stick_h1_down"
 name = "Ciclar Subsistema Anterior"
 keys = ["LShift", "Y"]
 
-[programming.m2.cells.stick_h2_right]
-button_id = "stick_h2_right"
+[programming.m2.cells.stick_h1_right]
+button_id = "stick_h1_right"
 name = "Siguiente Contacto Hostil"
 keys = ["G"]
 
-[programming.m2.cells.stick_h2_left]
-button_id = "stick_h2_left"
+[programming.m2.cells.stick_h1_left]
+button_id = "stick_h1_left"
 name = "Contacto Hostil Anterior"
 keys = ["LShift", "G"]
+
+[programming.m2.cells.stick_h2_up]
+button_id = "stick_h2_up"
+name = "Energía a Escudos (SYS)"
+keys = ["Up"]
+
+[programming.m2.cells.stick_h2_left]
+button_id = "stick_h2_left"
+name = "Energía a Propulsores (ENG)"
+keys = ["Left"]
+
+[programming.m2.cells.stick_h2_right]
+button_id = "stick_h2_right"
+name = "Energía a Armas (WEP)"
+keys = ["Right"]
+
+[programming.m2.cells.stick_h2_down]
+button_id = "stick_h2_down"
+name = "Restablecer Distribuidor de Energía"
+keys = ["Down"]
 
 [programming.m2.cells.thr_btn_e]
 button_id = "thr_btn_e"
@@ -404,23 +404,23 @@ button_id = "stick_pinkie"
 name = "Freno de Mano SRV (Handbrake)"
 keys = ["X"]
 
-[programming.s1.cells.stick_h1_up]
-button_id = "stick_h1_up"
+[programming.s1.cells.stick_h2_up]
+button_id = "stick_h2_up"
 name = "Distribuidor SYS / Escudos"
 keys = ["Up"]
 
-[programming.s1.cells.stick_h1_left]
-button_id = "stick_h1_left"
+[programming.s1.cells.stick_h2_left]
+button_id = "stick_h2_left"
 name = "Distribuidor ENG / Motores"
 keys = ["Left"]
 
-[programming.s1.cells.stick_h1_right]
-button_id = "stick_h1_right"
+[programming.s1.cells.stick_h2_right]
+button_id = "stick_h2_right"
 name = "Distribuidor WEP / Láseres de Minería"
 keys = ["Right"]
 
-[programming.s1.cells.stick_h1_down]
-button_id = "stick_h1_down"
+[programming.s1.cells.stick_h2_down]
+button_id = "stick_h2_down"
 name = "Distribuidor RST / Equilibrar"
 keys = ["Down"]
 

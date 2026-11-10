@@ -2258,20 +2258,20 @@ fn default_mapping_for(id: &str) -> DefaultMappingInfo {
         }
         "stick_h1_up" | "stick_h1_right" | "stick_h1_down" | "stick_h1_left" => {
             DefaultMappingInfo {
-                action: "DISTRIBUCIÓN ENERGÍA ESCUDOS",
-                key_display: "[F5..F8]",
-                map_type: "INSTANTÁNEO",
-                group_sc: "SC: POWER",
-                icon: "⚡",
-            }
-        }
-        "stick_h2_up" | "stick_h2_right" | "stick_h2_down" | "stick_h2_left" => {
-            DefaultMappingInfo {
                 action: "GESTIÓN BLANCOS RADAR // SUBSISTEMAS",
                 key_display: "[P/O/I/U]",
                 map_type: "INSTANTÁNEO",
                 group_sc: "SC: RADAR",
                 icon: "📡",
+            }
+        }
+        "stick_h2_up" | "stick_h2_right" | "stick_h2_down" | "stick_h2_left" => {
+            DefaultMappingInfo {
+                action: "DISTRIBUCIÓN ENERGÍA ESCUDOS",
+                key_display: "[F5..F8]",
+                map_type: "INSTANTÁNEO",
+                group_sc: "SC: POWER",
+                icon: "⚡",
             }
         }
         "thr_sw_1" => DefaultMappingInfo {
@@ -2602,11 +2602,11 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
-            // Sección C: HAT 1 (Castle)
+            // Sección C: HAT 1 (Witches)
             SchematicNode {
                 id: "stick_h1_up",
                 short_label: "1▲",
-                full_name: "HAT 1 (Castle) Arriba",
+                full_name: "HAT 1 (Witches) Arriba",
                 norm_x: 0.28,
                 norm_y: 0.26,
                 radius: 9.0,
@@ -2616,7 +2616,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
             SchematicNode {
                 id: "stick_h1_right",
                 short_label: "1▶",
-                full_name: "HAT 1 (Castle) Derecha",
+                full_name: "HAT 1 (Witches) Derecha",
                 norm_x: 0.35,
                 norm_y: 0.29,
                 radius: 9.0,
@@ -2626,7 +2626,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
             SchematicNode {
                 id: "stick_h1_down",
                 short_label: "1▼",
-                full_name: "HAT 1 (Castle) Abajo",
+                full_name: "HAT 1 (Witches) Abajo",
                 norm_x: 0.28,
                 norm_y: 0.32,
                 radius: 9.0,
@@ -2636,18 +2636,18 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
             SchematicNode {
                 id: "stick_h1_left",
                 short_label: "1◀",
-                full_name: "HAT 1 (Castle) Izquierda",
+                full_name: "HAT 1 (Witches) Izquierda",
                 norm_x: 0.21,
                 norm_y: 0.29,
                 radius: 9.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
-            // Sección C: HAT 2 (Witches)
+            // Sección C: HAT 2 (Castle)
             SchematicNode {
                 id: "stick_h2_up",
                 short_label: "2▲",
-                full_name: "HAT 2 (Witches) Arriba",
+                full_name: "HAT 2 (Castle) Arriba",
                 norm_x: 0.72,
                 norm_y: 0.26,
                 radius: 9.0,
@@ -2657,7 +2657,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
             SchematicNode {
                 id: "stick_h2_right",
                 short_label: "2▶",
-                full_name: "HAT 2 (Witches) Derecha",
+                full_name: "HAT 2 (Castle) Derecha",
                 norm_x: 0.79,
                 norm_y: 0.29,
                 radius: 9.0,
@@ -2667,7 +2667,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
             SchematicNode {
                 id: "stick_h2_down",
                 short_label: "2▼",
-                full_name: "HAT 2 (Witches) Abajo",
+                full_name: "HAT 2 (Castle) Abajo",
                 norm_x: 0.72,
                 norm_y: 0.32,
                 radius: 9.0,
@@ -2677,7 +2677,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
             SchematicNode {
                 id: "stick_h2_left",
                 short_label: "2◀",
-                full_name: "HAT 2 (Witches) Izquierda",
+                full_name: "HAT 2 (Castle) Izquierda",
                 norm_x: 0.65,
                 norm_y: 0.29,
                 radius: 9.0,

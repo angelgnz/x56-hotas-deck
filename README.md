@@ -536,7 +536,7 @@ Inspirada directamente en la **Sección 8 del Manual de Usuario Oficial Logitech
 
 - **Esquema Técnico Interactivo 2D con `egui::Painter`**:
   - Dibuja diagramas esquemáticos vectoriales de alta legibilidad técnica para el Stick y el Throttle organizados por las secciones del manual del fabricante:
-    - **Stick**: Sección A (*POV 8-Way*), Sección B (*Minipalanca analógica Push C*), Sección C (*Selectores Thumb HAT H1 Castle y H2 Witches*), Sección D (*Gatillo principal y Botones A, B, D*), Sección F (*Palanca Meñique Pinkie*).
+    - **Stick**: Sección A (*POV 8-Way*), Sección B (*Minipalanca analógica Push C*), Sección C (*Selectores Thumb HAT H1 Witches y H2 Castle*), Sección D (*Gatillo principal y Botones A, B, D*), Sección F (*Palanca Meñique Pinkie*).
     - **Throttle**: Sección A (*Giratorios F/G Push y Rueda Scroll*), Sección B (*Control deslizante de 2 posiciones SLD*), Sección C (*Botones E, H, I, Minipalanca Push y HATs H3 y H4*), Sección D (*Empuñaduras dobles gemelas*), Sección F (*Selector rotativo de modo M1/M2/S1*), Sección G (*Conmutadores de base TGL 1 a 7 con SW 1 a 14*).
   - **Retroalimentación luminosa en vivo**:
     - **Verde Neón**: Se ilumina instantáneamente al pulsar físicamente el botón en el hardware.
