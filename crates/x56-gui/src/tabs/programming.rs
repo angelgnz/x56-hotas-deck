@@ -776,6 +776,15 @@ impl ProgrammingTab {
     // COLUMNA IZQUIERDA: TARJETA 2 - MAPA VECTORIAL DE ENTRADAS 2D
     // ========================================================================
 
+    /// Compacta el espaciado horizontal de los controles del mapa vectorial hacia el centro (0.5)
+    /// preservando la proporción física original de los botones dentro del canvas de fondo.
+    #[inline]
+    fn compact_vector_map_x(rect: egui::Rect, norm_x: f32) -> f32 {
+        let center_x = rect.min.x + rect.width() * 0.50;
+        let factor = 0.80; // Compacta un 20% el ancho de dispersión horizontal
+        center_x + (norm_x - 0.50) * rect.width() * factor
+    }
+
     fn render_vector_map_card(&mut self, ui: &mut Ui, snapshot: &LiveButtonsSnapshot) {
         theme::card_frame().show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -920,7 +929,7 @@ impl ProgrammingTab {
 
             for node in &nodes {
                 let center = egui::pos2(
-                    rect.min.x + node.norm_x * rect.width(),
+                    Self::compact_vector_map_x(rect, node.norm_x),
                     rect.min.y + node.norm_y * rect.height(),
                 );
 
@@ -1119,11 +1128,11 @@ impl ProgrammingTab {
         // Cabezal superior del Stick (enmarca B, Witch, A, POV y Castle)
         let head_rect = egui::Rect::from_min_max(
             egui::pos2(
-                rect.min.x + rect.width() * 0.14,
+                Self::compact_vector_map_x(rect, 0.14),
                 rect.min.y + rect.height() * 0.04,
             ),
             egui::pos2(
-                rect.min.x + rect.width() * 0.86,
+                Self::compact_vector_map_x(rect, 0.86),
                 rect.min.y + rect.height() * 0.38,
             ),
         );
@@ -1132,7 +1141,7 @@ impl ProgrammingTab {
         // Biseles circulares de fondo para los 3 Hats (según diagrama de usuario)
         // 1. POV 8-Way (Cluster POV)
         let pov_c = egui::pos2(
-            rect.min.x + rect.width() * 0.246,
+            Self::compact_vector_map_x(rect, 0.246),
             rect.min.y + rect.height() * 0.242,
         );
         painter.circle_stroke(pov_c, 24.0, Stroke::new(0.8, COLOR_OUTLINE_VARIANT));
@@ -1146,7 +1155,7 @@ impl ProgrammingTab {
 
         // 2. Witch-Hat (HAT 1)
         let witch_c = egui::pos2(
-            rect.min.x + rect.width() * 0.587,
+            Self::compact_vector_map_x(rect, 0.587),
             rect.min.y + rect.height() * 0.121,
         );
         painter.circle_stroke(witch_c, 24.0, Stroke::new(0.8, COLOR_OUTLINE_VARIANT));
@@ -1160,7 +1169,7 @@ impl ProgrammingTab {
 
         // 3. Castle-Hat (HAT 2)
         let castle_c = egui::pos2(
-            rect.min.x + rect.width() * 0.690,
+            Self::compact_vector_map_x(rect, 0.690),
             rect.min.y + rect.height() * 0.285,
         );
         painter.circle_stroke(castle_c, 24.0, Stroke::new(0.8, COLOR_OUTLINE_VARIANT));
@@ -1175,11 +1184,11 @@ impl ProgrammingTab {
         // Mástil y empuñadura ergonómica centrada (cubre Trigger, C, Pinky y D)
         let shaft_rect = egui::Rect::from_min_max(
             egui::pos2(
-                rect.min.x + rect.width() * 0.30,
+                Self::compact_vector_map_x(rect, 0.30),
                 rect.min.y + rect.height() * 0.36,
             ),
             egui::pos2(
-                rect.min.x + rect.width() * 0.70,
+                Self::compact_vector_map_x(rect, 0.70),
                 rect.min.y + rect.height() * 0.92,
             ),
         );
@@ -1194,27 +1203,22 @@ impl ProgrammingTab {
         // Doble cuadrante de gases
         let lever_rect = egui::Rect::from_min_max(
             egui::pos2(
-                rect.min.x + rect.width() * 0.14,
+                Self::compact_vector_map_x(rect, 0.14),
                 rect.min.y + rect.height() * 0.08,
             ),
             egui::pos2(
-                rect.min.x + rect.width() * 0.86,
+                Self::compact_vector_map_x(rect, 0.86),
                 rect.min.y + rect.height() * 0.46,
             ),
         );
         painter.rect_stroke(lever_rect, 6.0, outline, egui::StrokeKind::Inside);
 
+        let sep_x = Self::compact_vector_map_x(rect, 0.50);
         // Separador central de palancas gemelas
         painter.line_segment(
             [
-                egui::pos2(
-                    rect.min.x + rect.width() * 0.50,
-                    rect.min.y + rect.height() * 0.08,
-                ),
-                egui::pos2(
-                    rect.min.x + rect.width() * 0.50,
-                    rect.min.y + rect.height() * 0.46,
-                ),
+                egui::pos2(sep_x, rect.min.y + rect.height() * 0.08),
+                egui::pos2(sep_x, rect.min.y + rect.height() * 0.46),
             ],
             Stroke::new(1.0, COLOR_OUTLINE_VARIANT),
         );
@@ -1222,21 +1226,18 @@ impl ProgrammingTab {
         // Base del Throttle con bahía de conmutadores TGL 1-7
         let base_rect = egui::Rect::from_min_max(
             egui::pos2(
-                rect.min.x + rect.width() * 0.10,
+                Self::compact_vector_map_x(rect, 0.10),
                 rect.min.y + rect.height() * 0.50,
             ),
             egui::pos2(
-                rect.min.x + rect.width() * 0.90,
+                Self::compact_vector_map_x(rect, 0.90),
                 rect.min.y + rect.height() * 0.93,
             ),
         );
         painter.rect_stroke(base_rect, 6.0, accent, egui::StrokeKind::Inside);
 
         painter.text(
-            egui::pos2(
-                rect.min.x + rect.width() * 0.50,
-                rect.min.y + rect.height() * 0.53,
-            ),
+            egui::pos2(sep_x, rect.min.y + rect.height() * 0.53),
             egui::Align2::CENTER_CENTER,
             "DUAL THROTTLE CONSOLE // TGL 1-7 BAY",
             egui::FontId::monospace(8.5),
