@@ -6,7 +6,6 @@ use x56_core::{RgbColor, TargetDevice, X56Manager};
 pub struct RgbTab {
     pub target: TargetDevice,
     pub color_rgba: [f32; 3], // 0.0 .. 1.0 para egui color picker
-    pub sync_both: bool,
     pub status_message: Option<(String, bool)>,
 }
 
@@ -15,7 +14,6 @@ impl Default for RgbTab {
         Self {
             target: TargetDevice::All,
             color_rgba: [0.0, 1.0, 1.0], // Cyan de fábrica
-            sync_both: true,
             status_message: None,
         }
     }
@@ -32,17 +30,18 @@ impl RgbTab {
 
     pub fn apply_color(&mut self) {
         let color = self.current_rgb_color();
-        let target = if self.sync_both {
-            TargetDevice::All
-        } else {
-            self.target
-        };
+        let target = self.target;
 
         match X56Manager::set_rgb(target, color) {
             Ok(count) => {
                 let hex = format!("#{:02x}{:02x}{:02x}", color.r, color.g, color.b);
+                let target_desc = match target {
+                    TargetDevice::All => "Ambos",
+                    TargetDevice::Stick => "Stick",
+                    TargetDevice::Throttle => "Throttle",
+                };
                 self.status_message = Some((
-                    format!("Color RGB {hex} aplicado en {count} dispositivo(s)."),
+                    format!("Color RGB {hex} aplicado en {count} dispositivo(s) [{target_desc}]."),
                     false,
                 ));
             }

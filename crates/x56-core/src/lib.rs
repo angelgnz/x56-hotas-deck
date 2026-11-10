@@ -223,33 +223,44 @@ impl X56Manager {
         X56Device::enumerate()
     }
 
-    /// Configura la iluminación LED RGB en el dispositivo o dispositivos indicados.
+    /// Configura la iluminación LED RGB en el dispositivo o dispositivos indicados
+    /// mediante una única sesión HID unificada ([`X56Device::set_rgb_unified`]).
     pub fn set_rgb(target: TargetDevice, color: RgbColor) -> Result<usize, CoreError> {
-        let mut count = 0;
-        let targets = match target {
-            TargetDevice::Stick => vec![DeviceKind::Stick],
-            TargetDevice::Throttle => vec![DeviceKind::Throttle],
-            TargetDevice::All => vec![DeviceKind::Stick, DeviceKind::Throttle],
+        let (stick_color, throttle_color) = match target {
+            TargetDevice::Stick => (Some(color), None),
+            TargetDevice::Throttle => (None, Some(color)),
+            TargetDevice::All => (Some(color), Some(color)),
         };
 
-        for kind in targets {
-            match X56Device::open(kind) {
-                Ok(dev) => {
-                    dev.set_rgb(color)?;
-                    count += 1;
-                }
-                Err(HidTransportError::DeviceNotFound(_)) => {
-                    if target != TargetDevice::All {
-                        return Err(CoreError::Transport(HidTransportError::DeviceNotFound(
-                            kind,
-                        )));
-                    }
-                }
-                Err(err) => return Err(CoreError::Transport(err)),
+        log::info!(
+            "X56Manager::set_rgb target={:?} color=#{:02x}{:02x}{:02x}",
+            target,
+            color.r,
+            color.g,
+            color.b
+        );
+
+        let (stick_ok, throttle_ok) = X56Device::set_rgb_unified(stick_color, throttle_color)?;
+
+        match target {
+            TargetDevice::Stick if !stick_ok => {
+                log::warn!("X56Manager::set_rgb failed: Stick not found or unreachable");
+                Err(CoreError::Transport(HidTransportError::DeviceNotFound(
+                    DeviceKind::Stick,
+                )))
+            }
+            TargetDevice::Throttle if !throttle_ok => {
+                log::warn!("X56Manager::set_rgb failed: Throttle not found or unreachable");
+                Err(CoreError::Transport(HidTransportError::DeviceNotFound(
+                    DeviceKind::Throttle,
+                )))
+            }
+            _ => {
+                let count = (stick_ok as usize) + (throttle_ok as usize);
+                log::debug!("X56Manager::set_rgb updated {count} device(s)");
+                Ok(count)
             }
         }
-
-        Ok(count)
     }
 
     /// Lee la configuración de un eje específico en el dispositivo indicado.

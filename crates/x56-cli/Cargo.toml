@@ -13,6 +13,8 @@ path = "src/main.rs"
 x56-core = { path = "../x56-core" }
 clap = { version = "4.5", features = ["derive", "cargo"] }
 serde_json = "1.0"
+log = "0.4"
+env_logger = "0.11"
 
 [package.metadata.deb]
 name = "x56linux"

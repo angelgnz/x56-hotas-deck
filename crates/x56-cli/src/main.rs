@@ -21,6 +21,10 @@ use x56_core::{
     long_about = "Permite configurar iluminación LED RGB, curvas de respuesta de ejes, zonas muertas y calibración de hardware en Linux mediante hidraw sin desconectar el driver del joystick."
 )]
 struct Cli {
+    /// Activa modo debug y registro detallado de eventos
+    #[arg(long, global = true)]
+    debug: bool,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -307,6 +311,18 @@ struct CalibrateArgs {
 }
 
 fn main() -> ExitCode {
+    let debug_flag = std::env::args().any(|arg| arg == "--debug" || arg == "-d");
+    let rust_log_set = std::env::var_os("RUST_LOG").is_some();
+    if debug_flag || rust_log_set {
+        let mut builder = env_logger::Builder::from_default_env();
+        if debug_flag && !rust_log_set {
+            builder.filter_level(log::LevelFilter::Debug);
+        }
+        builder.format_timestamp_millis();
+        builder.format_module_path(true);
+        let _ = builder.try_init();
+    }
+
     let cli = Cli::parse();
 
     match cli.command {

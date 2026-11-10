@@ -9,13 +9,20 @@
 
 use std::ffi::{CStr, CString};
 use std::fmt;
+use std::time::Duration;
 
 use hidapi::{DeviceInfo, HidApi, HidDevice, HidError};
+use log::{debug, error, info, warn};
 use x56_proto::{
     AxisConfig, PacketAxisConfig, PacketAxisQuery, PacketAxisSelect1, PacketAxisSelect2,
     PacketCommit, PacketRgb, ProtoError, RgbColor, AXIS_RESPONSE_MIN_LEN, PACKET_LEN,
     REPORT_ID_AXIS_RESPONSE,
 };
+
+/// Retardo de asentamiento entre `PacketRgb` (Report `0x09`) y `PacketCommit` (Report `0x01`)
+/// requerido por el microcontrolador del Stick (especialmente Saitek `0738:2221`) para
+/// evitar que descarte el Feature Report de confirmación durante el volcado del buffer USB EP0.
+pub const RGB_COMMIT_SETTLE_DELAY: Duration = Duration::from_millis(4);
 
 /// Vendor ID de Saitek / Mad Catz.
 pub const SAITEK_VID: u16 = 0x0738;
@@ -255,25 +262,64 @@ impl X56Device {
 
     /// Versión falible de [`Self::enumerate`] que propaga errores de inicialización de `hidapi`.
     pub fn try_enumerate() -> Result<Vec<X56Descriptor>, HidTransportError> {
-        let api = HidApi::new()?;
-        let descriptors = api
+        let api = HidApi::new().map_err(|err| {
+            error!("Failed to initialize HidApi during enumeration: {err}");
+            HidTransportError::Hid(err)
+        })?;
+        let descriptors: Vec<X56Descriptor> = api
             .device_list()
             .filter_map(X56Descriptor::from_device_info)
             .collect();
+        debug!(
+            "Enumerated {} X56 vendor config interface(s) (Interface 2):",
+            descriptors.len()
+        );
+        for d in &descriptors {
+            debug!(
+                "  -> {} {} ({:04x}:{:04x}) path={:?} iface={} usage_page={:#06x}",
+                d.vendor,
+                d.kind,
+                d.vendor_id,
+                d.product_id,
+                d.path,
+                d.interface_number,
+                d.usage_page
+            );
+        }
         Ok(descriptors)
     }
 
     /// Abre el primer dispositivo X56 del tipo indicado (`Stick` o `Throttle`)
     /// conectando exclusivamente a su Interfaz 2.
     pub fn open(kind: DeviceKind) -> Result<Self, HidTransportError> {
-        let api = HidApi::new()?;
+        let api = HidApi::new().map_err(|err| {
+            error!("Failed to initialize HidApi when opening {kind}: {err}");
+            HidTransportError::Hid(err)
+        })?;
         let descriptor = api
             .device_list()
             .filter_map(X56Descriptor::from_device_info)
             .find(|d| d.kind == kind)
-            .ok_or(HidTransportError::DeviceNotFound(kind))?;
+            .ok_or_else(|| {
+                warn!("X56 {kind} vendor config interface (Interface 2) not found");
+                HidTransportError::DeviceNotFound(kind)
+            })?;
 
-        let device = api.open_path(descriptor.path.as_c_str())?;
+        debug!(
+            "Opening X56 {} ({:04x}:{:04x}) on hidraw node {:?}",
+            descriptor.kind, descriptor.vendor_id, descriptor.product_id, descriptor.path
+        );
+        let device = api.open_path(descriptor.path.as_c_str()).map_err(|err| {
+            error!(
+                "Failed to open hidraw node {:?} for X56 {}: {err}",
+                descriptor.path, descriptor.kind
+            );
+            HidTransportError::Hid(err)
+        })?;
+        info!(
+            "Opened X56 {} ({:04x}:{:04x}) at {:?}",
+            descriptor.kind, descriptor.vendor_id, descriptor.product_id, descriptor.path
+        );
         Ok(Self { device, descriptor })
     }
 
@@ -281,7 +327,10 @@ impl X56Device {
     /// verificando **antes y después** que sea un dispositivo X56 válido y que
     /// pertenezca exclusivamente a la Interfaz 2 (nunca a la Interfaz 0).
     pub fn open_path(path: &CStr) -> Result<Self, HidTransportError> {
-        let api = HidApi::new()?;
+        let api = HidApi::new().map_err(|err| {
+            error!("Failed to initialize HidApi for open_path({path:?}): {err}");
+            HidTransportError::Hid(err)
+        })?;
 
         // Si el nodo aparece en la lista de enumeración, validamos ANTES de hacer open()
         // para jamás abrir el file descriptor de la Interfaz 0.
@@ -289,9 +338,20 @@ impl X56Device {
             Self::validate_device_info(info)?;
         }
 
-        let device = api.open_path(path)?;
-        let info = device.get_device_info()?;
+        debug!("Opening specific hidraw path {path:?}");
+        let device = api.open_path(path).map_err(|err| {
+            error!("Failed to open hidraw path {path:?}: {err}");
+            HidTransportError::Hid(err)
+        })?;
+        let info = device.get_device_info().map_err(|err| {
+            error!("Failed to query device_info on {path:?}: {err}");
+            HidTransportError::Hid(err)
+        })?;
         let descriptor = Self::validate_device_info(&info)?;
+        info!(
+            "Opened validated X56 {} ({:04x}:{:04x}) at {:?}",
+            descriptor.kind, descriptor.vendor_id, descriptor.product_id, descriptor.path
+        );
 
         Ok(Self { device, descriptor })
     }
@@ -311,15 +371,71 @@ impl X56Device {
         self.descriptor.vendor
     }
 
-    /// Configura el color de iluminación LED RGB enviando [`PacketRgb`] (Report `0x09`)
-    /// seguido de [`PacketCommit`] (Report `0x01`) como Feature Reports.
-    pub fn set_rgb(&self, color: RgbColor) -> Result<(), HidTransportError> {
+    /// Envía la secuencia completa de iluminación RGB (`PacketRgb` `0x09` -> retardo de
+    /// asentamiento de 4ms -> `PacketCommit` `0x01`) sobre un dispositivo `HidDevice` abierto.
+    fn send_rgb_reports(
+        device: &HidDevice,
+        descriptor: &X56Descriptor,
+        color: RgbColor,
+    ) -> Result<(), HidTransportError> {
         let rgb_pkt = PacketRgb::new(color).to_bytes();
         let commit_pkt = PacketCommit.to_bytes();
 
-        self.device.send_feature_report(&rgb_pkt)?;
-        self.device.send_feature_report(&commit_pkt)?;
+        debug!(
+            "Sending PacketRgb (0x09, #{:02x}{:02x}{:02x}) to {} ({:04x}:{:04x}) at {:?}",
+            color.r,
+            color.g,
+            color.b,
+            descriptor.kind,
+            descriptor.vendor_id,
+            descriptor.product_id,
+            descriptor.path
+        );
+        device.send_feature_report(&rgb_pkt).map_err(|err| {
+            error!(
+                "Failed sending PacketRgb (0x09) to {} ({:04x}:{:04x}) at {:?}: {err}",
+                descriptor.kind, descriptor.vendor_id, descriptor.product_id, descriptor.path
+            );
+            HidTransportError::Hid(err)
+        })?;
+
+        // El microcontrolador del Stick (especialmente Saitek 0738:2221) requiere ~4ms
+        // para procesar el buffer EP0 de PacketRgb antes de aceptar PacketCommit (0x01).
+        std::thread::sleep(RGB_COMMIT_SETTLE_DELAY);
+
+        debug!(
+            "Sending PacketCommit (0x01) to {} ({:04x}:{:04x}) at {:?} after {:?} settle delay",
+            descriptor.kind,
+            descriptor.vendor_id,
+            descriptor.product_id,
+            descriptor.path,
+            RGB_COMMIT_SETTLE_DELAY
+        );
+        device.send_feature_report(&commit_pkt).map_err(|err| {
+            error!(
+                "Failed sending PacketCommit (0x01) to {} ({:04x}:{:04x}) at {:?}: {err}",
+                descriptor.kind, descriptor.vendor_id, descriptor.product_id, descriptor.path
+            );
+            HidTransportError::Hid(err)
+        })?;
+
+        info!(
+            "RGB #{:02x}{:02x}{:02x} committed on {} ({:04x}:{:04x}) at {:?}",
+            color.r,
+            color.g,
+            color.b,
+            descriptor.kind,
+            descriptor.vendor_id,
+            descriptor.product_id,
+            descriptor.path
+        );
         Ok(())
+    }
+
+    /// Configura el color de iluminación LED RGB enviando [`PacketRgb`] (Report `0x09`)
+    /// seguido de un retardo de asentamiento de 4ms y [`PacketCommit`] (Report `0x01`) como Feature Reports.
+    pub fn set_rgb(&self, color: RgbColor) -> Result<(), HidTransportError> {
+        Self::send_rgb_reports(&self.device, &self.descriptor, color)
     }
 
     /// Aplica iluminación LED RGB a Stick y Throttle en un único pase de enumeración HID,
@@ -330,9 +446,17 @@ impl X56Device {
         stick_color: Option<RgbColor>,
         throttle_color: Option<RgbColor>,
     ) -> Result<(bool, bool), HidTransportError> {
-        let api = HidApi::new()?;
+        let api = HidApi::new().map_err(|err| {
+            error!("Failed to initialize HidApi in set_rgb_unified: {err}");
+            HidTransportError::Hid(err)
+        })?;
         let mut stick_ok = false;
         let mut throttle_ok = false;
+
+        debug!(
+            "Executing set_rgb_unified(stick={:?}, throttle={:?})",
+            stick_color, throttle_color
+        );
 
         for info in api.device_list() {
             if let Some(desc) = X56Descriptor::from_device_info(info) {
@@ -340,13 +464,17 @@ impl X56Device {
                     DeviceKind::Stick => {
                         if let Some(color) = stick_color {
                             if !stick_ok {
-                                if let Ok(dev) = api.open_path(desc.path.as_c_str()) {
-                                    let rgb_pkt = PacketRgb::new(color).to_bytes();
-                                    let commit_pkt = PacketCommit.to_bytes();
-                                    if dev.send_feature_report(&rgb_pkt).is_ok()
-                                        && dev.send_feature_report(&commit_pkt).is_ok()
-                                    {
-                                        stick_ok = true;
+                                match api.open_path(desc.path.as_c_str()) {
+                                    Ok(dev) => {
+                                        if Self::send_rgb_reports(&dev, &desc, color).is_ok() {
+                                            stick_ok = true;
+                                        }
+                                    }
+                                    Err(err) => {
+                                        warn!(
+                                            "set_rgb_unified: could not open Stick at {:?}: {err}",
+                                            desc.path
+                                        );
                                     }
                                 }
                             }
@@ -355,13 +483,17 @@ impl X56Device {
                     DeviceKind::Throttle => {
                         if let Some(color) = throttle_color {
                             if !throttle_ok {
-                                if let Ok(dev) = api.open_path(desc.path.as_c_str()) {
-                                    let rgb_pkt = PacketRgb::new(color).to_bytes();
-                                    let commit_pkt = PacketCommit.to_bytes();
-                                    if dev.send_feature_report(&rgb_pkt).is_ok()
-                                        && dev.send_feature_report(&commit_pkt).is_ok()
-                                    {
-                                        throttle_ok = true;
+                                match api.open_path(desc.path.as_c_str()) {
+                                    Ok(dev) => {
+                                        if Self::send_rgb_reports(&dev, &desc, color).is_ok() {
+                                            throttle_ok = true;
+                                        }
+                                    }
+                                    Err(err) => {
+                                        warn!(
+                                            "set_rgb_unified: could not open Throttle at {:?}: {err}",
+                                            desc.path
+                                        );
                                     }
                                 }
                             }
@@ -371,6 +503,10 @@ impl X56Device {
             }
         }
 
+        debug!(
+            "set_rgb_unified completed: stick_ok={}, throttle_ok={}",
+            stick_ok, throttle_ok
+        );
         Ok((stick_ok, throttle_ok))
     }
 

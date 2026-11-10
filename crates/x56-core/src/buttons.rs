@@ -16,6 +16,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use x56_hid::{identify_device, DeviceKind, X56Device};
 use x56_proto::RgbColor;
@@ -1328,14 +1329,22 @@ impl RgbDispatcher {
                             self.current_mode = newer_mode;
                         }
                     }
+                    info!(
+                        "RgbDispatcher: mode switch detected -> {}",
+                        self.current_mode.as_str()
+                    );
                     self.reconcile_colors(true);
                 }
                 RgbDispatchCommand::ForceUpdate => {
+                    debug!("RgbDispatcher: forced RGB reconciliation requested");
                     self.applied_stick_color = None;
                     self.applied_throttle_color = None;
                     self.reconcile_colors(true);
                 }
-                RgbDispatchCommand::Shutdown => break,
+                RgbDispatchCommand::Shutdown => {
+                    debug!("RgbDispatcher: shutting down");
+                    break;
+                }
             }
         }
     }
@@ -1394,14 +1403,28 @@ impl RgbDispatcher {
                 break;
             }
 
-            if let Ok((stick_ok, throttle_ok)) =
-                X56Device::set_rgb_unified(stick_to_send, throttle_to_send)
-            {
-                if stick_ok {
-                    self.applied_stick_color = target_stick;
+            match X56Device::set_rgb_unified(stick_to_send, throttle_to_send) {
+                Ok((stick_ok, throttle_ok)) => {
+                    if stick_ok {
+                        self.applied_stick_color = target_stick;
+                    }
+                    if throttle_ok {
+                        self.applied_throttle_color = target_throttle;
+                    }
+                    debug!(
+                        "RgbDispatcher attempt {}/{}: stick_ok={}, throttle_ok={}",
+                        attempt + 1,
+                        max_attempts,
+                        stick_ok,
+                        throttle_ok
+                    );
                 }
-                if throttle_ok {
-                    self.applied_throttle_color = target_throttle;
+                Err(err) => {
+                    error!(
+                        "RgbDispatcher attempt {}/{} failed calling set_rgb_unified: {err}",
+                        attempt + 1,
+                        max_attempts
+                    );
                 }
             }
 
@@ -1412,6 +1435,11 @@ impl RgbDispatcher {
             }
 
             if attempt + 1 < max_attempts {
+                warn!(
+                    "RgbDispatcher: partial RGB update (stick_synced={}, throttle_synced={}), retrying in 35ms...",
+                    self.applied_stick_color == target_stick,
+                    self.applied_throttle_color == target_throttle
+                );
                 thread::sleep(Duration::from_millis(35));
             }
         }
