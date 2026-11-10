@@ -229,12 +229,12 @@ impl CurvesTab {
                 self.render_axis_selection_subbar(ui);
                 ui.add_space(10.0);
 
-                // 3. Grid Avionics: 2 columnas en pantallas anchas (>= 820px), o apilado vertical (< 820px)
+                // 3. Grid Avionics: 2 columnas en pantallas anchas (>= 780px), o apilado vertical (< 780px)
                 let total_width = ui.available_width();
-                if total_width >= 820.0 {
+                if total_width >= 780.0 {
                     let gap = 12.0;
-                    let left_width = ((total_width - gap) * 0.62).max(360.0);
-                    let right_width = total_width - gap - left_width;
+                    let right_width = (total_width * 0.40).clamp(320.0, 480.0);
+                    let left_width = total_width - gap - right_width;
 
                     ui.horizontal_top(|ui| {
                         ui.spacing_mut().item_spacing.x = gap;
@@ -266,7 +266,7 @@ impl CurvesTab {
                         );
                     });
                 } else {
-                    // Modo apilado vertical para pantallas compactas (< 820px)
+                    // Modo apilado vertical para pantallas compactas (< 780px)
                     self.render_transfer_curve_section(ui, &live_state);
                     ui.add_space(10.0);
                     self.render_telemetry_cards(ui, &live_state);
@@ -291,10 +291,18 @@ impl CurvesTab {
         theme::card_frame()
             .inner_margin(Margin::symmetric(12, 8))
             .show(ui, |ui| {
+                let avail_w = ui.available_width();
                 ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::new(8.0, 6.0);
+
                     let is_stick = self.selected_device == DeviceKind::Stick;
-                    let stick_lbl =
-                        format!("{} STICK // RHINO [VID:0738 PID:2215]", icons::JOYSTICK);
+                    let stick_lbl = if avail_w >= 850.0 {
+                        format!("{} STICK // RHINO [VID:0738 PID:2215]", icons::JOYSTICK)
+                    } else if avail_w >= 560.0 {
+                        format!("{} STICK // RHINO", icons::JOYSTICK)
+                    } else {
+                        format!("{} STICK", icons::JOYSTICK)
+                    };
                     if theme::tactical_button(ui, &stick_lbl, is_stick, false).clicked()
                         && !is_stick
                     {
@@ -304,7 +312,13 @@ impl CurvesTab {
                     }
 
                     let is_throttle = self.selected_device == DeviceKind::Throttle;
-                    let thr_lbl = format!("{} DUAL THROTTLE [VID:0738 PID:2216]", icons::SLIDERS);
+                    let thr_lbl = if avail_w >= 850.0 {
+                        format!("{} DUAL THROTTLE [VID:0738 PID:2216]", icons::SLIDERS)
+                    } else if avail_w >= 560.0 {
+                        format!("{} DUAL THROTTLE", icons::SLIDERS)
+                    } else {
+                        format!("{} THROTTLE", icons::SLIDERS)
+                    };
                     if theme::tactical_button(ui, &thr_lbl, is_throttle, false).clicked()
                         && !is_throttle
                     {
@@ -315,12 +329,12 @@ impl CurvesTab {
 
                     ui.separator();
 
-                    theme::telemetry_badge(
-                        ui,
-                        "ADC:",
-                        "16-BIT HALL SENSOR (65536 STEPS)",
-                        COLOR_PRIMARY_CONTAINER,
-                    );
+                    let adc_val = if avail_w >= 640.0 {
+                        "16-BIT HALL SENSOR (65536 STEPS)"
+                    } else {
+                        "16-BIT (65k STEPS)"
+                    };
+                    theme::telemetry_badge(ui, "ADC:", adc_val, COLOR_PRIMARY_CONTAINER);
                     theme::telemetry_badge(ui, "JITTER:", "0.08ms", COLOR_TERTIARY_CONTAINER);
 
                     let node_str = match self.selected_device {
@@ -366,6 +380,7 @@ impl CurvesTab {
             .inner_margin(Margin::symmetric(12, 7))
             .show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::new(6.0, 6.0);
                     ui.label(
                         RichText::new("EJE ACTIVO:")
                             .color(COLOR_OUTLINE)
@@ -402,22 +417,20 @@ impl CurvesTab {
                         }
                     }
 
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        Frame::new()
-                            .fill(COLOR_SURFACE_LOWEST)
-                            .stroke(Stroke::new(1.0, COLOR_PRIMARY_CONTAINER))
-                            .corner_radius(CornerRadius::same(4))
-                            .inner_margin(Margin::symmetric(8, 3))
-                            .show(ui, |ui| {
-                                ui.label(
-                                    RichText::new(self.params.curve_type.polynomial_badge())
-                                        .color(COLOR_PRIMARY_FIXED)
-                                        .size(10.5)
-                                        .strong()
-                                        .monospace(),
-                                );
-                            });
-                    });
+                    Frame::new()
+                        .fill(COLOR_SURFACE_LOWEST)
+                        .stroke(Stroke::new(1.0, COLOR_PRIMARY_CONTAINER))
+                        .corner_radius(CornerRadius::same(4))
+                        .inner_margin(Margin::symmetric(8, 3))
+                        .show(ui, |ui| {
+                            ui.label(
+                                RichText::new(self.params.curve_type.polynomial_badge())
+                                    .color(COLOR_PRIMARY_FIXED)
+                                    .size(10.5)
+                                    .strong()
+                                    .monospace(),
+                            );
+                        });
                 });
             });
     }
@@ -430,31 +443,38 @@ impl CurvesTab {
     fn render_transfer_curve_section(&mut self, ui: &mut Ui, live_state: &LiveAxesState) {
         theme::card_frame().show(ui, |ui| {
             // Encabezado del bloque HUD
-            ui.horizontal(|ui| {
-                ui.label(
-                    RichText::new(format!(
+            let avail_w = ui.available_width();
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = Vec2::new(8.0, 4.0);
+                let title = if avail_w >= 520.0 {
+                    format!(
                         "{} RESPUESTA DE TRANSFERENCIA (TRANSFER CURVE)",
                         icons::ACTIVITY
-                    ))
-                    .color(COLOR_PRIMARY)
-                    .size(12.5)
-                    .strong()
-                    .monospace(),
+                    )
+                } else if avail_w >= 360.0 {
+                    format!("{} CURVA DE TRANSFERENCIA", icons::ACTIVITY)
+                } else {
+                    format!("{} CURVA", icons::ACTIVITY)
+                };
+                ui.label(
+                    RichText::new(title)
+                        .color(COLOR_PRIMARY)
+                        .size(12.0)
+                        .strong()
+                        .monospace(),
                 );
 
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(
-                        RichText::new(format!(
-                            "DZ: {:.1}% | EXPO: {:.2} | SAT: {:.1}%",
-                            self.params.deadband_pct(),
-                            self.params.expo_factor(),
-                            self.params.saturation_pct()
-                        ))
-                        .color(COLOR_ON_SURFACE_VARIANT)
-                        .size(10.5)
-                        .monospace(),
-                    );
-                });
+                ui.label(
+                    RichText::new(format!(
+                        "DZ: {:.1}% | EXPO: {:.2} | SAT: {:.1}%",
+                        self.params.deadband_pct(),
+                        self.params.expo_factor(),
+                        self.params.saturation_pct()
+                    ))
+                    .color(COLOR_ON_SURFACE_VARIANT)
+                    .size(10.0)
+                    .monospace(),
+                );
             });
 
             ui.add_space(6.0);
@@ -783,277 +803,401 @@ impl CurvesTab {
         });
     }
 
+    fn render_single_telemetry_card(
+        ui: &mut Ui,
+        title: &str,
+        main_val: &str,
+        sub_val: &str,
+        val_col: Color32,
+    ) {
+        theme::card_frame()
+            .inner_margin(Margin::symmetric(10, 8))
+            .show(ui, |ui| {
+                ui.label(
+                    RichText::new(title)
+                        .color(COLOR_OUTLINE)
+                        .size(9.5)
+                        .strong()
+                        .monospace(),
+                );
+                ui.add_space(3.0);
+                ui.label(
+                    RichText::new(main_val)
+                        .color(val_col)
+                        .size(14.0)
+                        .strong()
+                        .monospace(),
+                );
+                ui.add_space(2.0);
+                ui.label(
+                    RichText::new(sub_val)
+                        .color(COLOR_ON_SURFACE_VARIANT)
+                        .size(9.5)
+                        .monospace(),
+                );
+            });
+    }
+
     /// 4 tarjetas telemétricas inferiores:
     /// RAW ADC (HEX / LSB), DEFLEXIÓN FÍSICA (NORM), SALIDA PROCESADA (UINPUT), TASA DE COMPRESIÓN.
+    /// Se adaptan fluidamente a 4 columnas (>= 640px), rejilla 2x2 (>= 320px) o 1 columna (< 320px).
     fn render_telemetry_cards(&self, ui: &mut Ui, live_state: &LiveAxesState) {
         let (live_in, raw_adc) = self.current_live_input(live_state);
         let live_out = self.params.evaluate(live_in);
         let comp_rate = self.params.compression_rate(live_in);
 
+        let avail_w = ui.available_width();
+        let is_wide = avail_w >= 820.0;
+
+        let title_0 = if is_wide {
+            "RAW ADC (HEX / LSB)"
+        } else {
+            "RAW ADC"
+        };
+        let title_1 = if is_wide {
+            "DEFLEXIÓN FÍSICA (NORM)"
+        } else {
+            "DEFLEXIÓN (NORM)"
+        };
+        let title_2 = if is_wide {
+            "SALIDA PROCESADA (UINPUT)"
+        } else {
+            "SALIDA UINPUT"
+        };
+        let title_3 = if is_wide {
+            "TASA DE COMPRESIÓN"
+        } else {
+            "COMPRESIÓN"
+        };
+
         let cards = [
             (
-                "RAW ADC (HEX / LSB)",
+                title_0,
                 format!("{:#06X} / {}", raw_adc, raw_adc),
                 "16-BIT HALL SENSOR".to_string(),
                 COLOR_ON_SURFACE,
             ),
             (
-                "DEFLEXIÓN FÍSICA (NORM)",
+                title_1,
                 format!("{:+.4}", live_in),
                 format!("INPUT: {:+.1}%", live_in * 100.0),
                 COLOR_PRIMARY_FIXED,
             ),
             (
-                "SALIDA PROCESADA (UINPUT)",
+                title_2,
                 format!("{:+.4}", live_out),
                 format!("OUTPUT: {:+.1}%", live_out * 100.0),
                 COLOR_PRIMARY_CONTAINER,
             ),
             (
-                "TASA DE COMPRESIÓN",
+                title_3,
                 format!("{:.2}x", comp_rate),
                 "INSTANT GAIN dY/dX".to_string(),
                 COLOR_TERTIARY_CONTAINER,
             ),
         ];
 
-        ui.columns(4, |cols| {
-            for (idx, (title, main_val, sub_val, val_col)) in cards.iter().enumerate() {
-                theme::card_frame()
-                    .inner_margin(Margin::symmetric(10, 8))
-                    .show(&mut cols[idx], |ui| {
+        if avail_w >= 640.0 {
+            ui.columns(4, |cols| {
+                for (idx, (title, main_val, sub_val, val_col)) in cards.iter().enumerate() {
+                    Self::render_single_telemetry_card(
+                        &mut cols[idx],
+                        title,
+                        main_val,
+                        sub_val,
+                        *val_col,
+                    );
+                }
+            });
+        } else if avail_w >= 320.0 {
+            ui.columns(2, |cols| {
+                Self::render_single_telemetry_card(
+                    &mut cols[0],
+                    cards[0].0,
+                    &cards[0].1,
+                    &cards[0].2,
+                    cards[0].3,
+                );
+                Self::render_single_telemetry_card(
+                    &mut cols[1],
+                    cards[1].0,
+                    &cards[1].1,
+                    &cards[1].2,
+                    cards[1].3,
+                );
+            });
+            ui.add_space(6.0);
+            ui.columns(2, |cols| {
+                Self::render_single_telemetry_card(
+                    &mut cols[0],
+                    cards[2].0,
+                    &cards[2].1,
+                    &cards[2].2,
+                    cards[2].3,
+                );
+                Self::render_single_telemetry_card(
+                    &mut cols[1],
+                    cards[3].0,
+                    &cards[3].1,
+                    &cards[3].2,
+                    cards[3].3,
+                );
+            });
+        } else {
+            for (title, main_val, sub_val, val_col) in &cards {
+                Self::render_single_telemetry_card(ui, title, main_val, sub_val, *val_col);
+                ui.add_space(6.0);
+            }
+        }
+    }
+
+    /// Dibuja el radar de coordenadas 2D Gimbal con retícula, zona muerta y vector de deflexión.
+    fn render_gimbal_radar(&self, ui: &mut Ui, box_size: f32, live_state: &LiveAxesState) {
+        ui.vertical_centered(|ui| {
+            let (resp, painter) =
+                ui.allocate_painter(Vec2::new(box_size, box_size), Sense::hover());
+            let r = resp.rect;
+
+            painter.rect_filled(r, 6.0, COLOR_SURFACE_LOWEST);
+            painter.rect_stroke(
+                r,
+                6.0,
+                Stroke::new(1.0, COLOR_OUTLINE_VARIANT),
+                StrokeKind::Inside,
+            );
+
+            let center = r.center();
+            let half = (box_size * 0.5) - 10.0;
+
+            // Anillos concéntricos de deflexión (50% y 100%)
+            painter.circle_stroke(center, half, Stroke::new(1.0, COLOR_GRID_HUD));
+            painter.circle_stroke(center, half * 0.5, Stroke::new(1.0, COLOR_GRID_HUD));
+
+            // Retícula ortogonal
+            painter.line_segment(
+                [
+                    Pos2::new(r.min.x + 6.0, center.y),
+                    Pos2::new(r.max.x - 6.0, center.y),
+                ],
+                Stroke::new(1.0, COLOR_OUTLINE_VARIANT),
+            );
+            painter.line_segment(
+                [
+                    Pos2::new(center.x, r.min.y + 6.0),
+                    Pos2::new(center.x, r.max.y - 6.0),
+                ],
+                Stroke::new(1.0, COLOR_OUTLINE_VARIANT),
+            );
+
+            // Círculo de deadzone central
+            let dz_radius =
+                (((self.params.deadband as f32) / 1000.0) * half).clamp(3.0, half * 0.6);
+            painter.circle_filled(
+                center,
+                dz_radius,
+                Color32::from_rgba_unmultiplied(255, 180, 171, 25),
+            );
+            painter.circle_stroke(center, dz_radius, Stroke::new(1.0, COLOR_ERROR));
+
+            // Punto de posición reticular verde animado en vivo
+            let gx = live_state.stick_x as f32;
+            let gy = live_state.stick_y as f32;
+            let dot_pos = Pos2::new(center.x + gx * half, center.y - gy * half);
+
+            // Vector desde el origen
+            painter.line_segment(
+                [center, dot_pos],
+                Stroke::new(1.5, Color32::from_rgba_unmultiplied(52, 248, 133, 140)),
+            );
+            painter.circle_stroke(dot_pos, 6.5, Stroke::new(1.5, COLOR_TERTIARY_CONTAINER));
+            painter.circle_filled(dot_pos, 3.0, COLOR_TERTIARY_CONTAINER);
+
+            ui.add_space(4.0);
+            let (vect_mag, vect_deg) = live_state.gimbal_vector();
+            let coord_lbl = if box_size >= 170.0 {
+                format!(
+                    "X: {:+.3} Y: {:+.3} VECT: {:.3} ({:02.0}°)",
+                    live_state.stick_x, live_state.stick_y, vect_mag, vect_deg
+                )
+            } else {
+                format!(
+                    "X:{:+.2} Y:{:+.2} V:{:.2}",
+                    live_state.stick_x, live_state.stick_y, vect_mag
+                )
+            };
+            ui.label(
+                RichText::new(coord_lbl)
+                    .color(COLOR_TERTIARY_CONTAINER)
+                    .size(9.0)
+                    .strong()
+                    .monospace(),
+            );
+        });
+    }
+
+    /// Medidores secundarios: Timón Z, Ministick analógico y POV Hat 1.
+    fn render_secondary_meters(&self, ui: &mut Ui, live_state: &LiveAxesState, container_w: f32) {
+        ui.vertical(|ui| {
+            // 1. Timón Z (Twist) bipolar con centro cero
+            let rudder_lbl = if container_w >= 320.0 {
+                "TIMÓN Z (TWIST // RUDDER YAW)"
+            } else {
+                "TIMÓN Z (YAW)"
+            };
+            render_bipolar_bar(
+                ui,
+                rudder_lbl,
+                live_state.stick_z,
+                COLOR_PRIMARY_CONTAINER,
+                "CENTER-ZERO BIPOLAR",
+            );
+
+            ui.add_space(8.0);
+
+            // 2. Mini-stick analógico (Slew X / Y) con barras duales
+            let ministick_lbl = if container_w >= 320.0 {
+                "MINI-STICK ANALÓGICO (SLEW X/Y)"
+            } else {
+                "MINI-STICK (SLEW)"
+            };
+            Frame::new()
+                .fill(COLOR_SURFACE_LOWEST)
+                .stroke(Stroke::new(1.0, COLOR_OUTLINE_VARIANT))
+                .corner_radius(CornerRadius::same(6))
+                .inner_margin(Margin::symmetric(10, 8))
+                .show(ui, |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(6.0, 2.0);
                         ui.label(
-                            RichText::new(*title)
-                                .color(COLOR_OUTLINE)
-                                .size(9.5)
+                            RichText::new(ministick_lbl)
+                                .color(COLOR_ON_SURFACE)
+                                .size(10.5)
                                 .strong()
                                 .monospace(),
                         );
-                        ui.add_space(3.0);
                         ui.label(
-                            RichText::new(main_val)
-                                .color(*val_col)
-                                .size(14.5)
-                                .strong()
-                                .monospace(),
-                        );
-                        ui.add_space(2.0);
-                        ui.label(
-                            RichText::new(sub_val)
-                                .color(COLOR_ON_SURFACE_VARIANT)
-                                .size(9.5)
-                                .monospace(),
+                            RichText::new(format!(
+                                "X:{:+.2} Y:{:+.2}",
+                                live_state.ministick_x, live_state.ministick_y
+                            ))
+                            .color(COLOR_WARNING_AMBER)
+                            .size(10.0)
+                            .monospace(),
                         );
                     });
-            }
+                    ui.add_space(4.0);
+                    render_compact_dual_bar(
+                        ui,
+                        "SLEW X",
+                        live_state.ministick_x,
+                        COLOR_WARNING_AMBER,
+                    );
+                    ui.add_space(3.0);
+                    render_compact_dual_bar(
+                        ui,
+                        "SLEW Y",
+                        live_state.ministick_y,
+                        COLOR_WARNING_AMBER,
+                    );
+                });
+
+            ui.add_space(8.0);
+
+            // 3. POV Hat 1 con modo
+            let pov_lbl = if container_w >= 320.0 {
+                "POV HAT 1 (8-WAY DIRECTIONAL)"
+            } else {
+                "POV HAT 1"
+            };
+            Frame::new()
+                .fill(COLOR_SURFACE_LOWEST)
+                .stroke(Stroke::new(1.0, COLOR_OUTLINE_VARIANT))
+                .corner_radius(CornerRadius::same(6))
+                .inner_margin(Margin::symmetric(10, 8))
+                .show(ui, |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(6.0, 4.0);
+                        ui.label(
+                            RichText::new(pov_lbl)
+                                .color(COLOR_ON_SURFACE)
+                                .size(10.5)
+                                .strong()
+                                .monospace(),
+                        );
+                        theme::telemetry_badge(ui, "MODE:", "8-WAY", COLOR_PRIMARY_FIXED);
+                        theme::telemetry_badge(
+                            ui,
+                            "STATE:",
+                            live_state.pov_direction_label(),
+                            COLOR_TERTIARY_CONTAINER,
+                        );
+                    });
+                });
         });
     }
 
     /// "MONITOR GIMBAL 2D & EJES SECUNDARIOS EN VIVO":
-    /// Cuadro de coordenadas 2D Gimbal (retícula, círculo de deadzone, punto de posición reticular
-    /// verde animado en vivo, texto "X: +0.482 Y: +0.440 VECT: 0.652 ∠42°").
-    /// Medidores secundarios para Timón Z (Twist) bipolar con centro cero, mini-stick analógico
-    /// (slew X/Y) con barras duales, y POV Hat 1 con modo.
+    /// Adapta el Gimbal radar y medidores secundarios lado a lado (>= 440px) o apilados (< 440px).
     fn render_gimbal_and_secondary_axes(&self, ui: &mut Ui, live_state: &LiveAxesState) {
         theme::card_frame().show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(
-                    RichText::new(format!(
+            let avail_w = ui.available_width();
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = Vec2::new(8.0, 4.0);
+                let title = if avail_w >= 500.0 {
+                    format!(
                         "{} MONITOR GIMBAL 2D & EJES SECUNDARIOS EN VIVO",
                         icons::ACTIVITY
-                    ))
-                    .color(COLOR_PRIMARY)
-                    .size(12.0)
-                    .strong()
-                    .monospace(),
+                    )
+                } else if avail_w >= 360.0 {
+                    format!("{} GIMBAL 2D & EJES SECUNDARIOS", icons::ACTIVITY)
+                } else {
+                    format!("{} GIMBAL 2D", icons::ACTIVITY)
+                };
+                ui.label(
+                    RichText::new(title)
+                        .color(COLOR_PRIMARY)
+                        .size(12.0)
+                        .strong()
+                        .monospace(),
                 );
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(
-                        RichText::new(format!("{} LIVE TELEMETRY 50/1000Hz", icons::RADIO))
-                            .color(COLOR_TERTIARY_CONTAINER)
-                            .size(10.0)
-                            .monospace(),
-                    );
-                });
+                ui.label(
+                    RichText::new(format!("{} LIVE 50/1000Hz", icons::RADIO))
+                        .color(COLOR_TERTIARY_CONTAINER)
+                        .size(9.5)
+                        .monospace(),
+                );
             });
 
             ui.add_space(8.0);
 
-            ui.horizontal_top(|ui| {
-                // Izquierda: Radar / Cuadro de coordenadas 2D Gimbal
-                ui.vertical(|ui| {
-                    let box_size = 186.0;
-                    let (resp, painter) =
-                        ui.allocate_painter(Vec2::new(box_size, box_size), Sense::hover());
-                    let r = resp.rect;
+            if avail_w >= 440.0 {
+                let gap = 12.0;
+                let box_size = 186.0f32.min((avail_w - gap) * 0.44);
+                let right_w = avail_w - gap - box_size;
 
-                    painter.rect_filled(r, 6.0, COLOR_SURFACE_LOWEST);
-                    painter.rect_stroke(
-                        r,
-                        6.0,
-                        Stroke::new(1.0, COLOR_OUTLINE_VARIANT),
-                        StrokeKind::Inside,
+                ui.horizontal_top(|ui| {
+                    ui.allocate_ui_with_layout(
+                        Vec2::new(box_size, ui.available_height()),
+                        egui::Layout::top_down(egui::Align::Center),
+                        |ui| {
+                            self.render_gimbal_radar(ui, box_size, live_state);
+                        },
                     );
-
-                    let center = r.center();
-                    let half = (box_size * 0.5) - 10.0;
-
-                    // Anillos concéntricos de deflexión (50% y 100%)
-                    painter.circle_stroke(center, half, Stroke::new(1.0, COLOR_GRID_HUD));
-                    painter.circle_stroke(center, half * 0.5, Stroke::new(1.0, COLOR_GRID_HUD));
-
-                    // Retícula ortogonal
-                    painter.line_segment(
-                        [
-                            Pos2::new(r.min.x + 6.0, center.y),
-                            Pos2::new(r.max.x - 6.0, center.y),
-                        ],
-                        Stroke::new(1.0, COLOR_OUTLINE_VARIANT),
-                    );
-                    painter.line_segment(
-                        [
-                            Pos2::new(center.x, r.min.y + 6.0),
-                            Pos2::new(center.x, r.max.y - 6.0),
-                        ],
-                        Stroke::new(1.0, COLOR_OUTLINE_VARIANT),
-                    );
-
-                    // Círculo de deadzone central
-                    let dz_radius =
-                        (((self.params.deadband as f32) / 1000.0) * half).clamp(3.0, half * 0.6);
-                    painter.circle_filled(
-                        center,
-                        dz_radius,
-                        Color32::from_rgba_unmultiplied(255, 180, 171, 25),
-                    );
-                    painter.circle_stroke(center, dz_radius, Stroke::new(1.0, COLOR_ERROR));
-
-                    // Punto de posición reticular verde animado en vivo
-                    let gx = live_state.stick_x as f32;
-                    let gy = live_state.stick_y as f32;
-                    let dot_pos = Pos2::new(center.x + gx * half, center.y - gy * half);
-
-                    // Vector desde el origen
-                    painter.line_segment(
-                        [center, dot_pos],
-                        Stroke::new(1.5, Color32::from_rgba_unmultiplied(52, 248, 133, 140)),
-                    );
-                    painter.circle_stroke(dot_pos, 6.5, Stroke::new(1.5, COLOR_TERTIARY_CONTAINER));
-                    painter.circle_filled(dot_pos, 3.0, COLOR_TERTIARY_CONTAINER);
-
-                    ui.add_space(4.0);
-                    let (vect_mag, vect_deg) = live_state.gimbal_vector();
-                    ui.label(
-                        RichText::new(format!(
-                            "X: {:+.3} Y: {:+.3} VECT: {:.3} ({:02.0}°)",
-                            live_state.stick_x, live_state.stick_y, vect_mag, vect_deg
-                        ))
-                        .color(COLOR_TERTIARY_CONTAINER)
-                        .size(9.5)
-                        .strong()
-                        .monospace(),
+                    ui.add_space(gap);
+                    ui.allocate_ui_with_layout(
+                        Vec2::new(right_w, ui.available_height()),
+                        egui::Layout::top_down(egui::Align::Min),
+                        |ui| {
+                            self.render_secondary_meters(ui, live_state, right_w);
+                        },
                     );
                 });
-
-                ui.add_space(12.0);
-
-                // Derecha: Medidores secundarios en vivo
-                ui.vertical(|ui| {
-                    // 1. Timón Z (Twist) bipolar con centro cero
-                    render_bipolar_bar(
-                        ui,
-                        "TIMÓN Z (TWIST // RUDDER YAW)",
-                        live_state.stick_z,
-                        COLOR_PRIMARY_CONTAINER,
-                        "CENTER-ZERO BIPOLAR",
-                    );
-
-                    ui.add_space(10.0);
-
-                    // 2. Mini-stick analógico (Slew X / Y) con barras duales
-                    Frame::new()
-                        .fill(COLOR_SURFACE_LOWEST)
-                        .stroke(Stroke::new(1.0, COLOR_OUTLINE_VARIANT))
-                        .corner_radius(CornerRadius::same(6))
-                        .inner_margin(Margin::symmetric(10, 8))
-                        .show(ui, |ui| {
-                            ui.horizontal(|ui| {
-                                ui.label(
-                                    RichText::new("MINI-STICK ANALÓGICO (SLEW X/Y)")
-                                        .color(COLOR_ON_SURFACE)
-                                        .size(10.5)
-                                        .strong()
-                                        .monospace(),
-                                );
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        ui.label(
-                                            RichText::new(format!(
-                                                "X:{:+.2} Y:{:+.2}",
-                                                live_state.ministick_x, live_state.ministick_y
-                                            ))
-                                            .color(COLOR_WARNING_AMBER)
-                                            .size(10.0)
-                                            .monospace(),
-                                        );
-                                    },
-                                );
-                            });
-                            ui.add_space(4.0);
-                            render_compact_dual_bar(
-                                ui,
-                                "SLEW X",
-                                live_state.ministick_x,
-                                COLOR_WARNING_AMBER,
-                            );
-                            ui.add_space(3.0);
-                            render_compact_dual_bar(
-                                ui,
-                                "SLEW Y",
-                                live_state.ministick_y,
-                                COLOR_WARNING_AMBER,
-                            );
-                        });
-
-                    ui.add_space(10.0);
-
-                    // 3. POV Hat 1 con modo
-                    Frame::new()
-                        .fill(COLOR_SURFACE_LOWEST)
-                        .stroke(Stroke::new(1.0, COLOR_OUTLINE_VARIANT))
-                        .corner_radius(CornerRadius::same(6))
-                        .inner_margin(Margin::symmetric(10, 8))
-                        .show(ui, |ui| {
-                            ui.horizontal(|ui| {
-                                ui.label(
-                                    RichText::new("POV HAT 1 (8-WAY DIRECTIONAL)")
-                                        .color(COLOR_ON_SURFACE)
-                                        .size(10.5)
-                                        .strong()
-                                        .monospace(),
-                                );
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        theme::telemetry_badge(
-                                            ui,
-                                            "MODE:",
-                                            "8-WAY DIGITAL",
-                                            COLOR_PRIMARY_FIXED,
-                                        );
-                                        theme::telemetry_badge(
-                                            ui,
-                                            "STATE:",
-                                            live_state.pov_direction_label(),
-                                            COLOR_TERTIARY_CONTAINER,
-                                        );
-                                    },
-                                );
-                            });
-                        });
-                });
-            });
+            } else {
+                let box_size = 186.0f32.min(avail_w - 24.0);
+                self.render_gimbal_radar(ui, box_size, live_state);
+                ui.add_space(10.0);
+                self.render_secondary_meters(ui, live_state, avail_w);
+            }
         });
     }
 
@@ -1069,21 +1213,35 @@ impl CurvesTab {
             );
             ui.add_space(6.0);
 
-            ui.columns(2, |cols| {
-                for (idx, ct) in CurveType::ALL.iter().enumerate() {
-                    let col_idx = idx % 2;
-                    let is_active = self.params.curve_type == *ct;
-                    cols[col_idx].vertical_centered_justified(|ui| {
+            let avail_w = ui.available_width();
+            if avail_w >= 240.0 {
+                ui.columns(2, |cols| {
+                    for (idx, ct) in CurveType::ALL.iter().enumerate() {
+                        let col_idx = idx % 2;
+                        let is_active = self.params.curve_type == *ct;
+                        cols[col_idx].vertical_centered_justified(|ui| {
+                            if theme::tactical_button(ui, ct.label(), is_active, false).clicked() {
+                                self.params.set_curve_type(*ct);
+                                self.eeprom_synced = false;
+                            }
+                        });
+                        if idx < 2 {
+                            cols[col_idx].add_space(4.0);
+                        }
+                    }
+                });
+            } else {
+                for ct in CurveType::ALL {
+                    let is_active = self.params.curve_type == ct;
+                    ui.vertical_centered_justified(|ui| {
                         if theme::tactical_button(ui, ct.label(), is_active, false).clicked() {
-                            self.params.set_curve_type(*ct);
+                            self.params.set_curve_type(ct);
                             self.eeprom_synced = false;
                         }
                     });
-                    if idx < 2 {
-                        cols[col_idx].add_space(4.0);
-                    }
+                    ui.add_space(4.0);
                 }
-            });
+            }
         });
     }
 
@@ -1199,26 +1357,49 @@ impl CurvesTab {
             // Controles extra para Bézier libre si está activo
             if self.params.curve_type == CurveType::Bezier {
                 ui.add_space(6.0);
-                ui.horizontal(|ui| {
-                    ui.label(
-                        RichText::new("Nodos Bézier (P1 / P2):")
-                            .color(COLOR_ON_SURFACE_VARIANT)
-                            .size(10.5)
-                            .monospace(),
-                    );
+                ui.label(
+                    RichText::new("Nodos Bézier (P1 / P2):")
+                        .color(COLOR_ON_SURFACE_VARIANT)
+                        .size(10.5)
+                        .monospace(),
+                );
+                let avail_w = ui.available_width();
+                if avail_w >= 280.0 {
+                    ui.columns(2, |cols| {
+                        if cols[0]
+                            .add(
+                                egui::Slider::new(&mut self.params.bezier_p1[1], 0.0..=1.0)
+                                    .text("P1"),
+                            )
+                            .changed()
+                        {
+                            self.eeprom_synced = false;
+                        }
+                        if cols[1]
+                            .add(
+                                egui::Slider::new(&mut self.params.bezier_p2[1], 0.0..=1.0)
+                                    .text("P2"),
+                            )
+                            .changed()
+                        {
+                            self.eeprom_synced = false;
+                        }
+                    });
+                } else {
                     if ui
                         .add(egui::Slider::new(&mut self.params.bezier_p1[1], 0.0..=1.0).text("P1"))
                         .changed()
                     {
                         self.eeprom_synced = false;
                     }
+                    ui.add_space(3.0);
                     if ui
                         .add(egui::Slider::new(&mut self.params.bezier_p2[1], 0.0..=1.0).text("P2"))
                         .changed()
                     {
                         self.eeprom_synced = false;
                     }
-                });
+                }
             }
 
             ui.add_space(10.0);
@@ -1309,7 +1490,8 @@ impl CurvesTab {
                             ui.painter().rect_filled(dot_rect, 3.0, spring.color());
 
                             ui.vertical(|ui| {
-                                ui.horizontal(|ui| {
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.spacing_mut().item_spacing = Vec2::new(6.0, 2.0);
                                     ui.label(
                                         RichText::new(spring.label())
                                             .color(spring.color())

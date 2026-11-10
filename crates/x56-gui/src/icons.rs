@@ -98,3 +98,15 @@ pub fn icon_label(icon: &str, label: &str) -> String {
 pub fn from_icon(icon: Icon, label: &str) -> String {
     format!("{} {label}", icon.unicode())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_lucide_icon_font() {
+        assert!(!lucide_icons::LUCIDE_FONT_BYTES.is_empty());
+        assert_eq!(Icon::Save.unicode(), '\u{e14d}');
+        assert_eq!(Icon::Plane.unicode(), '\u{e1de}');
+    }
+}
