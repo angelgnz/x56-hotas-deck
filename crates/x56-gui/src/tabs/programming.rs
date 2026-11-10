@@ -196,10 +196,13 @@ impl ProgrammingTab {
 
         if self.show_diagram_view {
             if total_w >= 850.0 {
-                let left_w = (total_w * 0.42).clamp(340.0, 500.0);
-                let right_w = total_w - left_w - 12.0;
+                let gap = 12.0;
+                let left_w = (total_w * 0.36).clamp(320.0, 420.0);
+                let right_w = (total_w - left_w - gap).max(280.0);
 
                 ui.horizontal_top(|ui| {
+                    ui.spacing_mut().item_spacing.x = gap;
+
                     // ================================================================
                     // COLUMNA IZQUIERDA: Monitor, Mapa Vectorial 2D, POV Hat
                     // ================================================================
@@ -229,10 +232,6 @@ impl ProgrammingTab {
                                 });
                         },
                     );
-
-                    ui.add_space(4.0);
-                    ui.separator();
-                    ui.add_space(4.0);
 
                     // ================================================================
                     // COLUMNA DERECHA: Buscador, Estadísticas, Filtros y Mapeos
@@ -1661,152 +1660,164 @@ impl ProgrammingTab {
                 if is_editing {
                     self.render_inline_edit_controls(ui, monitor, btn);
                 } else {
-                    // Cabecera de fila: Icono, Nombre descriptivo, Badge evdev, Badge uinput, Acciones
-                    ui.horizontal(|ui| {
-                        // Icono distintivo
-                        ui.label(RichText::new(default_info.icon).size(14.0));
+                    let card_w = ui.available_width();
 
-                        // Nombre descriptivo
-                        ui.label(
-                            RichText::new(btn.label)
-                                .color(COLOR_PRIMARY)
-                                .size(11.5)
-                                .strong()
-                                .monospace(),
-                        );
-
-                        // Badge evdev
-                        let ev_str = if btn.evdev_code != 0 {
-                            format!("{:#06x}", btn.evdev_code)
-                        } else {
-                            "ABS_HAT0".to_string()
-                        };
-                        telemetry_badge(ui, "EVDEV", &ev_str, COLOR_PRIMARY_FIXED);
-
-                        // Indicador de pulsación física
-                        if is_physically_pressed {
-                            ui.label(
-                                RichText::new("● PULSADO (VAL: 1)")
-                                    .color(COLOR_TERTIARY_CONTAINER)
-                                    .size(10.0)
-                                    .strong()
-                                    .monospace(),
-                            );
-                        }
-
-                        // Badge de mapeo uinput destacado con fondo azul o cian
-                        let (mapped_text, mapped_bg, mapped_fg) = if let Some(ref c) = cell_opt {
-                            if c.is_assigned() {
-                                (
-                                    format!("[{}] {}", c.keys_display(), c.name.to_uppercase()),
-                                    COLOR_SECONDARY_CONTAINER,
-                                    COLOR_ON_SECONDARY_CONTAINER,
-                                )
-                            } else {
-                                (
-                                    format!("{} {}", default_info.key_display, default_info.action),
-                                    COLOR_SURFACE_HIGH,
-                                    COLOR_ON_SURFACE_VARIANT,
-                                )
-                            }
+                    // Badge de mapeo uinput destacado con fondo azul o cian
+                    let (mapped_text, mapped_bg, mapped_fg) = if let Some(ref c) = cell_opt {
+                        if c.is_assigned() {
+                            (
+                                format!("[{}] {}", c.keys_display(), c.name.to_uppercase()),
+                                COLOR_SECONDARY_CONTAINER,
+                                COLOR_ON_SECONDARY_CONTAINER,
+                            )
                         } else {
                             (
                                 format!("{} {}", default_info.key_display, default_info.action),
                                 COLOR_SURFACE_HIGH,
                                 COLOR_ON_SURFACE_VARIANT,
                             )
-                        };
+                        }
+                    } else {
+                        (
+                            format!("{} {}", default_info.key_display, default_info.action),
+                            COLOR_SURFACE_HIGH,
+                            COLOR_ON_SURFACE_VARIANT,
+                        )
+                    };
 
-                        egui::Frame::new()
-                            .fill(mapped_bg)
-                            .stroke(Stroke::new(1.0, COLOR_OUTLINE_VARIANT))
-                            .corner_radius(egui::CornerRadius::same(4))
-                            .inner_margin(egui::Margin::symmetric(8, 3))
-                            .show(ui, |ui| {
+                    if card_w >= 640.0 {
+                        // =========================================================
+                        // MODO ANCHO (>= 640px): Identificador + Mapeo + Acciones en 1 fila
+                        // =========================================================
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new(default_info.icon).size(14.0));
+                            ui.label(
+                                RichText::new(btn.label)
+                                    .color(COLOR_PRIMARY)
+                                    .size(11.5)
+                                    .strong()
+                                    .monospace(),
+                            );
+
+                            let ev_str = if btn.evdev_code != 0 {
+                                format!("{:#06x}", btn.evdev_code)
+                            } else {
+                                "ABS_HAT0".to_string()
+                            };
+                            telemetry_badge(ui, "EVDEV", &ev_str, COLOR_PRIMARY_FIXED);
+
+                            if is_physically_pressed {
                                 ui.label(
-                                    RichText::new(&mapped_text)
-                                        .color(mapped_fg)
-                                        .size(10.5)
+                                    RichText::new("● PULSADO")
+                                        .color(COLOR_TERTIARY_CONTAINER)
+                                        .size(10.0)
                                         .strong()
                                         .monospace(),
                                 );
-                            });
-
-                        // Botones de acción a la derecha
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            // Limpiar
-                            if cell_opt.as_ref().is_some_and(|c| c.is_assigned())
-                                && ui
-                                    .button(RichText::new("🗑").color(COLOR_ERROR).size(11.0))
-                                    .on_hover_text("Limpiar asignación")
-                                    .clicked()
-                            {
-                                self.profile.remove_cell(self.selected_mode, &btn.id);
-                                monitor.set_profile(self.profile.clone());
-                                self.status_message =
-                                    Some((format!("ASIGNACIÓN ELIMINADA // {}", btn.label), false));
                             }
 
-                            // Editar
-                            if tactical_button(ui, "EDITAR", false, false).clicked() {
-                                self.editing_button_id = Some(btn.id.clone());
-                                if let Some(ref c) = cell_opt {
-                                    self.pending_name = c.name.clone();
-                                    self.pending_keys = c.keys.clone();
-                                } else {
-                                    self.pending_name = default_info.action.to_string();
-                                    self.pending_keys =
-                                        vec![default_info.key_display.replace(['[', ']'], "")];
-                                }
-                            }
+                            egui::Frame::new()
+                                .fill(mapped_bg)
+                                .stroke(Stroke::new(1.0, COLOR_OUTLINE_VARIANT))
+                                .corner_radius(egui::CornerRadius::same(4))
+                                .inner_margin(egui::Margin::symmetric(8, 3))
+                                .show(ui, |ui| {
+                                    ui.label(
+                                        RichText::new(&mapped_text)
+                                            .color(mapped_fg)
+                                            .size(10.5)
+                                            .strong()
+                                            .monospace(),
+                                    );
+                                });
 
-                            // Test
-                            if ui
-                                .button(
-                                    RichText::new("TEST")
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    self.render_row_actions(ui, monitor, btn, &cell_opt, false);
+                                },
+                            );
+                        });
+
+                        ui.add_space(2.0);
+                        self.render_row_metadata(ui, &cell_opt, &default_info);
+                    } else {
+                        // =========================================================
+                        // MODO RESPONSIVO (< 640px): Acciones bajan para no desbordarse
+                        // =========================================================
+                        // Fila 1: Icono, Nombre descriptivo, Badge EVDEV y estado físico
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label(RichText::new(default_info.icon).size(14.0));
+                            ui.label(
+                                RichText::new(btn.label)
+                                    .color(COLOR_PRIMARY)
+                                    .size(11.5)
+                                    .strong()
+                                    .monospace(),
+                            );
+
+                            let ev_str = if btn.evdev_code != 0 {
+                                format!("{:#06x}", btn.evdev_code)
+                            } else {
+                                "ABS_HAT0".to_string()
+                            };
+                            telemetry_badge(ui, "EVDEV", &ev_str, COLOR_PRIMARY_FIXED);
+
+                            if is_physically_pressed {
+                                ui.label(
+                                    RichText::new("● PULSADO (VAL: 1)")
                                         .color(COLOR_TERTIARY_CONTAINER)
                                         .size(10.0)
-                                        .monospace(),
-                                )
-                                .clicked()
-                            {
-                                self.last_detected_button =
-                                    Some(format!("{} // {}", btn.id.to_uppercase(), btn.label));
-                                self.last_hex_code = if btn.evdev_code != 0 {
-                                    format!("{:#06x}", btn.evdev_code)
-                                } else {
-                                    "0x0120".to_string()
-                                };
-                                self.last_state_down = true;
-                                self.status_message =
-                                    Some((format!("TEST SIMULADO: {}", btn.label), false));
-                            }
-                        });
-                    });
-
-                    // Sublínea de metadatos tácticos: Tipo, Grupo SC, Macro
-                    ui.add_space(2.0);
-                    ui.horizontal(|ui| {
-                        ui.label(
-                            RichText::new(format!(
-                                "TIPO: {} // GRUPO: {}",
-                                default_info.map_type, default_info.group_sc
-                            ))
-                            .color(COLOR_OUTLINE)
-                            .size(9.0)
-                            .monospace(),
-                        );
-                        if let Some(ref c) = cell_opt {
-                            if c.keys.len() > 1 {
-                                ui.label(
-                                    RichText::new(format!("// SECUENCIA x{}", c.keys.len()))
-                                        .color(COLOR_WARNING_AMBER)
-                                        .size(9.0)
+                                        .strong()
                                         .monospace(),
                                 );
                             }
+                        });
+
+                        ui.add_space(3.0);
+
+                        // Fila 2: Asignación actual destacada (Badge uinput)
+                        ui.horizontal_wrapped(|ui| {
+                            egui::Frame::new()
+                                .fill(mapped_bg)
+                                .stroke(Stroke::new(1.0, COLOR_OUTLINE_VARIANT))
+                                .corner_radius(egui::CornerRadius::same(4))
+                                .inner_margin(egui::Margin::symmetric(8, 3))
+                                .show(ui, |ui| {
+                                    ui.label(
+                                        RichText::new(&mapped_text)
+                                            .color(mapped_fg)
+                                            .size(10.5)
+                                            .strong()
+                                            .monospace(),
+                                    );
+                                });
+                        });
+
+                        ui.add_space(4.0);
+
+                        // Fila 3: Metadatos y botones de acción (Test, Editar, Limpiar)
+                        // que bajan responsivamente sin desbordarse de la tarjeta
+                        if card_w >= 400.0 {
+                            ui.horizontal(|ui| {
+                                self.render_row_metadata(ui, &cell_opt, &default_info);
+
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        self.render_row_actions(ui, monitor, btn, &cell_opt, true);
+                                    },
+                                );
+                            });
+                        } else {
+                            // En anchos muy reducidos (< 400px), metadatos en Fila 3 y acciones en Fila 4
+                            self.render_row_metadata(ui, &cell_opt, &default_info);
+                            ui.add_space(3.0);
+                            ui.horizontal_wrapped(|ui| {
+                                self.render_row_actions_left_to_right(ui, monitor, btn, &cell_opt);
+                            });
                         }
-                    });
+                    }
                 }
             });
 
@@ -1815,13 +1826,192 @@ impl ProgrammingTab {
         }
     }
 
-    /// Controles de edición en línea de teclas y nombre de comando.
+    /// Sublínea con información de tipo, grupo y secuencia de macros.
+    fn render_row_metadata(
+        &self,
+        ui: &mut Ui,
+        cell_opt: &Option<CommandCell>,
+        default_info: &DefaultMappingInfo,
+    ) {
+        ui.horizontal(|ui| {
+            ui.label(
+                RichText::new(format!(
+                    "TIPO: {} // GRUPO: {}",
+                    default_info.map_type, default_info.group_sc
+                ))
+                .color(COLOR_OUTLINE)
+                .size(9.0)
+                .monospace(),
+            );
+            if let Some(ref c) = cell_opt {
+                if c.keys.len() > 1 {
+                    ui.label(
+                        RichText::new(format!("// SECUENCIA x{}", c.keys.len()))
+                            .color(COLOR_WARNING_AMBER)
+                            .size(9.0)
+                            .monospace(),
+                    );
+                }
+            }
+        });
+    }
+
+    /// Botones de acción para cada fila (ordenados de derecha a izquierda).
+    fn render_row_actions(
+        &mut self,
+        ui: &mut Ui,
+        monitor: &ButtonMonitor,
+        btn: &ButtonDescriptor,
+        cell_opt: &Option<CommandCell>,
+        is_dropped_down: bool,
+    ) {
+        // En right_to_left, el primer elemento añadido queda más a la derecha.
+        // 1. Limpiar
+        if cell_opt.as_ref().is_some_and(|c| c.is_assigned()) {
+            let clean_label = if is_dropped_down {
+                "🗑 LIMPIAR"
+            } else {
+                "🗑"
+            };
+            if ui
+                .button(
+                    RichText::new(clean_label)
+                        .color(COLOR_ERROR)
+                        .size(10.0)
+                        .monospace(),
+                )
+                .on_hover_text("Limpiar asignación uinput de este botón")
+                .clicked()
+            {
+                self.profile.remove_cell(self.selected_mode, &btn.id);
+                monitor.set_profile(self.profile.clone());
+                self.status_message =
+                    Some((format!("ASIGNACIÓN ELIMINADA // {}", btn.label), false));
+            }
+            ui.add_space(3.0);
+        }
+
+        // 2. Editar
+        let edit_label = if is_dropped_down {
+            "✏ EDITAR"
+        } else {
+            "EDITAR"
+        };
+        if tactical_button(ui, edit_label, false, false)
+            .on_hover_text("Editar asignación de teclas y comando")
+            .clicked()
+        {
+            self.editing_button_id = Some(btn.id.clone());
+            if let Some(ref c) = cell_opt {
+                self.pending_name = c.name.clone();
+                self.pending_keys = c.keys.clone();
+            } else {
+                let default_info = default_mapping_for(&btn.id);
+                self.pending_name = default_info.action.to_string();
+                self.pending_keys = vec![default_info.key_display.replace(['[', ']'], "")];
+            }
+        }
+
+        ui.add_space(3.0);
+
+        // 3. Test
+        let test_label = if is_dropped_down { "⚡ TEST" } else { "TEST" };
+        if ui
+            .button(
+                RichText::new(test_label)
+                    .color(COLOR_TERTIARY_CONTAINER)
+                    .size(10.0)
+                    .monospace(),
+            )
+            .on_hover_text("Simular pulsación para verificar uinput")
+            .clicked()
+        {
+            self.last_detected_button = Some(format!("{} // {}", btn.id.to_uppercase(), btn.label));
+            self.last_hex_code = if btn.evdev_code != 0 {
+                format!("{:#06x}", btn.evdev_code)
+            } else {
+                "0x0120".to_string()
+            };
+            self.last_state_down = true;
+            self.status_message = Some((format!("TEST SIMULADO: {}", btn.label), false));
+        }
+    }
+
+    /// Botones de acción de izquierda a derecha para anchos muy reducidos (< 400px).
+    fn render_row_actions_left_to_right(
+        &mut self,
+        ui: &mut Ui,
+        monitor: &ButtonMonitor,
+        btn: &ButtonDescriptor,
+        cell_opt: &Option<CommandCell>,
+    ) {
+        // Test
+        if ui
+            .button(
+                RichText::new("⚡ TEST")
+                    .color(COLOR_TERTIARY_CONTAINER)
+                    .size(10.0)
+                    .monospace(),
+            )
+            .on_hover_text("Simular pulsación para verificar uinput")
+            .clicked()
+        {
+            self.last_detected_button = Some(format!("{} // {}", btn.id.to_uppercase(), btn.label));
+            self.last_hex_code = if btn.evdev_code != 0 {
+                format!("{:#06x}", btn.evdev_code)
+            } else {
+                "0x0120".to_string()
+            };
+            self.last_state_down = true;
+            self.status_message = Some((format!("TEST SIMULADO: {}", btn.label), false));
+        }
+
+        ui.add_space(4.0);
+
+        // Editar
+        if tactical_button(ui, "✏ EDITAR", false, false)
+            .on_hover_text("Editar asignación de teclas y comando")
+            .clicked()
+        {
+            self.editing_button_id = Some(btn.id.clone());
+            if let Some(ref c) = cell_opt {
+                self.pending_name = c.name.clone();
+                self.pending_keys = c.keys.clone();
+            } else {
+                let default_info = default_mapping_for(&btn.id);
+                self.pending_name = default_info.action.to_string();
+                self.pending_keys = vec![default_info.key_display.replace(['[', ']'], "")];
+            }
+        }
+
+        if cell_opt.as_ref().is_some_and(|c| c.is_assigned()) {
+            ui.add_space(4.0);
+            if ui
+                .button(
+                    RichText::new("🗑 LIMPIAR")
+                        .color(COLOR_ERROR)
+                        .size(10.0)
+                        .monospace(),
+                )
+                .on_hover_text("Limpiar asignación uinput de este botón")
+                .clicked()
+            {
+                self.profile.remove_cell(self.selected_mode, &btn.id);
+                monitor.set_profile(self.profile.clone());
+                self.status_message =
+                    Some((format!("ASIGNACIÓN ELIMINADA // {}", btn.label), false));
+            }
+        }
+    }
+
+    /// Controles de edición en línea de teclas y nombre de comando responsivos.
     fn render_inline_edit_controls(
         &mut self,
         ui: &mut Ui,
         monitor: &ButtonMonitor,
         btn: &ButtonDescriptor,
     ) {
+        let card_w = ui.available_width();
         ui.vertical(|ui| {
             let time = ui.input(|i| i.time);
             let cursor = if (time * 2.0).fract() < 0.5 {
@@ -1830,7 +2020,7 @@ impl ProgrammingTab {
                 " "
             };
 
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label(
                     RichText::new(format!("EDITANDO: [{}] {}", btn.code_label, btn.label))
                         .color(COLOR_PRIMARY_CONTAINER)
@@ -1849,7 +2039,7 @@ impl ProgrammingTab {
             ui.add_space(4.0);
 
             // Mosaicos visuales de teclas capturadas
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label(
                     RichText::new("TECLAS:")
                         .color(COLOR_OUTLINE)
@@ -1888,35 +2078,78 @@ impl ProgrammingTab {
 
             ui.add_space(4.0);
 
-            // Campo de nombre y botones de confirmación
-            ui.horizontal(|ui| {
-                ui.label(
-                    RichText::new("ACCIÓN:")
-                        .color(COLOR_OUTLINE)
-                        .size(10.0)
-                        .monospace(),
-                );
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.pending_name)
-                        .desired_width(180.0)
-                        .hint_text("Nombre de comando"),
-                );
+            // Campo de nombre y botones de confirmación responsivos
+            if card_w >= 480.0 {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new("ACCIÓN:")
+                            .color(COLOR_OUTLINE)
+                            .size(10.0)
+                            .monospace(),
+                    );
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.pending_name)
+                            .desired_width((card_w * 0.35).clamp(120.0, 180.0))
+                            .hint_text("Nombre de comando"),
+                    );
 
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui
-                        .button(
-                            RichText::new("✖ CANCELAR")
-                                .color(COLOR_ERROR)
-                                .size(10.5)
-                                .monospace(),
-                        )
-                        .clicked()
-                    {
-                        self.editing_button_id = None;
-                        self.pending_keys.clear();
-                        self.pending_name.clear();
-                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .button(
+                                RichText::new("✖ CANCELAR")
+                                    .color(COLOR_ERROR)
+                                    .size(10.5)
+                                    .monospace(),
+                            )
+                            .clicked()
+                        {
+                            self.editing_button_id = None;
+                            self.pending_keys.clear();
+                            self.pending_name.clear();
+                        }
 
+                        if tactical_button(ui, "✔ CONFIRMAR MAPEO", false, true).clicked() {
+                            let name_final = if self.pending_name.trim().is_empty() {
+                                btn.label.to_string()
+                            } else {
+                                self.pending_name.trim().to_string()
+                            };
+
+                            let cell = CommandCell {
+                                button_id: btn.id.clone(),
+                                name: name_final,
+                                keys: self.pending_keys.clone(),
+                            };
+
+                            self.profile.set_cell(self.selected_mode, cell);
+                            monitor.set_profile(self.profile.clone());
+                            self.status_message =
+                                Some((format!("MAPEO CONFIRMADO PARA {}", btn.label), false));
+
+                            self.editing_button_id = None;
+                            self.pending_keys.clear();
+                            self.pending_name.clear();
+                        }
+                    });
+                });
+            } else {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new("ACCIÓN:")
+                            .color(COLOR_OUTLINE)
+                            .size(10.0)
+                            .monospace(),
+                    );
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.pending_name)
+                            .desired_width(ui.available_width() - 8.0)
+                            .hint_text("Nombre de comando"),
+                    );
+                });
+
+                ui.add_space(4.0);
+
+                ui.horizontal_wrapped(|ui| {
                     if tactical_button(ui, "✔ CONFIRMAR MAPEO", false, true).clicked() {
                         let name_final = if self.pending_name.trim().is_empty() {
                             btn.label.to_string()
@@ -1939,8 +2172,22 @@ impl ProgrammingTab {
                         self.pending_keys.clear();
                         self.pending_name.clear();
                     }
+
+                    if ui
+                        .button(
+                            RichText::new("✖ CANCELAR")
+                                .color(COLOR_ERROR)
+                                .size(10.5)
+                                .monospace(),
+                        )
+                        .clicked()
+                    {
+                        self.editing_button_id = None;
+                        self.pending_keys.clear();
+                        self.pending_name.clear();
+                    }
                 });
-            });
+            }
         });
     }
 
