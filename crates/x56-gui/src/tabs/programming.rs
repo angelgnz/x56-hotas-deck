@@ -137,6 +137,10 @@ impl ProgrammingTab {
 
     /// Renderizado principal de la pestaña de programación.
     pub fn ui(&mut self, ui: &mut Ui, monitor: &ButtonMonitor) {
+        // Establecer el ancho máximo disponible para evitar cualquier desbordamiento horizontal
+        let avail_w = ui.available_width();
+        ui.set_max_width(avail_w);
+
         let snapshot = monitor.snapshot();
 
         // 1. Sincronización física de hardware si está activo el seguimiento automático
@@ -164,7 +168,7 @@ impl ProgrammingTab {
                 COLOR_TERTIARY_CONTAINER
             };
             theme::sunken_frame().show(ui, |ui| {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label(
                         RichText::new("● TELEMETRÍA //")
                             .color(col)
@@ -178,11 +182,9 @@ impl ProgrammingTab {
                             .size(11.0)
                             .monospace(),
                     );
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button("✖").clicked() {
-                            dismiss_status = true;
-                        }
-                    });
+                    if ui.small_button("✖").clicked() {
+                        dismiss_status = true;
+                    }
                 });
             });
             ui.add_space(4.0);
@@ -197,8 +199,8 @@ impl ProgrammingTab {
         if self.show_diagram_view {
             if total_w >= 850.0 {
                 let gap = 12.0;
-                let left_w = (total_w * 0.36).clamp(320.0, 420.0);
-                let right_w = (total_w - left_w - gap).max(280.0);
+                let left_w = (total_w * 0.35).clamp(310.0, 390.0);
+                let right_w = (total_w - left_w - gap - 6.0).max(260.0);
 
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = gap;
@@ -567,38 +569,38 @@ impl ProgrammingTab {
                     }
                 }
 
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    // Botón TEST EVDEV LOOP
-                    if tactical_button(ui, "⚡ TEST EVDEV LOOP", false, true).clicked() {
-                        self.show_test_window = true;
-                    }
+                ui.separator();
 
-                    // Estado del Router uinput
-                    let uinput_ready = monitor.uinput_available();
-                    let (dot_col, router_text) = if uinput_ready {
-                        (
-                            COLOR_TERTIARY_CONTAINER,
-                            "/dev/uinput v2.4 ROUTER | ANTI-GHOSTING 4ms ACTIVE",
-                        )
-                    } else {
-                        (
-                            COLOR_ERROR,
-                            "/dev/uinput NO DISPONIBLE | MODO SOLO LECTURA",
-                        )
-                    };
+                // Estado del Router uinput
+                let uinput_ready = monitor.uinput_available();
+                let (dot_col, router_text) = if uinput_ready {
+                    (
+                        COLOR_TERTIARY_CONTAINER,
+                        "UINPUT ROUTER: ONLINE (4ms)",
+                    )
+                } else {
+                    (
+                        COLOR_ERROR,
+                        "UINPUT: SOLO LECTURA",
+                    )
+                };
 
-                    theme::sunken_frame().inner_margin(egui::Margin::symmetric(8, 3)).show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            ui.label(RichText::new("●").color(dot_col).size(11.0));
-                            ui.label(
-                                RichText::new(router_text)
-                                    .color(COLOR_PRIMARY_FIXED)
-                                    .size(10.0)
-                                    .monospace(),
-                            );
-                        });
+                theme::sunken_frame().inner_margin(egui::Margin::symmetric(8, 3)).show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("●").color(dot_col).size(11.0));
+                        ui.label(
+                            RichText::new(router_text)
+                                .color(COLOR_PRIMARY_FIXED)
+                                .size(10.0)
+                                .monospace(),
+                        );
                     });
                 });
+
+                // Botón TEST EVDEV LOOP
+                if tactical_button(ui, "⚡ TEST LOOP", false, true).clicked() {
+                    self.show_test_window = true;
+                }
             });
         });
     }
@@ -1685,138 +1687,77 @@ impl ProgrammingTab {
                         )
                     };
 
-                    if card_w >= 640.0 {
-                        // =========================================================
-                        // MODO ANCHO (>= 640px): Identificador + Mapeo + Acciones en 1 fila
-                        // =========================================================
-                        ui.horizontal(|ui| {
-                            ui.label(RichText::new(default_info.icon).size(14.0));
+                    // Fila 1: Identificador del control (Icono + Nombre descriptivo + Badge EVDEV + Estado físico)
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(RichText::new(default_info.icon).size(14.0));
+                        ui.label(
+                            RichText::new(btn.label)
+                                .color(COLOR_PRIMARY)
+                                .size(11.5)
+                                .strong()
+                                .monospace(),
+                        );
+
+                        let ev_str = if btn.evdev_code != 0 {
+                            format!("{:#06x}", btn.evdev_code)
+                        } else {
+                            "ABS_HAT0".to_string()
+                        };
+                        telemetry_badge(ui, "EVDEV", &ev_str, COLOR_PRIMARY_FIXED);
+
+                        if is_physically_pressed {
                             ui.label(
-                                RichText::new(btn.label)
-                                    .color(COLOR_PRIMARY)
-                                    .size(11.5)
+                                RichText::new("● PULSADO (VAL: 1)")
+                                    .color(COLOR_TERTIARY_CONTAINER)
+                                    .size(10.0)
                                     .strong()
                                     .monospace(),
                             );
+                        }
+                    });
 
-                            let ev_str = if btn.evdev_code != 0 {
-                                format!("{:#06x}", btn.evdev_code)
-                            } else {
-                                "ABS_HAT0".to_string()
-                            };
-                            telemetry_badge(ui, "EVDEV", &ev_str, COLOR_PRIMARY_FIXED);
+                    ui.add_space(3.0);
 
-                            if is_physically_pressed {
+                    // Fila 2: Asignación actual destacada (Badge uinput con comando y combinación de teclas)
+                    ui.horizontal_wrapped(|ui| {
+                        egui::Frame::new()
+                            .fill(mapped_bg)
+                            .stroke(Stroke::new(1.0, COLOR_OUTLINE_VARIANT))
+                            .corner_radius(egui::CornerRadius::same(4))
+                            .inner_margin(egui::Margin::symmetric(8, 3))
+                            .show(ui, |ui| {
                                 ui.label(
-                                    RichText::new("● PULSADO")
-                                        .color(COLOR_TERTIARY_CONTAINER)
-                                        .size(10.0)
+                                    RichText::new(&mapped_text)
+                                        .color(mapped_fg)
+                                        .size(10.5)
                                         .strong()
                                         .monospace(),
                                 );
-                            }
+                            });
+                    });
 
-                            egui::Frame::new()
-                                .fill(mapped_bg)
-                                .stroke(Stroke::new(1.0, COLOR_OUTLINE_VARIANT))
-                                .corner_radius(egui::CornerRadius::same(4))
-                                .inner_margin(egui::Margin::symmetric(8, 3))
-                                .show(ui, |ui| {
-                                    ui.label(
-                                        RichText::new(&mapped_text)
-                                            .color(mapped_fg)
-                                            .size(10.5)
-                                            .strong()
-                                            .monospace(),
-                                    );
-                                });
+                    ui.add_space(4.0);
+
+                    // Fila 3: Metadatos a la izquierda y botones de acción (Test, Editar, Limpiar)
+                    // bajados responsivamente para que nunca se desborden ni queden cortados
+                    if card_w >= 420.0 {
+                        ui.horizontal(|ui| {
+                            self.render_row_metadata(ui, &cell_opt, &default_info);
 
                             ui.with_layout(
                                 egui::Layout::right_to_left(egui::Align::Center),
                                 |ui| {
-                                    self.render_row_actions(ui, monitor, btn, &cell_opt, false);
+                                    self.render_row_actions(ui, monitor, btn, &cell_opt, true);
                                 },
                             );
                         });
-
-                        ui.add_space(2.0);
-                        self.render_row_metadata(ui, &cell_opt, &default_info);
                     } else {
-                        // =========================================================
-                        // MODO RESPONSIVO (< 640px): Acciones bajan para no desbordarse
-                        // =========================================================
-                        // Fila 1: Icono, Nombre descriptivo, Badge EVDEV y estado físico
-                        ui.horizontal_wrapped(|ui| {
-                            ui.label(RichText::new(default_info.icon).size(14.0));
-                            ui.label(
-                                RichText::new(btn.label)
-                                    .color(COLOR_PRIMARY)
-                                    .size(11.5)
-                                    .strong()
-                                    .monospace(),
-                            );
-
-                            let ev_str = if btn.evdev_code != 0 {
-                                format!("{:#06x}", btn.evdev_code)
-                            } else {
-                                "ABS_HAT0".to_string()
-                            };
-                            telemetry_badge(ui, "EVDEV", &ev_str, COLOR_PRIMARY_FIXED);
-
-                            if is_physically_pressed {
-                                ui.label(
-                                    RichText::new("● PULSADO (VAL: 1)")
-                                        .color(COLOR_TERTIARY_CONTAINER)
-                                        .size(10.0)
-                                        .strong()
-                                        .monospace(),
-                                );
-                            }
-                        });
-
+                        // En anchos ultra compactos (< 420px), metadatos en Fila 3 y acciones en Fila 4
+                        self.render_row_metadata(ui, &cell_opt, &default_info);
                         ui.add_space(3.0);
-
-                        // Fila 2: Asignación actual destacada (Badge uinput)
                         ui.horizontal_wrapped(|ui| {
-                            egui::Frame::new()
-                                .fill(mapped_bg)
-                                .stroke(Stroke::new(1.0, COLOR_OUTLINE_VARIANT))
-                                .corner_radius(egui::CornerRadius::same(4))
-                                .inner_margin(egui::Margin::symmetric(8, 3))
-                                .show(ui, |ui| {
-                                    ui.label(
-                                        RichText::new(&mapped_text)
-                                            .color(mapped_fg)
-                                            .size(10.5)
-                                            .strong()
-                                            .monospace(),
-                                    );
-                                });
+                            self.render_row_actions_left_to_right(ui, monitor, btn, &cell_opt);
                         });
-
-                        ui.add_space(4.0);
-
-                        // Fila 3: Metadatos y botones de acción (Test, Editar, Limpiar)
-                        // que bajan responsivamente sin desbordarse de la tarjeta
-                        if card_w >= 400.0 {
-                            ui.horizontal(|ui| {
-                                self.render_row_metadata(ui, &cell_opt, &default_info);
-
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        self.render_row_actions(ui, monitor, btn, &cell_opt, true);
-                                    },
-                                );
-                            });
-                        } else {
-                            // En anchos muy reducidos (< 400px), metadatos en Fila 3 y acciones en Fila 4
-                            self.render_row_metadata(ui, &cell_opt, &default_info);
-                            ui.add_space(3.0);
-                            ui.horizontal_wrapped(|ui| {
-                                self.render_row_actions_left_to_right(ui, monitor, btn, &cell_opt);
-                            });
-                        }
                     }
                 }
             });
@@ -2197,71 +2138,73 @@ impl ProgrammingTab {
 
     fn render_tactical_footer(&mut self, ui: &mut Ui, monitor: &ButtonMonitor) {
         theme::dock_frame().show(ui, |ui| {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 // Badge de compatibilidad Proton & Steam Deck
-                theme::sunken_frame().inner_margin(egui::Margin::symmetric(8, 4)).show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label(RichText::new("🛡️").size(12.0));
-                        ui.label(
-                            RichText::new("PROTON & STEAM DECK COMPATIBLE (udev rules: 99-logitech-x56.rules [MODE 0666])")
-                                .color(COLOR_TERTIARY_CONTAINER)
-                                .size(9.5)
-                                .monospace(),
-                        );
+                theme::sunken_frame()
+                    .inner_margin(egui::Margin::symmetric(8, 4))
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new("🛡️").size(12.0));
+                            ui.label(
+                                RichText::new("PROTON & STEAM DECK (udev: 99-logitech-x56.rules)")
+                                    .color(COLOR_TERTIARY_CONTAINER)
+                                    .size(9.5)
+                                    .monospace(),
+                            );
+                        });
                     });
-                });
 
-                ui.add_space(8.0);
+                ui.add_space(4.0);
 
                 // Botones de exportación
-                if tactical_button(ui, "📄 EXPORTAR XML STAR CITIZEN", false, false).clicked() {
+                if tactical_button(ui, "📄 EXPORTAR XML", false, false).clicked() {
                     let xml = generate_star_citizen_xml(&self.profile);
                     if let Err(e) = std::fs::write("examples/star_citizen_actionmaps.xml", &xml) {
                         self.status_message = Some((format!("Error exportando XML: {e}"), true));
                     } else {
                         self.status_message = Some((
-                            "MAPEO EXPORTADO CON ÉXITO: examples/star_citizen_actionmaps.xml".to_string(),
+                            "MAPEO EXPORTADO: examples/star_citizen_actionmaps.xml".to_string(),
                             false,
                         ));
                     }
                 }
 
-                if tactical_button(ui, "💾 EXPORTAR JSON CONFIG", false, false).clicked() {
+                if tactical_button(ui, "💾 EXPORTAR JSON", false, false).clicked() {
                     let json = export_programming_json(&self.profile);
                     if let Err(e) = std::fs::write("examples/x56_buttons_config.json", &json) {
                         self.status_message = Some((format!("Error exportando JSON: {e}"), true));
                     } else {
                         self.status_message = Some((
-                            "CONFIGURACIÓN EXPORTADA CON ÉXITO: examples/x56_buttons_config.json".to_string(),
+                            "CONFIGURACIÓN EXPORTADA: examples/x56_buttons_config.json".to_string(),
                             false,
                         ));
                     }
                 }
 
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    // Botón primario azul con resplandor
-                    if tactical_button(ui, "⚡ ESCRIBIR MAPEO A UINPUT", false, true).clicked() {
-                        monitor.set_profile(self.profile.clone());
-                        monitor.set_active(true);
-                        self.status_message = Some((
-                            "MAPEO ESCRITO A /dev/uinput // ROUTER ACTIVO Y EMITIENDO TECLAS".to_string(),
-                            false,
-                        ));
-                    }
+                ui.separator();
 
-                    // Descartar cambios
-                    if tactical_button(ui, "✖ DESCARTAR CAMBIOS", false, false).clicked() {
-                        self.profile = ProgrammingProfile::default();
-                        monitor.set_profile(self.profile.clone());
-                        self.editing_button_id = None;
-                        self.pending_keys.clear();
-                        self.pending_name.clear();
-                        self.status_message = Some((
-                            "CAMBIOS DESCARTADOS // PERFIL REINICIADO".to_string(),
-                            false,
-                        ));
-                    }
-                });
+                // Descartar cambios
+                if tactical_button(ui, "✖ DESCARTAR CAMBIOS", false, false).clicked() {
+                    self.profile = ProgrammingProfile::default();
+                    monitor.set_profile(self.profile.clone());
+                    self.editing_button_id = None;
+                    self.pending_keys.clear();
+                    self.pending_name.clear();
+                    self.status_message = Some((
+                        "CAMBIOS DESCARTADOS // PERFIL REINICIADO".to_string(),
+                        false,
+                    ));
+                }
+
+                // Botón primario azul con resplandor
+                if tactical_button(ui, "⚡ ESCRIBIR MAPEO A UINPUT", false, true).clicked() {
+                    monitor.set_profile(self.profile.clone());
+                    monitor.set_active(true);
+                    self.status_message = Some((
+                        "MAPEO ESCRITO A /dev/uinput // ROUTER ACTIVO".to_string(),
+                        false,
+                    ));
+                }
             });
         });
     }
