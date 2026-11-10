@@ -1,6 +1,5 @@
-src/x56
-doxygen/*
 /target/
 __pycache__/
 *.pyc
+
 
