@@ -1601,7 +1601,7 @@ impl ProgrammingTab {
                 egui::pos2(center.x, top_y + 2.0 * s),
                 egui::Align2::CENTER_CENTER,
                 top_num,
-                egui::FontId::monospace(13.0 * s),
+                egui::FontId::monospace(18.5 * s),
                 t_col,
             );
         } else {
@@ -1648,7 +1648,7 @@ impl ProgrammingTab {
                 egui::pos2(center.x, bot_y - 2.0 * s),
                 egui::Align2::CENTER_CENTER,
                 bot_num,
-                egui::FontId::monospace(13.0 * s),
+                egui::FontId::monospace(18.5 * s),
                 t_col,
             );
         } else {
@@ -1691,11 +1691,17 @@ impl ProgrammingTab {
             ),
         );
         painter.circle_filled(knob_pos, r_knob * 0.72, Color32::from_rgb(20, 28, 41));
+
+        let knob_font_sz = if center_label.len() <= 2 {
+            20.0 * s
+        } else {
+            16.5 * s
+        };
         painter.text(
             knob_pos,
             egui::Align2::CENTER_CENTER,
             center_label,
-            egui::FontId::monospace(12.0 * s),
+            egui::FontId::monospace(knob_font_sz),
             Color32::WHITE,
         );
     }
@@ -1771,9 +1777,9 @@ impl ProgrammingTab {
         painter.circle_filled(center, r_cap * 0.72, Color32::from_rgb(18, 24, 36));
 
         let (t_col, font_sz) = if is_pressed {
-            (Color32::WHITE, if is_large { 42.0 * s } else { 38.0 * s })
+            (Color32::WHITE, if is_large { 54.0 * s } else { 50.0 * s })
         } else {
-            (cyan, if is_large { 40.0 * s } else { 36.0 * s })
+            (cyan, if is_large { 52.0 * s } else { 48.0 * s })
         };
         painter.text(
             egui::pos2(center.x, center.y + 1.5 * s),
@@ -1860,9 +1866,9 @@ impl ProgrammingTab {
         painter.rect_filled(inner_rect, 5.0 * s, Color32::from_rgb(17, 23, 35));
 
         let (t_col, font_sz) = if is_pressed {
-            (Color32::WHITE, 38.0 * s)
+            (Color32::WHITE, 50.0 * s)
         } else {
-            (cyan, 36.0 * s)
+            (cyan, 48.0 * s)
         };
         painter.text(
             egui::pos2(center.x, center.y + 1.5 * s),
@@ -1997,7 +2003,7 @@ impl ProgrammingTab {
             center,
             egui::Align2::CENTER_CENTER,
             "SC",
-            egui::FontId::monospace(13.0 * s),
+            egui::FontId::monospace(18.0 * s),
             Color32::WHITE,
         );
     }
@@ -2117,7 +2123,7 @@ impl ProgrammingTab {
             h_pos,
             egui::Align2::CENTER_CENTER,
             "K1",
-            egui::FontId::monospace(14.0 * s),
+            egui::FontId::monospace(19.0 * s),
             Color32::WHITE,
         );
 
@@ -2251,7 +2257,7 @@ impl ProgrammingTab {
             h_pos,
             egui::Align2::CENTER_CENTER,
             "SLD",
-            egui::FontId::monospace(14.0 * s),
+            egui::FontId::monospace(19.0 * s),
             Color32::WHITE,
         );
     }
@@ -2413,7 +2419,7 @@ impl ProgrammingTab {
             center,
             egui::Align2::CENTER_CENTER,
             label,
-            egui::FontId::monospace(17.0 * s),
+            egui::FontId::monospace(24.0 * s),
             Color32::WHITE,
         );
     }
