@@ -214,8 +214,8 @@ fn throttle_catalog() -> Vec<ButtonDescriptor> {
 
     let mut v = vec![
         btn("thr_btn_e", T, 0, "C", "Botón E (Pulgar)", GC),
-        btn("thr_rty_f_push", T, 1, "A", "Giratorio F Push (RTY 1)", GA),
-        btn("thr_rty_g_push", T, 2, "A", "Giratorio G Push (RTY 2)", GA),
+        btn("thr_rty_f_push", T, 1, "A", "Giratorio F Push (RTY 5)", GA),
+        btn("thr_rty_g_push", T, 2, "A", "Giratorio G Push (RTY 6)", GA),
         btn("thr_btn_i", T, 3, "C", "Botón I", GC),
         btn("thr_btn_h", T, 4, "C", "Botón H", GC),
     ];
