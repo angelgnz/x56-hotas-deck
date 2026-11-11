@@ -834,12 +834,12 @@ impl ProgrammingTab {
             ui.add_space(4.0);
 
             // Canvas de dibujo vectorial con egui::Painter
-            // El Throttle usa la relación de aspecto exacta del SVG (612/792 ≈ 0.7727)
+            // El Throttle usa la relación de aspecto exacta de la suite vectorial (1180x790 ≈ 0.6695)
             let aspect = match self.selected_device {
-                DeviceKind::Throttle => 612.0 / 792.0,
+                DeviceKind::Throttle => 790.0 / 1180.0,
                 DeviceKind::Stick => 0.72,
             };
-            let canvas_height = (ui.available_width() * aspect).clamp(280.0, 440.0);
+            let canvas_height = (ui.available_width() * aspect).clamp(280.0, 540.0);
             let canvas_size = Vec2::new(ui.available_width(), canvas_height);
             let (response, painter) = ui.allocate_painter(canvas_size, egui::Sense::click());
             let rect = response.rect;
@@ -939,7 +939,9 @@ impl ProgrammingTab {
             // Dibujar siluetas vectoriales de fondo
             match self.selected_device {
                 DeviceKind::Stick => self.draw_vector_stick_silhouette(&painter, rect),
-                DeviceKind::Throttle => self.draw_vector_throttle_silhouette(&painter, rect),
+                DeviceKind::Throttle => {
+                    self.draw_vector_throttle_silhouette(&painter, rect, snapshot)
+                }
             }
 
             // Dibujar pines interactivos con resplandor
@@ -985,88 +987,110 @@ impl ProgrammingTab {
                     .get_cell(self.selected_mode, node.id)
                     .is_some_and(|c| c.is_assigned());
 
-                // Determinación cromática Avionics Vector
-                let (fill, border, glow_col, glow_radius) = if is_pressed {
-                    (
-                        COLOR_TERTIARY_CONTAINER,
-                        Color32::WHITE,
-                        COLOR_TERTIARY_CONTAINER,
-                        node.radius + 6.0,
-                    )
-                } else if is_hovered {
-                    (
-                        COLOR_PRIMARY_CONTAINER,
-                        Color32::WHITE,
-                        COLOR_PRIMARY_CONTAINER,
-                        node.radius + 5.0,
-                    )
-                } else if is_assigned {
-                    (
-                        COLOR_WARNING_AMBER,
-                        Color32::from_rgb(255, 235, 170),
-                        COLOR_WARNING_AMBER,
-                        node.radius + 3.0,
-                    )
+                if self.selected_device == DeviceKind::Throttle {
+                    // Para Throttle: los componentes SVG detallados ya están dibujados y animados.
+                    // Aquí dibujamos el halo de interacción táctil y el indicador de asignación.
+                    if is_pressed {
+                        painter.circle_stroke(
+                            center,
+                            node.radius + 4.0,
+                            Stroke::new(2.5, COLOR_TERTIARY_CONTAINER),
+                        );
+                    } else if is_hovered {
+                        painter.circle_stroke(
+                            center,
+                            node.radius + 3.0,
+                            Stroke::new(2.0, COLOR_PRIMARY_CONTAINER),
+                        );
+                    }
+                    if is_assigned {
+                        painter.circle_filled(
+                            egui::pos2(center.x + node.radius * 0.7, center.y - node.radius * 0.7),
+                            3.5,
+                            COLOR_WARNING_AMBER,
+                        );
+                    }
                 } else {
-                    (
-                        COLOR_SURFACE_CONTAINER,
-                        COLOR_OUTLINE_VARIANT,
-                        Color32::TRANSPARENT,
-                        0.0,
-                    )
-                };
+                    // Para Stick: renderizado estándar de pines sólidos con etiqueta
+                    let (fill, border, glow_col, glow_radius) = if is_pressed {
+                        (
+                            COLOR_TERTIARY_CONTAINER,
+                            Color32::WHITE,
+                            COLOR_TERTIARY_CONTAINER,
+                            node.radius + 6.0,
+                        )
+                    } else if is_hovered {
+                        (
+                            COLOR_PRIMARY_CONTAINER,
+                            Color32::WHITE,
+                            COLOR_PRIMARY_CONTAINER,
+                            node.radius + 5.0,
+                        )
+                    } else if is_assigned {
+                        (
+                            COLOR_WARNING_AMBER,
+                            Color32::from_rgb(255, 235, 170),
+                            COLOR_WARNING_AMBER,
+                            node.radius + 3.0,
+                        )
+                    } else {
+                        (
+                            COLOR_SURFACE_CONTAINER,
+                            COLOR_OUTLINE_VARIANT,
+                            Color32::TRANSPARENT,
+                            0.0,
+                        )
+                    };
 
-                // Resplandor táctico exterior
-                if glow_radius > 0.0 {
-                    painter.circle_stroke(
-                        center,
-                        glow_radius,
-                        Stroke::new(
-                            1.5,
-                            Color32::from_rgba_premultiplied(
-                                glow_col.r(),
-                                glow_col.g(),
-                                glow_col.b(),
-                                70,
+                    if glow_radius > 0.0 {
+                        painter.circle_stroke(
+                            center,
+                            glow_radius,
+                            Stroke::new(
+                                1.5,
+                                Color32::from_rgba_premultiplied(
+                                    glow_col.r(),
+                                    glow_col.g(),
+                                    glow_col.b(),
+                                    70,
+                                ),
                             ),
-                        ),
+                        );
+                    }
+
+                    if node.is_rect {
+                        let node_rect = egui::Rect::from_center_size(center, node.rect_size);
+                        painter.rect_filled(node_rect, 3.0, fill);
+                        painter.rect_stroke(
+                            node_rect,
+                            3.0,
+                            Stroke::new(1.0, border),
+                            egui::StrokeKind::Inside,
+                        );
+                    } else {
+                        painter.circle_filled(center, node.radius, fill);
+                        painter.circle_stroke(center, node.radius, Stroke::new(1.0, border));
+                    }
+
+                    let text_col = if is_pressed || is_hovered || is_assigned {
+                        COLOR_SURFACE_LOWEST
+                    } else {
+                        COLOR_ON_SURFACE_VARIANT
+                    };
+
+                    let node_font_size = if node.short_label.chars().count() > 5 {
+                        7.5
+                    } else {
+                        9.0
+                    };
+                    painter.text(
+                        center,
+                        egui::Align2::CENTER_CENTER,
+                        node.short_label,
+                        egui::FontId::monospace(node_font_size),
+                        text_col,
                     );
                 }
-
-                // Cuerpo del pin
-                if node.is_rect {
-                    let node_rect = egui::Rect::from_center_size(center, node.rect_size);
-                    painter.rect_filled(node_rect, 3.0, fill);
-                    painter.rect_stroke(
-                        node_rect,
-                        3.0,
-                        Stroke::new(1.0, border),
-                        egui::StrokeKind::Inside,
-                    );
-                } else {
-                    painter.circle_filled(center, node.radius, fill);
-                    painter.circle_stroke(center, node.radius, Stroke::new(1.0, border));
-                }
-
-                // Etiqueta corta del nodo
-                let text_col = if is_pressed || is_hovered || is_assigned {
-                    COLOR_SURFACE_LOWEST
-                } else {
-                    COLOR_ON_SURFACE_VARIANT
-                };
-
-                let node_font_size = if node.short_label.chars().count() > 5 {
-                    7.5
-                } else {
-                    9.0
-                };
-                painter.text(
-                    center,
-                    egui::Align2::CENTER_CENTER,
-                    node.short_label,
-                    egui::FontId::monospace(node_font_size),
-                    text_col,
-                );
 
                 // Tooltip táctico
                 if is_mouse_over {
@@ -1223,155 +1247,1174 @@ impl ProgrammingTab {
         painter.rect_stroke(shaft_rect, 6.0, outline, egui::StrokeKind::Inside);
     }
 
-    /// Dibuja la silueta técnica y carcasas del Throttle en el mapa vectorial (coincide con diagrama SVG de hardware).
-    fn draw_vector_throttle_silhouette(&self, painter: &egui::Painter, rect: egui::Rect) {
-        let outline = Stroke::new(1.0, COLOR_OUTLINE_VARIANT);
-        let accent = Stroke::new(1.2, COLOR_PRIMARY_CONTAINER);
-        let label_col = COLOR_ON_SURFACE_VARIANT;
-
-        let p = |nx: f32, ny: f32| {
+    /// Dibuja la silueta técnica, carcasas y componentes interactivos animados del Throttle
+    /// replicando con fidelidad la suite vectorial SVG (viewBox 1180x790) y respondiendo en tiempo real
+    /// a las pulsaciones físicas de conmutadores, botones y ejes.
+    fn draw_vector_throttle_silhouette(
+        &self,
+        painter: &egui::Painter,
+        rect: egui::Rect,
+        snapshot: &LiveButtonsSnapshot,
+    ) {
+        let s = rect.width() / 1180.0;
+        let p = |x: f32, y: f32| {
             egui::pos2(
-                rect.min.x + nx * rect.width(),
-                rect.min.y + ny * rect.height(),
+                rect.min.x + (x / 1180.0) * rect.width(),
+                rect.min.y + (y / 790.0) * rect.height(),
             )
         };
-        let rx = |r_px: f32| (r_px / 792.0) * rect.width();
-        let ry = |r_px: f32| (r_px / 612.0) * rect.height();
 
-        // 1. SC Cápsula (cx: 0.1454, cy: 0.2110, w: 33.5, h: 68.2)
-        let sc_rect =
-            egui::Rect::from_center_size(p(0.1454, 0.2110), egui::vec2(rx(33.52), ry(68.20)));
-        painter.rect_stroke(sc_rect, 10.0, outline, egui::StrokeKind::Inside);
+        // 1. SC: Scroll Wheel (cx: 138, cy: 209, scale: 0.38)
+        let sc_center = p(138.0, 208.8);
+        let sc_fwd = snapshot.pressed_buttons.contains("thr_scroll_fwd");
+        let sc_bck = snapshot.pressed_buttons.contains("thr_scroll_bck");
+        Self::draw_scroll_wheel(painter, sc_center, 0.38 * s, sc_fwd, sc_bck);
+
+        // 2. K1: Toggle Doble Vertical (cx: 235.1, cy: 210.8, scale: 0.38)
+        let k1_center = p(235.1, 210.8);
+        let k1_up = snapshot.pressed_buttons.contains("thr_k1_up");
+        let k1_down = snapshot.pressed_buttons.contains("thr_k1_down");
+        Self::draw_double_toggle_k1(painter, k1_center, 0.38 * s, k1_up, k1_down);
+
+        // 3. Botones Circulares del Grip: I y H (scale: 0.29)
+        let i_center = p(484.6, 184.6);
+        let i_pressed = snapshot.pressed_buttons.contains("thr_btn_i");
+        let i_hovered = self.hovered_button_id.as_deref() == Some("thr_btn_i");
+        Self::draw_circular_button(
+            painter,
+            i_center,
+            0.29 * s,
+            i_pressed,
+            i_hovered,
+            "I",
+            false,
+        );
+
+        let h_center = p(594.6, 184.6);
+        let h_pressed = snapshot.pressed_buttons.contains("thr_btn_h");
+        let h_hovered = self.hovered_button_id.as_deref() == Some("thr_btn_h");
+        Self::draw_circular_button(
+            painter,
+            h_center,
+            0.29 * s,
+            h_pressed,
+            h_hovered,
+            "H",
+            false,
+        );
+
+        // 4. Giratorios Superiores F y G (scale: 0.40)
+        let f_center = p(745.0, 118.0);
+        let f_pressed = snapshot.pressed_buttons.contains("thr_rty_f_push");
+        let f_hovered = self.hovered_button_id.as_deref() == Some("thr_rty_f_push");
+        Self::draw_circular_button(painter, f_center, 0.40 * s, f_pressed, f_hovered, "F", true);
+
+        let g_center = p(745.0, 272.0);
+        let g_pressed = snapshot.pressed_buttons.contains("thr_rty_g_push");
+        let g_hovered = self.hovered_button_id.as_deref() == Some("thr_rty_g_push");
+        Self::draw_circular_button(painter, g_center, 0.40 * s, g_pressed, g_hovered, "G", true);
+
+        // 5. SLD: Toggle Horizontal (cx: 594.0, cy: 290.0, scale: 0.40)
+        let sld_center = p(594.0, 290.0);
+        let sld_on = snapshot.pressed_buttons.contains("thr_sld") || snapshot.slider_sld_on;
+        Self::draw_horizontal_slider_sld(painter, sld_center, 0.40 * s, sld_on);
+
+        // 6. E: Botón Cuadrado (cx: 581.6, cy: 391.6, scale: 0.29)
+        let e_center = p(581.6, 391.6);
+        let e_pressed = snapshot.pressed_buttons.contains("thr_btn_e");
+        let e_hovered = self.hovered_button_id.as_deref() == Some("thr_btn_e");
+        Self::draw_square_button(painter, e_center, 0.29 * s, e_pressed, e_hovered, "E");
+
+        // 7. H3: Cruceta Circular (cx: 694.7, cy: 394.7, scale: 0.31)
+        let h3_center = p(694.7, 394.7);
+        let h3_u = snapshot.pressed_buttons.contains("thr_h3_up");
+        let h3_r = snapshot.pressed_buttons.contains("thr_h3_right");
+        let h3_d = snapshot.pressed_buttons.contains("thr_h3_down");
+        let h3_l = snapshot.pressed_buttons.contains("thr_h3_left");
+        Self::draw_dpad(painter, h3_center, 0.31 * s, h3_u, h3_r, h3_d, h3_l, "H3");
+
+        // 8. H4: Cruceta Circular (cx: 647.7, cy: 509.7, scale: 0.31)
+        let h4_center = p(647.7, 509.7);
+        let h4_u = snapshot.pressed_buttons.contains("thr_h4_up");
+        let h4_r = snapshot.pressed_buttons.contains("thr_h4_right");
+        let h4_d = snapshot.pressed_buttons.contains("thr_h4_down");
+        let h4_l = snapshot.pressed_buttons.contains("thr_h4_left");
+        Self::draw_dpad(painter, h4_center, 0.31 * s, h4_u, h4_r, h4_d, h4_l, "H4");
+
+        // 9. Columna Derecha de Toggles: TGL 4, TGL 3, TGL 2, TGL 1 (scale: 0.34, solo flechas)
+        let tgl4_center = p(1035.0, 262.0);
+        let tgl4_u = snapshot.pressed_buttons.contains("thr_sw_13");
+        let tgl4_d = snapshot.pressed_buttons.contains("thr_sw_14");
+        Self::draw_circular_double_toggle(
+            painter,
+            tgl4_center,
+            0.34 * s,
+            tgl4_u,
+            tgl4_d,
+            "TGL 4",
+            false,
+            "",
+            "",
+        );
+
+        let tgl3_center = p(938.0, 352.0);
+        let tgl3_u = snapshot.pressed_buttons.contains("thr_sw_11");
+        let tgl3_d = snapshot.pressed_buttons.contains("thr_sw_12");
+        Self::draw_circular_double_toggle(
+            painter,
+            tgl3_center,
+            0.34 * s,
+            tgl3_u,
+            tgl3_d,
+            "TGL 3",
+            false,
+            "",
+            "",
+        );
+
+        let tgl2_center = p(1035.0, 472.0);
+        let tgl2_u = snapshot.pressed_buttons.contains("thr_sw_9");
+        let tgl2_d = snapshot.pressed_buttons.contains("thr_sw_10");
+        Self::draw_circular_double_toggle(
+            painter,
+            tgl2_center,
+            0.34 * s,
+            tgl2_u,
+            tgl2_d,
+            "TGL 2",
+            false,
+            "",
+            "",
+        );
+
+        let tgl1_center = p(938.0, 562.0);
+        let tgl1_u = snapshot.pressed_buttons.contains("thr_sw_7");
+        let tgl1_d = snapshot.pressed_buttons.contains("thr_sw_8");
+        Self::draw_circular_double_toggle(
+            painter,
+            tgl1_center,
+            0.34 * s,
+            tgl1_u,
+            tgl1_d,
+            "TGL 1",
+            false,
+            "",
+            "",
+        );
+
+        // 10. Fila Inferior de Conmutadores SW con números (scale: 0.36)
+        let sw12_center = p(345.0, 685.0);
+        let sw1_u = snapshot.pressed_buttons.contains("thr_sw_1");
+        let sw2_d = snapshot.pressed_buttons.contains("thr_sw_2");
+        Self::draw_circular_double_toggle(
+            painter,
+            sw12_center,
+            0.36 * s,
+            sw1_u,
+            sw2_d,
+            "SW",
+            true,
+            "1",
+            "2",
+        );
+
+        let sw34_center = p(545.0, 685.0);
+        let sw3_u = snapshot.pressed_buttons.contains("thr_sw_3");
+        let sw4_d = snapshot.pressed_buttons.contains("thr_sw_4");
+        Self::draw_circular_double_toggle(
+            painter,
+            sw34_center,
+            0.36 * s,
+            sw3_u,
+            sw4_d,
+            "SW",
+            true,
+            "3",
+            "4",
+        );
+
+        let sw56_center = p(745.0, 685.0);
+        let sw5_u = snapshot.pressed_buttons.contains("thr_sw_5");
+        let sw6_d = snapshot.pressed_buttons.contains("thr_sw_6");
+        Self::draw_circular_double_toggle(
+            painter,
+            sw56_center,
+            0.36 * s,
+            sw5_u,
+            sw6_d,
+            "SW",
+            true,
+            "5",
+            "6",
+        );
+    }
+
+    /// Dibuja un conmutador circular doble interactivo (TGL 1-4 o SW 1-6) con su palanca animada.
+    #[allow(clippy::too_many_arguments)]
+    fn draw_circular_double_toggle(
+        painter: &egui::Painter,
+        center: egui::Pos2,
+        s: f32,
+        is_up: bool,
+        is_down: bool,
+        center_label: &str,
+        is_numbered: bool,
+        top_num: &str,
+        bot_num: &str,
+    ) {
+        let cyan = COLOR_PRIMARY_CONTAINER;
+        let is_neutral = !is_up && !is_down;
+
+        let r_outer = 144.0 * s;
+        let r_inner = 134.0 * s;
+        let r_dish = 120.0 * s;
+
+        let outer_stroke = if !is_neutral {
+            Stroke::new(2.5 * s, cyan)
+        } else {
+            Stroke::new(2.5 * s, Color32::from_rgb(46, 60, 86))
+        };
+        painter.circle_filled(center, r_outer, Color32::from_rgb(18, 24, 36));
+        painter.circle_stroke(center, r_outer, outer_stroke);
+        painter.circle_stroke(
+            center,
+            r_inner,
+            Stroke::new(2.0 * s, Color32::from_rgb(11, 15, 23)),
+        );
+        painter.circle_filled(center, r_dish, Color32::from_rgb(24, 32, 48));
+        painter.circle_stroke(
+            center,
+            r_dish,
+            Stroke::new(1.8 * s, Color32::from_rgb(30, 40, 58)),
+        );
+
+        // Guardas curvas laterales
+        let guard_col = Color32::from_rgb(40, 55, 78);
+        let guard_w = 3.5 * s;
+        painter.line_segment(
+            [
+                egui::pos2(center.x - 68.0 * s, center.y - 40.0 * s),
+                egui::pos2(center.x - 76.0 * s, center.y),
+            ],
+            Stroke::new(guard_w, guard_col),
+        );
+        painter.line_segment(
+            [
+                egui::pos2(center.x - 76.0 * s, center.y),
+                egui::pos2(center.x - 68.0 * s, center.y + 40.0 * s),
+            ],
+            Stroke::new(guard_w, guard_col),
+        );
+        painter.line_segment(
+            [
+                egui::pos2(center.x + 68.0 * s, center.y - 40.0 * s),
+                egui::pos2(center.x + 76.0 * s, center.y),
+            ],
+            Stroke::new(guard_w, guard_col),
+        );
+        painter.line_segment(
+            [
+                egui::pos2(center.x + 76.0 * s, center.y),
+                egui::pos2(center.x + 68.0 * s, center.y + 40.0 * s),
+            ],
+            Stroke::new(guard_w, guard_col),
+        );
+
+        // Pozo vertical central
+        let well_w = 76.0 * s;
+        let well_h = 172.0 * s;
+        let well_rect = egui::Rect::from_center_size(center, egui::vec2(well_w, well_h));
+        painter.rect_filled(well_rect, 38.0 * s, Color32::from_rgb(6, 9, 15));
+        painter.rect_stroke(
+            well_rect,
+            38.0 * s,
+            Stroke::new(1.8 * s, Color32::from_rgb(31, 41, 59)),
+            egui::StrokeKind::Inside,
+        );
+
+        // Marcas de centro neutro
+        let tick_col = if is_neutral {
+            cyan
+        } else {
+            Color32::from_rgb(71, 85, 105)
+        };
+        painter.line_segment(
+            [
+                egui::pos2(center.x - 62.0 * s, center.y),
+                egui::pos2(center.x - 42.0 * s, center.y),
+            ],
+            Stroke::new(2.5 * s, tick_col),
+        );
+        painter.line_segment(
+            [
+                egui::pos2(center.x + 42.0 * s, center.y),
+                egui::pos2(center.x + 62.0 * s, center.y),
+            ],
+            Stroke::new(2.5 * s, tick_col),
+        );
+
+        // Posición del pomo animado
+        let handle_y = if is_up {
+            center.y - 52.0 * s
+        } else if is_down {
+            center.y + 52.0 * s
+        } else {
+            center.y
+        };
+
+        // Varilla de conexión
+        painter.line_segment(
+            [center, egui::pos2(center.x, handle_y)],
+            Stroke::new(
+                5.5 * s,
+                if !is_neutral {
+                    cyan
+                } else {
+                    Color32::from_rgb(30, 41, 59)
+                },
+            ),
+        );
+
+        // Indicador Superior
+        let top_y = center.y - 100.0 * s;
+        if is_numbered {
+            let tri = vec![
+                egui::pos2(center.x, top_y - 20.0 * s),
+                egui::pos2(center.x - 22.0 * s, top_y + 14.0 * s),
+                egui::pos2(center.x + 22.0 * s, top_y + 14.0 * s),
+            ];
+            let (f_col, s_col, t_col) = if is_up {
+                (cyan, Color32::WHITE, Color32::from_rgb(6, 8, 13))
+            } else {
+                (
+                    Color32::from_rgb(11, 16, 27),
+                    Color32::from_rgb(71, 85, 105),
+                    Color32::from_rgb(203, 213, 225),
+                )
+            };
+            painter.add(egui::Shape::convex_polygon(
+                tri,
+                f_col,
+                Stroke::new(1.5 * s, s_col),
+            ));
+            painter.text(
+                egui::pos2(center.x, top_y + 2.0 * s),
+                egui::Align2::CENTER_CENTER,
+                top_num,
+                egui::FontId::monospace(13.0 * s),
+                t_col,
+            );
+        } else {
+            let tri = vec![
+                egui::pos2(center.x, top_y - 24.0 * s),
+                egui::pos2(center.x - 18.0 * s, top_y + 6.0 * s),
+                egui::pos2(center.x + 18.0 * s, top_y + 6.0 * s),
+            ];
+            let (f_col, s_col) = if is_up {
+                (cyan, Color32::WHITE)
+            } else {
+                (Color32::from_rgb(30, 41, 59), cyan)
+            };
+            painter.add(egui::Shape::convex_polygon(
+                tri,
+                f_col,
+                Stroke::new(1.8 * s, s_col),
+            ));
+        }
+
+        // Indicador Inferior
+        let bot_y = center.y + 100.0 * s;
+        if is_numbered {
+            let tri = vec![
+                egui::pos2(center.x, bot_y + 20.0 * s),
+                egui::pos2(center.x - 22.0 * s, bot_y - 14.0 * s),
+                egui::pos2(center.x + 22.0 * s, bot_y - 14.0 * s),
+            ];
+            let (f_col, s_col, t_col) = if is_down {
+                (cyan, Color32::WHITE, Color32::from_rgb(6, 8, 13))
+            } else {
+                (
+                    Color32::from_rgb(11, 16, 27),
+                    Color32::from_rgb(71, 85, 105),
+                    Color32::from_rgb(203, 213, 225),
+                )
+            };
+            painter.add(egui::Shape::convex_polygon(
+                tri,
+                f_col,
+                Stroke::new(1.5 * s, s_col),
+            ));
+            painter.text(
+                egui::pos2(center.x, bot_y - 2.0 * s),
+                egui::Align2::CENTER_CENTER,
+                bot_num,
+                egui::FontId::monospace(13.0 * s),
+                t_col,
+            );
+        } else {
+            let tri = vec![
+                egui::pos2(center.x, bot_y + 24.0 * s),
+                egui::pos2(center.x - 18.0 * s, bot_y - 6.0 * s),
+                egui::pos2(center.x + 18.0 * s, bot_y - 6.0 * s),
+            ];
+            let (f_col, s_col) = if is_down {
+                (cyan, Color32::WHITE)
+            } else {
+                (Color32::from_rgb(30, 41, 59), cyan)
+            };
+            painter.add(egui::Shape::convex_polygon(
+                tri,
+                f_col,
+                Stroke::new(1.8 * s, s_col),
+            ));
+        }
+
+        // Pomo central animado
+        let knob_pos = egui::pos2(center.x, handle_y);
+        let r_knob = 34.0 * s;
+        painter.circle_filled(
+            egui::pos2(knob_pos.x, knob_pos.y + 3.0 * s),
+            r_knob,
+            Color32::from_black_alpha(150),
+        );
+        painter.circle_filled(knob_pos, r_knob, Color32::from_rgb(32, 42, 60));
+        painter.circle_stroke(
+            knob_pos,
+            r_knob,
+            Stroke::new(
+                1.8 * s,
+                if !is_neutral {
+                    cyan
+                } else {
+                    Color32::from_rgb(71, 91, 124)
+                },
+            ),
+        );
+        painter.circle_filled(knob_pos, r_knob * 0.72, Color32::from_rgb(20, 28, 41));
         painter.text(
-            p(0.1454, 0.2110),
+            knob_pos,
+            egui::Align2::CENTER_CENTER,
+            center_label,
+            egui::FontId::monospace(12.0 * s),
+            Color32::WHITE,
+        );
+    }
+
+    /// Dibuja un botón circular táctico (I, H, F, G) con bisel radial y halo LED.
+    fn draw_circular_button(
+        painter: &egui::Painter,
+        center: egui::Pos2,
+        s: f32,
+        is_pressed: bool,
+        is_hovered: bool,
+        letter: &str,
+        is_large: bool,
+    ) {
+        let cyan = COLOR_PRIMARY_CONTAINER;
+        let r_bezel = 132.0 * s;
+        let r_well = 114.0 * s;
+        let r_halo = 102.0 * s;
+        let r_cap = if is_pressed { 80.0 * s } else { 86.0 * s };
+
+        let bezel_stroke = if is_pressed || is_hovered {
+            Stroke::new(2.8 * s, cyan)
+        } else {
+            Stroke::new(2.2 * s, Color32::from_rgb(51, 67, 94))
+        };
+
+        painter.circle_filled(center, r_bezel, Color32::from_rgb(19, 25, 38));
+        painter.circle_stroke(center, r_bezel, bezel_stroke);
+        painter.circle_filled(center, r_well, Color32::from_rgb(7, 10, 16));
+
+        // Halo LED circular
+        if is_pressed {
+            painter.circle_stroke(center, r_halo, Stroke::new(4.5 * s, cyan));
+        } else if is_hovered {
+            painter.circle_stroke(
+                center,
+                r_halo,
+                Stroke::new(2.5 * s, Color32::from_rgba_unmultiplied(0, 240, 255, 160)),
+            );
+        } else {
+            painter.circle_stroke(
+                center,
+                r_halo,
+                Stroke::new(1.8 * s, Color32::from_rgba_unmultiplied(34, 48, 70, 130)),
+            );
+        }
+
+        // Émbolo central
+        let shadow_y = if is_pressed { 2.0 * s } else { 6.0 * s };
+        painter.circle_filled(
+            egui::pos2(center.x, center.y + shadow_y),
+            r_cap,
+            Color32::from_black_alpha(160),
+        );
+        let cap_col = if is_pressed {
+            Color32::from_rgb(24, 33, 48)
+        } else {
+            Color32::from_rgb(32, 42, 60)
+        };
+        painter.circle_filled(center, r_cap, cap_col);
+        painter.circle_stroke(
+            center,
+            r_cap,
+            Stroke::new(
+                1.8 * s,
+                if is_pressed {
+                    cyan
+                } else {
+                    Color32::from_rgb(71, 91, 124)
+                },
+            ),
+        );
+        painter.circle_filled(center, r_cap * 0.72, Color32::from_rgb(18, 24, 36));
+
+        let (t_col, font_sz) = if is_pressed {
+            (Color32::WHITE, if is_large { 42.0 * s } else { 38.0 * s })
+        } else {
+            (cyan, if is_large { 40.0 * s } else { 36.0 * s })
+        };
+        painter.text(
+            egui::pos2(center.x, center.y + 1.5 * s),
+            egui::Align2::CENTER_CENTER,
+            letter,
+            egui::FontId::monospace(font_sz),
+            t_col,
+        );
+    }
+
+    /// Dibuja el botón cuadrado biselado E.
+    fn draw_square_button(
+        painter: &egui::Painter,
+        center: egui::Pos2,
+        s: f32,
+        is_pressed: bool,
+        is_hovered: bool,
+        letter: &str,
+    ) {
+        let cyan = COLOR_PRIMARY_CONTAINER;
+        let half_chassis = 126.0 * s;
+        let half_well = 102.0 * s;
+        let half_cap = if is_pressed { 74.0 * s } else { 80.0 * s };
+
+        let stroke_col = if is_pressed || is_hovered {
+            cyan
+        } else {
+            Color32::from_rgb(46, 61, 86)
+        };
+
+        let chassis_rect = egui::Rect::from_center_size(
+            center,
+            egui::vec2(half_chassis * 2.0, half_chassis * 2.0),
+        );
+        painter.rect_filled(chassis_rect, 14.0 * s, Color32::from_rgb(18, 24, 36));
+        painter.rect_stroke(
+            chassis_rect,
+            14.0 * s,
+            Stroke::new(2.2 * s, stroke_col),
+            egui::StrokeKind::Inside,
+        );
+
+        let well_rect =
+            egui::Rect::from_center_size(center, egui::vec2(half_well * 2.0, half_well * 2.0));
+        painter.rect_filled(well_rect, 10.0 * s, Color32::from_rgb(6, 9, 15));
+        painter.rect_stroke(
+            well_rect,
+            10.0 * s,
+            Stroke::new(1.8 * s, Color32::from_rgb(31, 41, 59)),
+            egui::StrokeKind::Inside,
+        );
+
+        let shadow_y = if is_pressed { 2.0 * s } else { 6.0 * s };
+        let shadow_rect = egui::Rect::from_center_size(
+            egui::pos2(center.x, center.y + shadow_y),
+            egui::vec2(half_cap * 2.0, half_cap * 2.0),
+        );
+        painter.rect_filled(shadow_rect, 8.0 * s, Color32::from_black_alpha(160));
+
+        let cap_rect =
+            egui::Rect::from_center_size(center, egui::vec2(half_cap * 2.0, half_cap * 2.0));
+        let cap_col = if is_pressed {
+            Color32::from_rgb(24, 33, 48)
+        } else {
+            Color32::from_rgb(32, 42, 60)
+        };
+        painter.rect_filled(cap_rect, 8.0 * s, cap_col);
+        painter.rect_stroke(
+            cap_rect,
+            8.0 * s,
+            Stroke::new(
+                1.8 * s,
+                if is_pressed {
+                    cyan
+                } else {
+                    Color32::from_rgb(71, 91, 124)
+                },
+            ),
+            egui::StrokeKind::Inside,
+        );
+
+        let inner_rect =
+            egui::Rect::from_center_size(center, egui::vec2(half_cap * 1.35, half_cap * 1.35));
+        painter.rect_filled(inner_rect, 5.0 * s, Color32::from_rgb(17, 23, 35));
+
+        let (t_col, font_sz) = if is_pressed {
+            (Color32::WHITE, 38.0 * s)
+        } else {
+            (cyan, 36.0 * s)
+        };
+        painter.text(
+            egui::pos2(center.x, center.y + 1.5 * s),
+            egui::Align2::CENTER_CENTER,
+            letter,
+            egui::FontId::monospace(font_sz),
+            t_col,
+        );
+    }
+
+    /// Dibuja la rueda scroll táctica SC con punteros laterales y ranuras rotativas.
+    fn draw_scroll_wheel(
+        painter: &egui::Painter,
+        center: egui::Pos2,
+        s: f32,
+        is_fwd: bool,
+        is_bck: bool,
+    ) {
+        let cyan = COLOR_PRIMARY_CONTAINER;
+
+        let w = 164.0 * s;
+        let h = 300.0 * s;
+        let cap_rect = egui::Rect::from_center_size(center, egui::vec2(w, h));
+        painter.rect_filled(cap_rect, w * 0.5, Color32::from_rgb(14, 19, 30));
+        painter.rect_stroke(
+            cap_rect,
+            w * 0.5,
+            Stroke::new(2.2 * s, Color32::from_rgb(41, 56, 82)),
+            egui::StrokeKind::Inside,
+        );
+
+        // Flechas superior e inferior
+        let top_arrow = vec![
+            egui::pos2(center.x, center.y - 136.0 * s),
+            egui::pos2(center.x - 15.0 * s, center.y - 114.0 * s),
+            egui::pos2(center.x + 15.0 * s, center.y - 114.0 * s),
+        ];
+        painter.add(egui::Shape::convex_polygon(
+            top_arrow,
+            if is_fwd {
+                cyan
+            } else {
+                Color32::from_rgb(71, 85, 105)
+            },
+            Stroke::NONE,
+        ));
+
+        let bot_arrow = vec![
+            egui::pos2(center.x, center.y + 136.0 * s),
+            egui::pos2(center.x - 15.0 * s, center.y + 114.0 * s),
+            egui::pos2(center.x + 15.0 * s, center.y + 114.0 * s),
+        ];
+        painter.add(egui::Shape::convex_polygon(
+            bot_arrow,
+            if is_bck {
+                cyan
+            } else {
+                Color32::from_rgb(71, 85, 105)
+            },
+            Stroke::NONE,
+        ));
+
+        // Cavidad del tambor
+        let cav_rect = egui::Rect::from_center_size(center, egui::vec2(92.0 * s, 212.0 * s));
+        painter.rect_filled(cav_rect, 22.0 * s, Color32::from_rgb(5, 7, 12));
+        painter.rect_stroke(
+            cav_rect,
+            22.0 * s,
+            Stroke::new(1.8 * s, Color32::from_rgb(30, 41, 59)),
+            egui::StrokeKind::Inside,
+        );
+
+        // Punteros laterales cian
+        let p_left = vec![
+            egui::pos2(center.x - 56.0 * s, center.y),
+            egui::pos2(center.x - 66.0 * s, center.y - 5.0 * s),
+            egui::pos2(center.x - 66.0 * s, center.y + 5.0 * s),
+        ];
+        painter.add(egui::Shape::convex_polygon(p_left, cyan, Stroke::NONE));
+
+        let p_right = vec![
+            egui::pos2(center.x + 56.0 * s, center.y),
+            egui::pos2(center.x + 66.0 * s, center.y - 5.0 * s),
+            egui::pos2(center.x + 66.0 * s, center.y + 5.0 * s),
+        ];
+        painter.add(egui::Shape::convex_polygon(p_right, cyan, Stroke::NONE));
+
+        // Tambor rotativo
+        let drum_rect = egui::Rect::from_center_size(center, egui::vec2(72.0 * s, 196.0 * s));
+        painter.rect_filled(drum_rect, 16.0 * s, Color32::from_rgb(30, 40, 58));
+        painter.rect_stroke(
+            drum_rect,
+            16.0 * s,
+            Stroke::new(
+                1.8 * s,
+                if is_fwd || is_bck {
+                    cyan
+                } else {
+                    Color32::from_rgb(59, 77, 107)
+                },
+            ),
+            egui::StrokeKind::Inside,
+        );
+
+        // Ranuras del tambor
+        for i in -5..=5 {
+            let ry = center.y + (i as f32) * 16.0 * s;
+            let line_col = if i == 0 {
+                cyan
+            } else {
+                Color32::from_rgb(71, 85, 105)
+            };
+            painter.line_segment(
+                [
+                    egui::pos2(center.x - 26.0 * s, ry),
+                    egui::pos2(center.x + 26.0 * s, ry),
+                ],
+                Stroke::new(1.4 * s, line_col),
+            );
+        }
+
+        // Badge central "SC"
+        let badge_rect = egui::Rect::from_center_size(center, egui::vec2(48.0 * s, 32.0 * s));
+        painter.rect_filled(badge_rect, 6.0 * s, Color32::from_rgb(10, 14, 23));
+        painter.rect_stroke(
+            badge_rect,
+            6.0 * s,
+            Stroke::new(1.2 * s, cyan),
+            egui::StrokeKind::Inside,
+        );
+        painter.text(
+            center,
             egui::Align2::CENTER_CENTER,
             "SC",
-            egui::FontId::monospace(9.5),
-            label_col,
+            egui::FontId::monospace(13.0 * s),
+            Color32::WHITE,
+        );
+    }
+
+    /// Dibuja el conmutador vertical K1 con su manija animada y LEDs.
+    fn draw_double_toggle_k1(
+        painter: &egui::Painter,
+        center: egui::Pos2,
+        s: f32,
+        is_up: bool,
+        is_down: bool,
+    ) {
+        let cyan = COLOR_PRIMARY_CONTAINER;
+        let is_neutral = !is_up && !is_down;
+
+        let w = 166.0 * s;
+        let h = 300.0 * s;
+        let k1_rect = egui::Rect::from_center_size(center, egui::vec2(w, h));
+        painter.rect_filled(k1_rect, 14.0 * s, Color32::from_rgb(14, 19, 30));
+        painter.rect_stroke(
+            k1_rect,
+            14.0 * s,
+            Stroke::new(2.0 * s, Color32::from_rgb(38, 53, 77)),
+            egui::StrokeKind::Inside,
         );
 
-        // 2. K1 Cápsula (cx: 0.2147, cy: 0.2110, w: 33.5, h: 50.3)
-        let k1_rect =
-            egui::Rect::from_center_size(p(0.2147, 0.2110), egui::vec2(rx(33.52), ry(50.34)));
-        painter.rect_stroke(k1_rect, 8.0, outline, egui::StrokeKind::Inside);
+        // Barras laterales
+        let b_left = egui::Rect::from_center_size(
+            egui::pos2(center.x - 63.0 * s, center.y),
+            egui::vec2(8.0 * s, 184.0 * s),
+        );
+        painter.rect_filled(b_left, 3.0 * s, Color32::from_rgb(20, 27, 38));
+        let b_right = egui::Rect::from_center_size(
+            egui::pos2(center.x + 63.0 * s, center.y),
+            egui::vec2(8.0 * s, 184.0 * s),
+        );
+        painter.rect_filled(b_right, 3.0 * s, Color32::from_rgb(20, 27, 38));
+
+        // Flecha Arriba + LED
+        let top_arrow = vec![
+            egui::pos2(center.x, center.y - 142.0 * s),
+            egui::pos2(center.x - 13.0 * s, center.y - 124.0 * s),
+            egui::pos2(center.x + 13.0 * s, center.y - 124.0 * s),
+        ];
+        painter.add(egui::Shape::convex_polygon(
+            top_arrow,
+            if is_up {
+                cyan
+            } else {
+                Color32::from_rgb(71, 85, 105)
+            },
+            Stroke::NONE,
+        ));
+        painter.circle_filled(
+            egui::pos2(center.x, center.y - 110.0 * s),
+            6.0 * s,
+            if is_up {
+                cyan
+            } else {
+                Color32::from_rgb(24, 32, 44)
+            },
+        );
+
+        // Pozo vertical
+        let slot_rect = egui::Rect::from_center_size(center, egui::vec2(70.0 * s, 184.0 * s));
+        painter.rect_filled(slot_rect, 35.0 * s, Color32::from_rgb(6, 9, 15));
+        painter.rect_stroke(
+            slot_rect,
+            35.0 * s,
+            Stroke::new(1.8 * s, Color32::from_rgb(29, 38, 54)),
+            egui::StrokeKind::Inside,
+        );
+
+        // Manija animada
+        let handle_y = if is_up {
+            center.y - 58.0 * s
+        } else if is_down {
+            center.y + 58.0 * s
+        } else {
+            center.y
+        };
+
+        painter.line_segment(
+            [center, egui::pos2(center.x, handle_y)],
+            Stroke::new(
+                4.5 * s,
+                if !is_neutral {
+                    cyan
+                } else {
+                    Color32::from_rgb(30, 41, 59)
+                },
+            ),
+        );
+
+        let h_pos = egui::pos2(center.x, handle_y);
+        let handle_pts = vec![
+            egui::pos2(h_pos.x - 26.0 * s, h_pos.y - 28.0 * s),
+            egui::pos2(h_pos.x + 26.0 * s, h_pos.y - 28.0 * s),
+            egui::pos2(h_pos.x + 30.0 * s, h_pos.y),
+            egui::pos2(h_pos.x + 26.0 * s, h_pos.y + 28.0 * s),
+            egui::pos2(h_pos.x - 26.0 * s, h_pos.y + 28.0 * s),
+            egui::pos2(h_pos.x - 30.0 * s, h_pos.y),
+        ];
+        painter.add(egui::Shape::convex_polygon(
+            handle_pts,
+            Color32::from_rgb(32, 42, 59),
+            Stroke::new(
+                1.8 * s,
+                if !is_neutral {
+                    cyan
+                } else {
+                    Color32::from_rgb(67, 86, 117)
+                },
+            ),
+        ));
         painter.text(
-            p(0.2147, 0.2110),
+            h_pos,
             egui::Align2::CENTER_CENTER,
             "K1",
-            egui::FontId::monospace(9.5),
-            label_col,
+            egui::FontId::monospace(14.0 * s),
+            Color32::WHITE,
         );
 
-        // 3. I Anillo exterior (cx: 0.4397, cy: 0.2110, r: 21.0)
-        painter.circle_stroke(p(0.4397, 0.2110), rx(20.99), outline);
+        // LED + Flecha Abajo
+        painter.circle_filled(
+            egui::pos2(center.x, center.y + 110.0 * s),
+            6.0 * s,
+            if is_down {
+                cyan
+            } else {
+                Color32::from_rgb(24, 32, 44)
+            },
+        );
+        let bot_arrow = vec![
+            egui::pos2(center.x, center.y + 142.0 * s),
+            egui::pos2(center.x - 13.0 * s, center.y + 124.0 * s),
+            egui::pos2(center.x + 13.0 * s, center.y + 124.0 * s),
+        ];
+        painter.add(egui::Shape::convex_polygon(
+            bot_arrow,
+            if is_down {
+                cyan
+            } else {
+                Color32::from_rgb(71, 85, 105)
+            },
+            Stroke::NONE,
+        ));
+    }
 
-        // 4. H Anillo exterior (cx: 0.5197, cy: 0.2110, r: 21.0)
-        painter.circle_stroke(p(0.5197, 0.2110), rx(20.99), outline);
-
-        // 5. SLD Carcasa redondeada (cx: 0.5197, cy: 0.2995, w: 50.3, h: 33.5)
-        let sld_rect =
-            egui::Rect::from_center_size(p(0.5197, 0.2995), egui::vec2(rx(50.34), ry(33.52)));
-        painter.rect_stroke(sld_rect, 6.0, outline, egui::StrokeKind::Inside);
-
-        // 6. E Carcasa cuadrada (cx: 0.5119, cy: 0.3811, size: 38.1)
-        let e_rect =
-            egui::Rect::from_center_size(p(0.5119, 0.3811), egui::vec2(rx(38.13), ry(38.13)));
-        painter.rect_stroke(e_rect, 3.0, outline, egui::StrokeKind::Inside);
-
-        // 7. F Giratorio Superior (cx: 0.6627, cy: 0.1293, r: 29.0)
-        painter.circle_stroke(p(0.6627, 0.1293), rx(28.99), accent);
-
-        // 8. G Giratorio Inferior (cx: 0.6627, cy: 0.2995, r: 29.0)
-        painter.circle_stroke(p(0.6627, 0.2995), rx(28.99), accent);
-
-        // 9. H3 Carcasa circular (cx: 0.5995, cy: 0.3843, r: 21.0)
-        painter.circle_stroke(p(0.5995, 0.3843), rx(20.99), outline);
-        painter.text(
-            p(0.5995, 0.3843),
-            egui::Align2::CENTER_CENTER,
-            "H3",
-            egui::FontId::monospace(9.0),
-            label_col,
+    /// Dibuja el control deslizante horizontal SLD con LEDs laterales y manija animada.
+    fn draw_horizontal_slider_sld(
+        painter: &egui::Painter,
+        center: egui::Pos2,
+        s: f32,
+        is_on: bool,
+    ) {
+        let cyan = COLOR_PRIMARY_CONTAINER;
+        let w = 256.0 * s;
+        let h = 162.0 * s;
+        let sld_rect = egui::Rect::from_center_size(center, egui::vec2(w, h));
+        painter.rect_filled(sld_rect, 34.0 * s, Color32::from_rgb(14, 19, 30));
+        painter.rect_stroke(
+            sld_rect,
+            34.0 * s,
+            Stroke::new(
+                2.2 * s,
+                if is_on {
+                    cyan
+                } else {
+                    Color32::from_rgb(43, 58, 84)
+                },
+            ),
+            egui::StrokeKind::Inside,
         );
 
-        // 10. H4 Carcasa circular (cx: 0.5730, cy: 0.4657, r: 21.0)
-        painter.circle_stroke(p(0.5730, 0.4657), rx(20.99), outline);
-        painter.text(
-            p(0.5730, 0.4657),
-            egui::Align2::CENTER_CENTER,
-            "H4",
-            egui::FontId::monospace(9.0),
-            label_col,
+        // Pista horizontal
+        let track_rect = egui::Rect::from_center_size(center, egui::vec2(168.0 * s, 74.0 * s));
+        painter.rect_filled(track_rect, 37.0 * s, Color32::from_rgb(6, 9, 15));
+        painter.rect_stroke(
+            track_rect,
+            37.0 * s,
+            Stroke::new(1.8 * s, Color32::from_rgb(29, 38, 54)),
+            egui::StrokeKind::Inside,
         );
 
-        // 11. TGL 4 (cx: 0.8381, cy: 0.3188, r: 24.2)
-        painter.circle_stroke(p(0.8381, 0.3188), rx(24.22), outline);
-        painter.text(
-            p(0.8381, 0.3188),
-            egui::Align2::CENTER_CENTER,
-            "TGL 4",
-            egui::FontId::monospace(8.0),
-            label_col,
+        // LEDs laterales
+        painter.circle_filled(
+            egui::pos2(center.x - 104.0 * s, center.y),
+            5.5 * s,
+            if !is_on {
+                Color32::from_rgb(148, 163, 184)
+            } else {
+                Color32::from_rgb(24, 32, 44)
+            },
+        );
+        painter.circle_filled(
+            egui::pos2(center.x + 104.0 * s, center.y),
+            6.0 * s,
+            if is_on {
+                cyan
+            } else {
+                Color32::from_rgb(24, 32, 44)
+            },
         );
 
-        // 12. TGL 3 (cx: 0.7770, cy: 0.3979, r: 24.2)
-        painter.circle_stroke(p(0.7770, 0.3979), rx(24.22), outline);
-        painter.text(
-            p(0.7770, 0.3979),
-            egui::Align2::CENTER_CENTER,
-            "TGL 3",
-            egui::FontId::monospace(8.0),
-            label_col,
+        // Posición de la manija deslizante
+        let handle_x = if is_on {
+            center.x + 46.0 * s
+        } else {
+            center.x - 46.0 * s
+        };
+
+        // Barra de recorrido
+        painter.line_segment(
+            [
+                egui::pos2(center.x - 46.0 * s, center.y),
+                egui::pos2(handle_x, center.y),
+            ],
+            Stroke::new(
+                5.0 * s,
+                if is_on {
+                    cyan
+                } else {
+                    Color32::from_rgb(30, 41, 59)
+                },
+            ),
         );
 
-        // 13. TGL 2 (cx: 0.8381, cy: 0.5335, r: 24.2)
-        painter.circle_stroke(p(0.8381, 0.5335), rx(24.22), outline);
+        let h_pos = egui::pos2(handle_x, center.y);
+        let handle_pts = vec![
+            egui::pos2(h_pos.x - 32.0 * s, h_pos.y - 28.0 * s),
+            egui::pos2(h_pos.x + 32.0 * s, h_pos.y - 28.0 * s),
+            egui::pos2(h_pos.x + 36.0 * s, h_pos.y),
+            egui::pos2(h_pos.x + 32.0 * s, h_pos.y + 28.0 * s),
+            egui::pos2(h_pos.x - 32.0 * s, h_pos.y + 28.0 * s),
+            egui::pos2(h_pos.x - 36.0 * s, h_pos.y),
+        ];
+        painter.add(egui::Shape::convex_polygon(
+            handle_pts,
+            Color32::from_rgb(32, 42, 59),
+            Stroke::new(
+                1.8 * s,
+                if is_on {
+                    cyan
+                } else {
+                    Color32::from_rgb(71, 91, 124)
+                },
+            ),
+        ));
         painter.text(
-            p(0.8381, 0.5335),
+            h_pos,
             egui::Align2::CENTER_CENTER,
-            "TGL 2",
-            egui::FontId::monospace(8.0),
-            label_col,
+            "SLD",
+            egui::FontId::monospace(14.0 * s),
+            Color32::WHITE,
+        );
+    }
+
+    /// Dibuja una cruceta circular D-Pad (H3 o H4) con 4 flechas cardinales iluminadas dinámicamente.
+    #[allow(clippy::too_many_arguments)]
+    fn draw_dpad(
+        painter: &egui::Painter,
+        center: egui::Pos2,
+        s: f32,
+        up: bool,
+        right: bool,
+        down: bool,
+        left: bool,
+        label: &str,
+    ) {
+        let cyan = COLOR_PRIMARY_CONTAINER;
+        let r_rim = 162.0 * s;
+        let r_dish = 140.0 * s;
+
+        let any_active = up || right || down || left;
+        painter.circle_filled(center, r_rim, Color32::from_rgb(20, 25, 37));
+        painter.circle_stroke(
+            center,
+            r_rim,
+            Stroke::new(
+                2.8 * s,
+                if any_active {
+                    cyan
+                } else {
+                    Color32::from_rgb(46, 60, 86)
+                },
+            ),
+        );
+        painter.circle_filled(center, r_dish, Color32::from_rgb(17, 22, 34));
+        painter.circle_stroke(
+            center,
+            r_dish,
+            Stroke::new(1.8 * s, Color32::from_rgb(31, 40, 59)),
         );
 
-        // 14. TGL 1 (cx: 0.7770, cy: 0.6126, r: 24.2)
-        painter.circle_stroke(p(0.7770, 0.6126), rx(24.22), outline);
-        painter.text(
-            p(0.7770, 0.6126),
-            egui::Align2::CENTER_CENTER,
-            "TGL 1",
-            egui::FontId::monospace(8.0),
-            label_col,
+        // Brazos de la cruz central
+        let arm_w = 76.0 * s;
+        let arm_len = 268.0 * s;
+        let v_rect = egui::Rect::from_center_size(center, egui::vec2(arm_w, arm_len));
+        painter.rect_filled(v_rect, 14.0 * s, Color32::from_rgb(32, 42, 60));
+        painter.rect_stroke(
+            v_rect,
+            14.0 * s,
+            Stroke::new(1.4 * s, Color32::from_rgb(50, 62, 87)),
+            egui::StrokeKind::Inside,
         );
 
-        // 15. SW 1/2 (cx: 0.3134, cy: 0.7543, r: 25.2)
-        painter.circle_stroke(p(0.3134, 0.7543), rx(25.22), outline);
-        painter.text(
-            p(0.3134, 0.7543),
-            egui::Align2::CENTER_CENTER,
-            "SW",
-            egui::FontId::monospace(9.0),
-            label_col,
+        let h_rect = egui::Rect::from_center_size(center, egui::vec2(arm_len, arm_w));
+        painter.rect_filled(h_rect, 14.0 * s, Color32::from_rgb(32, 42, 60));
+        painter.rect_stroke(
+            h_rect,
+            14.0 * s,
+            Stroke::new(1.4 * s, Color32::from_rgb(50, 62, 87)),
+            egui::StrokeKind::Inside,
         );
 
-        // 16. SW 3/4 (cx: 0.4879, cy: 0.7543, r: 25.2)
-        painter.circle_stroke(p(0.4879, 0.7543), rx(25.22), outline);
-        painter.text(
-            p(0.4879, 0.7543),
-            egui::Align2::CENTER_CENTER,
-            "SW",
-            egui::FontId::monospace(9.0),
-            label_col,
-        );
+        // Flechas direccionales cardinales
+        let d_offset = 116.0 * s;
+        let arrow_size = 18.0 * s;
 
-        // 17. SW 5/6 (cx: 0.6623, cy: 0.7543, r: 25.2)
-        painter.circle_stroke(p(0.6623, 0.7543), rx(25.22), outline);
+        // Up arrow
+        let up_tri = vec![
+            egui::pos2(center.x, center.y - d_offset),
+            egui::pos2(
+                center.x - arrow_size * 0.7,
+                center.y - d_offset + arrow_size,
+            ),
+            egui::pos2(
+                center.x + arrow_size * 0.7,
+                center.y - d_offset + arrow_size,
+            ),
+        ];
+        painter.add(egui::Shape::convex_polygon(
+            up_tri,
+            if up {
+                cyan
+            } else {
+                Color32::from_rgba_unmultiplied(0, 240, 255, 120)
+            },
+            Stroke::new(1.2 * s, if up { Color32::WHITE } else { cyan }),
+        ));
+
+        // Down arrow
+        let down_tri = vec![
+            egui::pos2(center.x, center.y + d_offset),
+            egui::pos2(
+                center.x - arrow_size * 0.7,
+                center.y + d_offset - arrow_size,
+            ),
+            egui::pos2(
+                center.x + arrow_size * 0.7,
+                center.y + d_offset - arrow_size,
+            ),
+        ];
+        painter.add(egui::Shape::convex_polygon(
+            down_tri,
+            if down {
+                cyan
+            } else {
+                Color32::from_rgba_unmultiplied(0, 240, 255, 120)
+            },
+            Stroke::new(1.2 * s, if down { Color32::WHITE } else { cyan }),
+        ));
+
+        // Left arrow
+        let left_tri = vec![
+            egui::pos2(center.x - d_offset, center.y),
+            egui::pos2(
+                center.x - d_offset + arrow_size,
+                center.y - arrow_size * 0.7,
+            ),
+            egui::pos2(
+                center.x - d_offset + arrow_size,
+                center.y + arrow_size * 0.7,
+            ),
+        ];
+        painter.add(egui::Shape::convex_polygon(
+            left_tri,
+            if left {
+                cyan
+            } else {
+                Color32::from_rgba_unmultiplied(0, 240, 255, 120)
+            },
+            Stroke::new(1.2 * s, if left { Color32::WHITE } else { cyan }),
+        ));
+
+        // Right arrow
+        let right_tri = vec![
+            egui::pos2(center.x + d_offset, center.y),
+            egui::pos2(
+                center.x + d_offset - arrow_size,
+                center.y - arrow_size * 0.7,
+            ),
+            egui::pos2(
+                center.x + d_offset - arrow_size,
+                center.y + arrow_size * 0.7,
+            ),
+        ];
+        painter.add(egui::Shape::convex_polygon(
+            right_tri,
+            if right {
+                cyan
+            } else {
+                Color32::from_rgba_unmultiplied(0, 240, 255, 120)
+            },
+            Stroke::new(1.2 * s, if right { Color32::WHITE } else { cyan }),
+        ));
+
+        // Botón central con H3 / H4
+        painter.circle_filled(center, 40.0 * s, Color32::from_rgb(18, 24, 36));
+        painter.circle_stroke(center, 40.0 * s, Stroke::new(1.8 * s, cyan));
         painter.text(
-            p(0.6623, 0.7543),
+            center,
             egui::Align2::CENTER_CENTER,
-            "SW",
-            egui::FontId::monospace(9.0),
-            label_col,
+            label,
+            egui::FontId::monospace(17.0 * s),
+            Color32::WHITE,
         );
     }
 
@@ -3131,9 +4174,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_scroll_fwd",
                 short_label: "▲",
                 full_name: "Rueda Scroll Adelante",
-                norm_x: 0.145,
-                norm_y: 0.186,
-                radius: 7.5,
+                norm_x: 0.1169,
+                norm_y: 0.2042,
+                radius: 14.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3141,9 +4184,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_scroll_bck",
                 short_label: "▼",
                 full_name: "Rueda Scroll Atrás",
-                norm_x: 0.145,
-                norm_y: 0.236,
-                radius: 7.5,
+                norm_x: 0.1169,
+                norm_y: 0.3244,
+                radius: 14.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3152,9 +4195,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_k1_up",
                 short_label: "▲",
                 full_name: "Interruptor K1 Arriba",
-                norm_x: 0.215,
-                norm_y: 0.189,
-                radius: 7.5,
+                norm_x: 0.1992,
+                norm_y: 0.2029,
+                radius: 14.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3162,9 +4205,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_k1_down",
                 short_label: "▼",
                 full_name: "Interruptor K1 Abajo",
-                norm_x: 0.215,
-                norm_y: 0.232,
-                radius: 7.5,
+                norm_x: 0.1992,
+                norm_y: 0.3308,
+                radius: 14.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3173,9 +4216,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_btn_i",
                 short_label: "I",
                 full_name: "Botón I",
-                norm_x: 0.440,
-                norm_y: 0.211,
-                radius: 12.0,
+                norm_x: 0.4107,
+                norm_y: 0.2337,
+                radius: 22.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3183,9 +4226,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_btn_h",
                 short_label: "H",
                 full_name: "Botón H",
-                norm_x: 0.520,
-                norm_y: 0.211,
-                radius: 12.0,
+                norm_x: 0.5039,
+                norm_y: 0.2337,
+                radius: 22.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3193,30 +4236,30 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_sld",
                 short_label: "SLD",
                 full_name: "Control Deslizante SLD (2 Posiciones)",
-                norm_x: 0.520,
-                norm_y: 0.299,
-                radius: 11.0,
+                norm_x: 0.5034,
+                norm_y: 0.3671,
+                radius: 14.0,
                 is_rect: true,
-                rect_size: Vec2::new(32.0, 16.0),
+                rect_size: Vec2::new(52.0, 30.0),
             },
             SchematicNode {
                 id: "thr_btn_e",
                 short_label: "E",
                 full_name: "Botón E (Pulgar)",
-                norm_x: 0.512,
-                norm_y: 0.381,
-                radius: 11.0,
+                norm_x: 0.4929,
+                norm_y: 0.4957,
+                radius: 14.0,
                 is_rect: true,
-                rect_size: Vec2::new(22.0, 22.0),
+                rect_size: Vec2::new(34.0, 34.0),
             },
             // 4. Giratorios Superiores F y G (Reemplazan RTY 5 y RTY 6)
             SchematicNode {
                 id: "thr_rty_f_push",
                 short_label: "F",
                 full_name: "Giratorio F Push (RTY 5)",
-                norm_x: 0.663,
-                norm_y: 0.129,
-                radius: 15.0,
+                norm_x: 0.6314,
+                norm_y: 0.1494,
+                radius: 28.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3224,9 +4267,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_rty_g_push",
                 short_label: "G",
                 full_name: "Giratorio G Push (RTY 6)",
-                norm_x: 0.663,
-                norm_y: 0.299,
-                radius: 15.0,
+                norm_x: 0.6314,
+                norm_y: 0.3443,
+                radius: 28.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3235,9 +4278,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_h3_up",
                 short_label: "▲",
                 full_name: "HAT 3 Arriba (H3▲)",
-                norm_x: 0.600,
-                norm_y: 0.365,
-                radius: 6.5,
+                norm_x: 0.5887,
+                norm_y: 0.4596,
+                radius: 12.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3245,9 +4288,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_h3_right",
                 short_label: "▶",
                 full_name: "HAT 3 Derecha (H3▶)",
-                norm_x: 0.614,
-                norm_y: 0.384,
-                radius: 6.5,
+                norm_x: 0.6155,
+                norm_y: 0.4996,
+                radius: 12.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3255,9 +4298,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_h3_down",
                 short_label: "▼",
                 full_name: "HAT 3 Abajo (H3▼)",
-                norm_x: 0.600,
-                norm_y: 0.404,
-                radius: 6.5,
+                norm_x: 0.5887,
+                norm_y: 0.5396,
+                radius: 12.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3265,9 +4308,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_h3_left",
                 short_label: "◀",
                 full_name: "HAT 3 Izquierda (H3◀)",
-                norm_x: 0.585,
-                norm_y: 0.384,
-                radius: 6.5,
+                norm_x: 0.5619,
+                norm_y: 0.4996,
+                radius: 12.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3276,9 +4319,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_h4_up",
                 short_label: "▲",
                 full_name: "HAT 4 Arriba (H4▲)",
-                norm_x: 0.573,
-                norm_y: 0.446,
-                radius: 6.5,
+                norm_x: 0.5489,
+                norm_y: 0.6052,
+                radius: 12.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3286,9 +4329,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_h4_right",
                 short_label: "▶",
                 full_name: "HAT 4 Derecha (H4▶)",
-                norm_x: 0.587,
-                norm_y: 0.466,
-                radius: 6.5,
+                norm_x: 0.5757,
+                norm_y: 0.6452,
+                radius: 12.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3296,9 +4339,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_h4_down",
                 short_label: "▼",
                 full_name: "HAT 4 Abajo (H4▼)",
-                norm_x: 0.573,
-                norm_y: 0.485,
-                radius: 6.5,
+                norm_x: 0.5489,
+                norm_y: 0.6852,
+                radius: 12.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3306,9 +4349,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_h4_left",
                 short_label: "◀",
                 full_name: "HAT 4 Izquierda (H4◀)",
-                norm_x: 0.559,
-                norm_y: 0.466,
-                radius: 6.5,
+                norm_x: 0.5221,
+                norm_y: 0.6452,
+                radius: 12.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3317,9 +4360,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_sw_13",
                 short_label: "▲",
                 full_name: "Toggle 4 Arriba (TGL 4 Up)",
-                norm_x: 0.838,
-                norm_y: 0.296,
-                radius: 7.5,
+                norm_x: 0.8771,
+                norm_y: 0.2822,
+                radius: 15.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3327,9 +4370,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_sw_14",
                 short_label: "▼",
                 full_name: "Toggle 4 Abajo (TGL 4 Down)",
-                norm_x: 0.838,
-                norm_y: 0.341,
-                radius: 7.5,
+                norm_x: 0.8771,
+                norm_y: 0.3811,
+                radius: 15.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3337,9 +4380,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_sw_11",
                 short_label: "▲",
                 full_name: "Toggle 3 Arriba (TGL 3 Up)",
-                norm_x: 0.777,
-                norm_y: 0.375,
-                radius: 7.5,
+                norm_x: 0.7949,
+                norm_y: 0.3961,
+                radius: 15.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3347,9 +4390,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_sw_12",
                 short_label: "▼",
                 full_name: "Toggle 3 Abajo (TGL 3 Down)",
-                norm_x: 0.777,
-                norm_y: 0.420,
-                radius: 7.5,
+                norm_x: 0.7949,
+                norm_y: 0.4951,
+                radius: 15.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3357,9 +4400,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_sw_9",
                 short_label: "▲",
                 full_name: "Toggle 2 Arriba (TGL 2 Up)",
-                norm_x: 0.838,
-                norm_y: 0.511,
-                radius: 7.5,
+                norm_x: 0.8771,
+                norm_y: 0.5480,
+                radius: 15.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3367,9 +4410,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_sw_10",
                 short_label: "▼",
                 full_name: "Toggle 2 Abajo (TGL 2 Down)",
-                norm_x: 0.838,
-                norm_y: 0.556,
-                radius: 7.5,
+                norm_x: 0.8771,
+                norm_y: 0.6470,
+                radius: 15.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3377,9 +4420,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_sw_7",
                 short_label: "▲",
                 full_name: "Toggle 1 Arriba (TGL 1 Up)",
-                norm_x: 0.777,
-                norm_y: 0.590,
-                radius: 7.5,
+                norm_x: 0.7949,
+                norm_y: 0.6619,
+                radius: 15.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3387,9 +4430,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_sw_8",
                 short_label: "▼",
                 full_name: "Toggle 1 Abajo (TGL 1 Down)",
-                norm_x: 0.777,
-                norm_y: 0.635,
-                radius: 7.5,
+                norm_x: 0.7949,
+                norm_y: 0.7609,
+                radius: 15.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3398,9 +4441,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_sw_1",
                 short_label: "1",
                 full_name: "Switch 1 Arriba (SW 1)",
-                norm_x: 0.313,
-                norm_y: 0.731,
-                radius: 7.5,
+                norm_x: 0.2924,
+                norm_y: 0.8142,
+                radius: 15.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3408,9 +4451,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_sw_2",
                 short_label: "2",
                 full_name: "Switch 2 Abajo (SW 2)",
-                norm_x: 0.313,
-                norm_y: 0.778,
-                radius: 7.5,
+                norm_x: 0.2924,
+                norm_y: 0.9200,
+                radius: 15.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3418,9 +4461,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_sw_3",
                 short_label: "3",
                 full_name: "Switch 3 Arriba (SW 3)",
-                norm_x: 0.488,
-                norm_y: 0.731,
-                radius: 7.5,
+                norm_x: 0.4619,
+                norm_y: 0.8142,
+                radius: 15.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3428,9 +4471,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_sw_4",
                 short_label: "4",
                 full_name: "Switch 4 Abajo (SW 4)",
-                norm_x: 0.488,
-                norm_y: 0.778,
-                radius: 7.5,
+                norm_x: 0.4619,
+                norm_y: 0.9200,
+                radius: 15.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3438,9 +4481,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_sw_5",
                 short_label: "5",
                 full_name: "Switch 5 Arriba (SW 5)",
-                norm_x: 0.662,
-                norm_y: 0.731,
-                radius: 7.5,
+                norm_x: 0.6314,
+                norm_y: 0.8142,
+                radius: 15.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3448,9 +4491,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_sw_6",
                 short_label: "6",
                 full_name: "Switch 6 Abajo (SW 6)",
-                norm_x: 0.662,
-                norm_y: 0.778,
-                radius: 7.5,
+                norm_x: 0.6314,
+                norm_y: 0.9200,
+                radius: 15.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3467,40 +4510,40 @@ mod tests {
         let nodes = get_device_schematic_nodes(DeviceKind::Throttle);
         assert_eq!(nodes.len(), 32);
 
-        // Verifica que RTY 5 y RTY 6 hayan sido reemplazados por F y G
+        // Verifica que RTY 5 y RTY 6 hayan sido reemplazados por F y G con coords 1180x790
         let node_f = nodes.iter().find(|n| n.id == "thr_rty_f_push").unwrap();
         assert_eq!(node_f.short_label, "F");
-        assert!((node_f.norm_x - 0.663).abs() < 1e-3);
-        assert!((node_f.norm_y - 0.129).abs() < 1e-3);
+        assert!((node_f.norm_x - 0.6314).abs() < 1e-3);
+        assert!((node_f.norm_y - 0.1494).abs() < 1e-3);
 
         let node_g = nodes.iter().find(|n| n.id == "thr_rty_g_push").unwrap();
         assert_eq!(node_g.short_label, "G");
-        assert!((node_g.norm_x - 0.663).abs() < 1e-3);
-        assert!((node_g.norm_y - 0.299).abs() < 1e-3);
+        assert!((node_g.norm_x - 0.6314).abs() < 1e-3);
+        assert!((node_g.norm_y - 0.3443).abs() < 1e-3);
 
         // Verifica HAT 3 y HAT 4
         let h3_up = nodes.iter().find(|n| n.id == "thr_h3_up").unwrap();
         assert!(h3_up.full_name.contains("H3▲"));
-        assert!((h3_up.norm_x - 0.600).abs() < 1e-3);
+        assert!((h3_up.norm_x - 0.5887).abs() < 1e-3);
 
         let h4_up = nodes.iter().find(|n| n.id == "thr_h4_up").unwrap();
         assert!(h4_up.full_name.contains("H4▲"));
-        assert!((h4_up.norm_x - 0.573).abs() < 1e-3);
+        assert!((h4_up.norm_x - 0.5489).abs() < 1e-3);
 
         // Verifica SC y K1 en lado izquierdo
         let sc_fwd = nodes.iter().find(|n| n.id == "thr_scroll_fwd").unwrap();
-        assert!((sc_fwd.norm_x - 0.145).abs() < 1e-3);
+        assert!((sc_fwd.norm_x - 0.1169).abs() < 1e-3);
 
         let k1_up = nodes.iter().find(|n| n.id == "thr_k1_up").unwrap();
-        assert!((k1_up.norm_x - 0.215).abs() < 1e-3);
+        assert!((k1_up.norm_x - 0.1992).abs() < 1e-3);
 
         // Verifica TGL 1..4 en lado derecho
         let tgl4_up = nodes.iter().find(|n| n.id == "thr_sw_13").unwrap();
-        assert!((tgl4_up.norm_x - 0.838).abs() < 1e-3);
+        assert!((tgl4_up.norm_x - 0.8771).abs() < 1e-3);
 
         // Verifica SW 1..6 en fila inferior
         let sw1 = nodes.iter().find(|n| n.id == "thr_sw_1").unwrap();
         assert_eq!(sw1.short_label, "1");
-        assert!((sw1.norm_y - 0.731).abs() < 1e-3);
+        assert!((sw1.norm_y - 0.8142).abs() < 1e-3);
     }
 }

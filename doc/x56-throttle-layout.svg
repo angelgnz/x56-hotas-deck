@@ -1,0 +1,739 @@
+<svg viewBox="0 0 1180 790" width="1180" height="790" xmlns="http://www.w3.org/2000/svg" style="background:#06080D">
+  <!-- SC & K1 -->
+  <g transform="translate(100, 148) scale(0.38)"><svg viewBox="0 0 200 320" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg" class="select-none cursor-ns-resize" style="touch-action: none;">
+  <defs>
+    <linearGradient id="sc-chassis" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#182234"/>
+      <stop offset="50%" stop-color="#0E131E"/>
+      <stop offset="100%" stop-color="#070A10"/>
+    </linearGradient>
+    <linearGradient id="sc-cyl" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#070A10"/>
+      <stop offset="22%" stop-color="#1E283A"/>
+      <stop offset="50%" stop-color="#33435E"/>
+      <stop offset="78%" stop-color="#1E283A"/>
+      <stop offset="100%" stop-color="#070A10"/>
+    </linearGradient>
+  </defs>
+  <!-- Cápsula ovalada estilo SC -->
+  <rect x="18" y="10" width="164" height="300" rx="82" fill="url(#sc-chassis)" stroke="#293852" stroke-width="2.5"/>
+  <rect x="26" y="18" width="148" height="284" rx="74" fill="none" stroke="#111826" stroke-width="1.5"/>
+
+  <!-- Flechas superior e inferior -->
+  <polygon points="100,24 85,46 115,46" fill="#475569"/>
+  <polygon points="100,296 85,274 115,274" fill="#475569"/>
+
+  <!-- Cavidad del tambor -->
+  <rect x="54" y="54" width="92" height="212" rx="22" fill="#05070C" stroke="#1E293B" stroke-width="2"/>
+  
+  <!-- Punteros laterales -->
+  <polygon points="44,160.0 34,155.0 34,165.0" fill="#00F0FF"/>
+  <polygon points="156,160.0 166,155.0 166,165.0" fill="#00F0FF"/>
+
+  <!-- Tambor rotativo -->
+  <g transform="translate(100, 160.0) scale(1) translate(-100, -160)">
+    <rect x="64" y="62" width="72" height="196" rx="16" fill="url(#sc-cyl)" stroke="#3B4D6B" stroke-width="2"/>
+    <g pointer-events="none">
+          <line x1="72" y1="84.0" x2="128" y2="84.0" stroke="#06090F" stroke-width="2.0" stroke-linecap="round" opacity="0.42"/>
+          <line x1="74" y1="82.8" x2="126" y2="82.8" stroke="#475569" stroke-width="1.3" stroke-linecap="round" opacity="0.42"/>
+        
+          <line x1="72" y1="100.0" x2="128" y2="100.0" stroke="#06090F" stroke-width="2.2" stroke-linecap="round" opacity="0.54"/>
+          <line x1="74" y1="98.8" x2="126" y2="98.8" stroke="#475569" stroke-width="1.3" stroke-linecap="round" opacity="0.54"/>
+        
+          <line x1="72" y1="116.0" x2="128" y2="116.0" stroke="#06090F" stroke-width="2.5" stroke-linecap="round" opacity="0.67"/>
+          <line x1="74" y1="114.8" x2="126" y2="114.8" stroke="#475569" stroke-width="1.3" stroke-linecap="round" opacity="0.67"/>
+        
+          <line x1="72" y1="132.0" x2="128" y2="132.0" stroke="#06090F" stroke-width="2.7" stroke-linecap="round" opacity="0.79"/>
+          <line x1="74" y1="130.8" x2="126" y2="130.8" stroke="#475569" stroke-width="1.3" stroke-linecap="round" opacity="0.79"/>
+        
+          <line x1="72" y1="148.0" x2="128" y2="148.0" stroke="#06090F" stroke-width="3.0" stroke-linecap="round" opacity="0.91"/>
+          <line x1="74" y1="146.8" x2="126" y2="146.8" stroke="#475569" stroke-width="1.3" stroke-linecap="round" opacity="0.91"/>
+        
+          <line x1="72" y1="164.0" x2="128" y2="164.0" stroke="#06090F" stroke-width="3.1" stroke-linecap="round" opacity="0.97"/>
+          <line x1="74" y1="162.8" x2="126" y2="162.8" stroke="#00F0FF" stroke-width="1.3" stroke-linecap="round" opacity="0.97"/>
+        
+          <line x1="72" y1="180.0" x2="128" y2="180.0" stroke="#06090F" stroke-width="2.9" stroke-linecap="round" opacity="0.85"/>
+          <line x1="74" y1="178.8" x2="126" y2="178.8" stroke="#475569" stroke-width="1.3" stroke-linecap="round" opacity="0.85"/>
+        
+          <line x1="72" y1="196.0" x2="128" y2="196.0" stroke="#06090F" stroke-width="2.6" stroke-linecap="round" opacity="0.73"/>
+          <line x1="74" y1="194.8" x2="126" y2="194.8" stroke="#475569" stroke-width="1.3" stroke-linecap="round" opacity="0.73"/>
+        
+          <line x1="72" y1="212.0" x2="128" y2="212.0" stroke="#06090F" stroke-width="2.4" stroke-linecap="round" opacity="0.60"/>
+          <line x1="74" y1="210.8" x2="126" y2="210.8" stroke="#475569" stroke-width="1.3" stroke-linecap="round" opacity="0.60"/>
+        
+          <line x1="72" y1="228.0" x2="128" y2="228.0" stroke="#06090F" stroke-width="2.1" stroke-linecap="round" opacity="0.48"/>
+          <line x1="74" y1="226.8" x2="126" y2="226.8" stroke="#475569" stroke-width="1.3" stroke-linecap="round" opacity="0.48"/>
+        
+          <line x1="72" y1="244.0" x2="128" y2="244.0" stroke="#06090F" stroke-width="1.8" stroke-linecap="round" opacity="0.36"/>
+          <line x1="74" y1="242.8" x2="126" y2="242.8" stroke="#475569" stroke-width="1.3" stroke-linecap="round" opacity="0.36"/>
+        </g>
+    <rect x="76" y="144" width="48" height="32" rx="6" fill="#0A0E17" stroke="#00F0FF" stroke-width="1.2" opacity="0.9"/>
+    <text x="100" y="161" fill="#FFFFFF" font-family="Chakra Petch, sans-serif" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="central">SC</text>
+  </g>
+</svg></g>
+  <g transform="translate(199, 150) scale(0.38)"><svg viewBox="0 0 190 320" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg" class="select-none cursor-pointer">
+  <defs>
+    <linearGradient id="k1-chassis" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#172030"/>
+      <stop offset="50%" stop-color="#0E131E"/>
+      <stop offset="100%" stop-color="#070A10"/>
+    </linearGradient>
+    <linearGradient id="k1-handle" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#384964"/>
+      <stop offset="50%" stop-color="#202A3B"/>
+      <stop offset="100%" stop-color="#121824"/>
+    </linearGradient>
+  </defs>
+
+  <polygon points="24,10 166,10 178,22 178,298 166,310 24,310 12,298 12,22" fill="url(#k1-chassis)" stroke="#26354D" stroke-width="2" />
+  
+  <!-- Barras laterales -->
+  <rect x="28" y="68" width="8" height="184" rx="3" fill="#141B26" stroke="#253245" stroke-width="1"/>
+  <rect x="154" y="68" width="8" height="184" rx="3" fill="#141B26" stroke="#253245" stroke-width="1"/>
+
+  <!-- Flecha Arriba + LED -->
+  <polygon points="95,18 82,36 108,36" fill="#475569" />
+  <circle cx="95" cy="50" r="6" fill="#18202C" stroke="#080C14" stroke-width="1.5"/>
+
+  <!-- Pozo vertical -->
+  <rect x="60" y="68" width="70" height="184" rx="35" fill="#06090F" stroke="#1D2636" stroke-width="2"/>
+  <line x1="95" y1="160" x2="95" y2="160" stroke="#1E293B" stroke-width="5" stroke-linecap="round"/>
+
+  <!-- Manija K1 -->
+  <g transform="translate(95, 160)">
+    <polygon points="-26,-28 26,-28 30,0 26,28 -26,28 -30,0" fill="#000000" opacity="0.6" transform="translate(0, 4)"/>
+    <polygon points="-26,-28 26,-28 30,0 26,28 -26,28 -30,0" fill="url(#k1-handle)" stroke="#435675" stroke-width="1.8"/>
+    <text x="0" y="1" fill="#FFFFFF" font-family="Chakra Petch, sans-serif" font-size="20" font-weight="700" text-anchor="middle" dominant-baseline="central">K1</text>
+  </g>
+
+  <!-- LED + Flecha Abajo -->
+  <circle cx="95" cy="270" r="6" fill="#18202C" stroke="#080C14" stroke-width="1.5"/>
+  <polygon points="95,302 82,284 108,284" fill="#475569" />
+</svg></g>
+
+  <!-- Botones I, H, F, G -->
+  <g transform="translate(444, 144) scale(0.29)"><svg viewBox="0 0 280 280" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg" class="select-none cursor-pointer">
+  <defs>
+    <radialGradient id="btn-bezel-I" cx="45%" cy="35%" r="60%">
+      <stop offset="0%" stop-color="#263147"/>
+      <stop offset="65%" stop-color="#131926"/>
+      <stop offset="100%" stop-color="#080B12"/>
+    </radialGradient>
+    <radialGradient id="btn-cap-I" cx="42%" cy="35%" r="60%">
+      <stop offset="0%" stop-color="#364663"/>
+      <stop offset="55%" stop-color="#202A3C"/>
+      <stop offset="100%" stop-color="#0E141F"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Anillo exterior circular limpio -->
+  <circle cx="140" cy="140" r="132" fill="url(#btn-bezel-I)" stroke="#33435E" stroke-width="3"/>
+  <circle cx="140" cy="140" r="114" fill="#070A10" stroke="#090D14" stroke-width="2.5"/>
+
+  <!-- Halo LED circular -->
+  <circle cx="140" cy="140" r="102" fill="none" stroke="#223046" stroke-width="2.5" stroke-dasharray="28, 8" opacity="0.5"/>
+
+  <!-- Émbolo central con la letra correspondiente -->
+  <g transform="translate(140, 140) scale(1)" class="transition-transform duration-75">
+    <circle cx="0" cy="7" r="88" fill="#000000" opacity="0.65"/>
+    <circle cx="0" cy="0" r="86" fill="url(#btn-cap-I)" stroke="#475B7C" stroke-width="2.2"/>
+    <circle cx="0" cy="0" r="62" fill="#121824" stroke="#253247" stroke-width="1.5"/>
+    <text x="0" y="3" fill="#00F0FF" font-family="Chakra Petch, sans-serif" font-size="54" font-weight="700" text-anchor="middle" dominant-baseline="central">I</text>
+  </g>
+</svg></g>
+  <g transform="translate(554, 144) scale(0.29)"><svg viewBox="0 0 280 280" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg" class="select-none cursor-pointer">
+  <defs>
+    <radialGradient id="btn-bezel-H" cx="45%" cy="35%" r="60%">
+      <stop offset="0%" stop-color="#263147"/>
+      <stop offset="65%" stop-color="#131926"/>
+      <stop offset="100%" stop-color="#080B12"/>
+    </radialGradient>
+    <radialGradient id="btn-cap-H" cx="42%" cy="35%" r="60%">
+      <stop offset="0%" stop-color="#364663"/>
+      <stop offset="55%" stop-color="#202A3C"/>
+      <stop offset="100%" stop-color="#0E141F"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Anillo exterior circular limpio -->
+  <circle cx="140" cy="140" r="132" fill="url(#btn-bezel-H)" stroke="#33435E" stroke-width="3"/>
+  <circle cx="140" cy="140" r="114" fill="#070A10" stroke="#090D14" stroke-width="2.5"/>
+
+  <!-- Halo LED circular -->
+  <circle cx="140" cy="140" r="102" fill="none" stroke="#223046" stroke-width="2.5" stroke-dasharray="28, 8" opacity="0.5"/>
+
+  <!-- Émbolo central con la letra correspondiente -->
+  <g transform="translate(140, 140) scale(1)" class="transition-transform duration-75">
+    <circle cx="0" cy="7" r="88" fill="#000000" opacity="0.65"/>
+    <circle cx="0" cy="0" r="86" fill="url(#btn-cap-H)" stroke="#475B7C" stroke-width="2.2"/>
+    <circle cx="0" cy="0" r="62" fill="#121824" stroke="#253247" stroke-width="1.5"/>
+    <text x="0" y="3" fill="#00F0FF" font-family="Chakra Petch, sans-serif" font-size="54" font-weight="700" text-anchor="middle" dominant-baseline="central">H</text>
+  </g>
+</svg></g>
+  <g transform="translate(689, 62) scale(0.40)"><svg viewBox="0 0 280 280" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg" class="select-none cursor-pointer">
+  <defs>
+    <radialGradient id="btn-bezel-F" cx="45%" cy="35%" r="60%">
+      <stop offset="0%" stop-color="#263147"/>
+      <stop offset="65%" stop-color="#131926"/>
+      <stop offset="100%" stop-color="#080B12"/>
+    </radialGradient>
+    <radialGradient id="btn-cap-F" cx="42%" cy="35%" r="60%">
+      <stop offset="0%" stop-color="#364663"/>
+      <stop offset="55%" stop-color="#202A3C"/>
+      <stop offset="100%" stop-color="#0E141F"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Anillo exterior circular limpio -->
+  <circle cx="140" cy="140" r="132" fill="url(#btn-bezel-F)" stroke="#33435E" stroke-width="3"/>
+  <circle cx="140" cy="140" r="114" fill="#070A10" stroke="#090D14" stroke-width="2.5"/>
+
+  <!-- Halo LED circular -->
+  <circle cx="140" cy="140" r="102" fill="none" stroke="#223046" stroke-width="2.5" stroke-dasharray="28, 8" opacity="0.5"/>
+
+  <!-- Émbolo central con la letra correspondiente -->
+  <g transform="translate(140, 140) scale(1)" class="transition-transform duration-75">
+    <circle cx="0" cy="7" r="88" fill="#000000" opacity="0.65"/>
+    <circle cx="0" cy="0" r="86" fill="url(#btn-cap-F)" stroke="#475B7C" stroke-width="2.2"/>
+    <circle cx="0" cy="0" r="62" fill="#121824" stroke="#253247" stroke-width="1.5"/>
+    <text x="0" y="3" fill="#00F0FF" font-family="Chakra Petch, sans-serif" font-size="54" font-weight="700" text-anchor="middle" dominant-baseline="central">F</text>
+  </g>
+</svg></g>
+  <g transform="translate(689, 216) scale(0.40)"><svg viewBox="0 0 280 280" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg" class="select-none cursor-pointer">
+  <defs>
+    <radialGradient id="btn-bezel-G" cx="45%" cy="35%" r="60%">
+      <stop offset="0%" stop-color="#263147"/>
+      <stop offset="65%" stop-color="#131926"/>
+      <stop offset="100%" stop-color="#080B12"/>
+    </radialGradient>
+    <radialGradient id="btn-cap-G" cx="42%" cy="35%" r="60%">
+      <stop offset="0%" stop-color="#364663"/>
+      <stop offset="55%" stop-color="#202A3C"/>
+      <stop offset="100%" stop-color="#0E141F"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Anillo exterior circular limpio -->
+  <circle cx="140" cy="140" r="132" fill="url(#btn-bezel-G)" stroke="#33435E" stroke-width="3"/>
+  <circle cx="140" cy="140" r="114" fill="#070A10" stroke="#090D14" stroke-width="2.5"/>
+
+  <!-- Halo LED circular -->
+  <circle cx="140" cy="140" r="102" fill="none" stroke="#223046" stroke-width="2.5" stroke-dasharray="28, 8" opacity="0.5"/>
+
+  <!-- Émbolo central con la letra correspondiente -->
+  <g transform="translate(140, 140) scale(1)" class="transition-transform duration-75">
+    <circle cx="0" cy="7" r="88" fill="#000000" opacity="0.65"/>
+    <circle cx="0" cy="0" r="86" fill="url(#btn-cap-G)" stroke="#475B7C" stroke-width="2.2"/>
+    <circle cx="0" cy="0" r="62" fill="#121824" stroke="#253247" stroke-width="1.5"/>
+    <text x="0" y="3" fill="#00F0FF" font-family="Chakra Petch, sans-serif" font-size="54" font-weight="700" text-anchor="middle" dominant-baseline="central">G</text>
+  </g>
+</svg></g>
+
+  <!-- SLD & E -->
+  <g transform="translate(538, 252) scale(0.40)"><svg viewBox="0 0 280 190" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg" class="select-none cursor-pointer">
+  <defs>
+    <linearGradient id="sld-chassis" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#172030"/>
+      <stop offset="50%" stop-color="#0E131E"/>
+      <stop offset="100%" stop-color="#070A10"/>
+    </linearGradient>
+    <linearGradient id="sld-handle" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#384964"/>
+      <stop offset="50%" stop-color="#202A3B"/>
+      <stop offset="100%" stop-color="#121824"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="12" y="14" width="256" height="162" rx="34" fill="url(#sld-chassis)" stroke="#00F0FF" stroke-width="2.2"/>
+  <rect x="64" y="30" width="152" height="8" rx="3" fill="#141B26" stroke="#253245" stroke-width="1"/>
+  <rect x="64" y="152" width="152" height="8" rx="3" fill="#141B26" stroke="#253245" stroke-width="1"/>
+
+  <!-- Pista horizontal -->
+  <rect x="56" y="58" width="168" height="74" rx="37" fill="#06090F" stroke="#1D2636" stroke-width="2"/>
+  <line x1="94" y1="95" x2="186" y2="95" stroke="#00F0FF" stroke-width="6" stroke-linecap="round"/>
+
+  <!-- LEDs laterales -->
+  <circle cx="36" cy="95" r="5" fill="#18202C"/>
+  <circle cx="244" cy="95" r="6" fill="#00F0FF"/>
+
+  <!-- Manija con texto SLD -->
+  <g transform="translate(186, 95)">
+    <polygon points="-32,-28 32,-28 36,0 32,28 -32,28 -36,0" fill="#000000" opacity="0.65" transform="translate(0, 4)"/>
+    <polygon points="-32,-28 32,-28 36,0 32,28 -32,28 -36,0" fill="url(#sld-handle)" stroke="#00F0FF" stroke-width="2"/>
+    <text x="0" y="2" fill="#FFFFFF" font-family="Chakra Petch, sans-serif" font-size="20" font-weight="700" text-anchor="middle" dominant-baseline="central">SLD</text>
+  </g>
+</svg></g>
+  <g transform="translate(541, 351) scale(0.29)"><svg viewBox="0 0 280 280" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg" class="select-none cursor-pointer">
+  <defs>
+    <linearGradient id="sq-chassis" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#222C40"/>
+      <stop offset="50%" stop-color="#121824"/>
+      <stop offset="100%" stop-color="#080B11"/>
+    </linearGradient>
+    <linearGradient id="sq-cap" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#384966"/>
+      <stop offset="55%" stop-color="#202A3C"/>
+      <stop offset="100%" stop-color="#0E141F"/>
+    </linearGradient>
+  </defs>
+
+  <polygon points="30,14 250,14 266,30 266,250 250,266 30,266 14,250 14,30" fill="url(#sq-chassis)" stroke="#2E3D56" stroke-width="2.5"/>
+  <rect x="38" y="38" width="204" height="204" rx="16" fill="#06090F" stroke="#1F293B" stroke-width="2.5"/>
+  <rect x="48" y="48" width="184" height="184" rx="12" fill="none" stroke="#243247" stroke-width="2" stroke-dasharray="32, 10"/>
+
+  <g transform="translate(140, 140) scale(1)" class="transition-transform duration-75">
+    <rect x="-80" y="-73" width="160" height="160" rx="14" fill="#000000" opacity="0.65"/>
+    <rect x="-80" y="-80" width="160" height="160" rx="14" fill="url(#sq-cap)" stroke="#475B7C" stroke-width="2.2"/>
+    <rect x="-54" y="-54" width="108" height="108" rx="8" fill="#111723" stroke="#253247" stroke-width="1.5"/>
+    <text x="0" y="3" fill="#00F0FF" font-family="Chakra Petch, sans-serif" font-size="54" font-weight="700" text-anchor="middle" dominant-baseline="central">E</text>
+  </g>
+</svg></g>
+
+  <!-- H3 & H4 -->
+  <g transform="translate(642, 342) scale(0.31)"><svg viewBox="0 0 340 340" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg" class="select-none">
+  <defs>
+    <radialGradient id="dpad-rim-h3" cx="50%" cy="40%" r="50%">
+      <stop offset="0%" stop-color="#242E42"/>
+      <stop offset="70%" stop-color="#141925"/>
+      <stop offset="100%" stop-color="#0A0D14"/>
+    </radialGradient>
+    <radialGradient id="dpad-dish-h3" cx="50%" cy="45%" r="50%">
+      <stop offset="0%" stop-color="#1A2232"/>
+      <stop offset="60%" stop-color="#111622"/>
+      <stop offset="100%" stop-color="#080B10"/>
+    </radialGradient>
+  </defs>
+
+  <circle cx="170" cy="170" r="162" fill="url(#dpad-rim-h3)" stroke="#2E3C56" stroke-width="3" />
+  <circle cx="170" cy="170" r="140" fill="url(#dpad-dish-h3)" stroke="#1F283B" stroke-width="2" />
+
+  <!-- Diagonales -->
+  <circle class="dpad-btn" data-dir="up-left" cx="88" cy="88" r="18" fill="#141A26" stroke="#252F42" stroke-width="1.5" />
+  <circle class="dpad-btn" data-dir="up-right" cx="252" cy="88" r="18" fill="#141A26" stroke="#252F42" stroke-width="1.5" />
+  <circle class="dpad-btn" data-dir="down-right" cx="252" cy="252" r="18" fill="#141A26" stroke="#252F42" stroke-width="1.5" />
+  <circle class="dpad-btn" data-dir="down-left" cx="88" cy="252" r="18" fill="#141A26" stroke="#252F42" stroke-width="1.5" />
+
+  <!-- Cruz central -->
+  <rect x="132" y="36" width="76" height="268" rx="14" fill="#202A3C" stroke="#323E57" stroke-width="1.5" />
+  <rect x="36" y="132" width="268" height="76" rx="14" fill="#202A3C" stroke="#323E57" stroke-width="1.5" />
+
+  <!-- Brazos cardinales -->
+  <path class="dpad-btn" data-dir="up" d="M 134 50 C 134 42 140 38 148 38 L 192 38 C 200 38 206 42 206 50 L 206 132 L 134 132 Z" fill="#1C2436" stroke="#36435C" stroke-width="1.2" />
+  <path class="dpad-btn" data-dir="down" d="M 134 208 L 206 208 L 206 290 C 206 298 200 302 192 302 L 148 302 C 140 302 134 298 134 290 Z" fill="#1C2436" stroke="#36435C" stroke-width="1.2" />
+  <path class="dpad-btn" data-dir="left" d="M 50 134 C 42 134 38 140 38 148 L 38 192 C 38 200 42 206 50 206 L 132 206 L 132 134 Z" fill="#1C2436" stroke="#36435C" stroke-width="1.2" />
+  <path class="dpad-btn" data-dir="right" d="M 208 134 L 290 134 C 298 134 302 140 302 148 L 302 192 C 302 200 298 206 290 206 L 208 206 Z" fill="#1C2436" stroke="#36435C" stroke-width="1.2" />
+
+  <!-- Flechas triangulares -->
+  <polygon points="170,54 150,82 190,82" fill="#00F0FF" pointer-events="none" />
+  <polygon points="170,286 150,258 190,258" fill="#00F0FF" pointer-events="none" />
+  <polygon points="54,170 82,150 82,190" fill="#00F0FF" pointer-events="none" />
+  <polygon points="286,170 258,150 258,190" fill="#00F0FF" pointer-events="none" />
+
+  <!-- Botón central con H3 / H4 -->
+  <circle class="dpad-btn" data-dir="center" cx="170" cy="170" r="40" fill="#121824" stroke="#00F0FF" stroke-width="1.8" />
+  <text x="170" y="172" fill="#FFFFFF" font-family="Chakra Petch, sans-serif" font-size="24" font-weight="700" text-anchor="middle" dominant-baseline="central" pointer-events="none">H3</text>
+</svg></g>
+  <g transform="translate(595, 457) scale(0.31)"><svg viewBox="0 0 340 340" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg" class="select-none">
+  <defs>
+    <radialGradient id="dpad-rim-h4" cx="50%" cy="40%" r="50%">
+      <stop offset="0%" stop-color="#242E42"/>
+      <stop offset="70%" stop-color="#141925"/>
+      <stop offset="100%" stop-color="#0A0D14"/>
+    </radialGradient>
+    <radialGradient id="dpad-dish-h4" cx="50%" cy="45%" r="50%">
+      <stop offset="0%" stop-color="#1A2232"/>
+      <stop offset="60%" stop-color="#111622"/>
+      <stop offset="100%" stop-color="#080B10"/>
+    </radialGradient>
+  </defs>
+
+  <circle cx="170" cy="170" r="162" fill="url(#dpad-rim-h4)" stroke="#2E3C56" stroke-width="3" />
+  <circle cx="170" cy="170" r="140" fill="url(#dpad-dish-h4)" stroke="#1F283B" stroke-width="2" />
+
+  <!-- Diagonales -->
+  <circle class="dpad-btn" data-dir="up-left" cx="88" cy="88" r="18" fill="#141A26" stroke="#252F42" stroke-width="1.5" />
+  <circle class="dpad-btn" data-dir="up-right" cx="252" cy="88" r="18" fill="#141A26" stroke="#252F42" stroke-width="1.5" />
+  <circle class="dpad-btn" data-dir="down-right" cx="252" cy="252" r="18" fill="#141A26" stroke="#252F42" stroke-width="1.5" />
+  <circle class="dpad-btn" data-dir="down-left" cx="88" cy="252" r="18" fill="#141A26" stroke="#252F42" stroke-width="1.5" />
+
+  <!-- Cruz central -->
+  <rect x="132" y="36" width="76" height="268" rx="14" fill="#202A3C" stroke="#323E57" stroke-width="1.5" />
+  <rect x="36" y="132" width="268" height="76" rx="14" fill="#202A3C" stroke="#323E57" stroke-width="1.5" />
+
+  <!-- Brazos cardinales -->
+  <path class="dpad-btn" data-dir="up" d="M 134 50 C 134 42 140 38 148 38 L 192 38 C 200 38 206 42 206 50 L 206 132 L 134 132 Z" fill="#1C2436" stroke="#36435C" stroke-width="1.2" />
+  <path class="dpad-btn" data-dir="down" d="M 134 208 L 206 208 L 206 290 C 206 298 200 302 192 302 L 148 302 C 140 302 134 298 134 290 Z" fill="#1C2436" stroke="#36435C" stroke-width="1.2" />
+  <path class="dpad-btn" data-dir="left" d="M 50 134 C 42 134 38 140 38 148 L 38 192 C 38 200 42 206 50 206 L 132 206 L 132 134 Z" fill="#1C2436" stroke="#36435C" stroke-width="1.2" />
+  <path class="dpad-btn" data-dir="right" d="M 208 134 L 290 134 C 298 134 302 140 302 148 L 302 192 C 302 200 298 206 290 206 L 208 206 Z" fill="#1C2436" stroke="#36435C" stroke-width="1.2" />
+
+  <!-- Flechas triangulares -->
+  <polygon points="170,54 150,82 190,82" fill="#00F0FF" pointer-events="none" />
+  <polygon points="170,286 150,258 190,258" fill="#00F0FF" pointer-events="none" />
+  <polygon points="54,170 82,150 82,190" fill="#00F0FF" pointer-events="none" />
+  <polygon points="286,170 258,150 258,190" fill="#00F0FF" pointer-events="none" />
+
+  <!-- Botón central con H3 / H4 -->
+  <circle class="dpad-btn" data-dir="center" cx="170" cy="170" r="40" fill="#121824" stroke="#00F0FF" stroke-width="1.8" />
+  <text x="170" y="172" fill="#FFFFFF" font-family="Chakra Petch, sans-serif" font-size="24" font-weight="700" text-anchor="middle" dominant-baseline="central" pointer-events="none">H4</text>
+</svg></g>
+
+  <!-- TGL 4, 3, 2, 1 (Solo flechas) -->
+  <g transform="translate(984, 211) scale(0.34)"><svg viewBox="0 0 300 300" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg" class="select-none cursor-pointer">
+  <defs>
+    <radialGradient id="cdbl-rim-TGL 4" cx="50%" cy="40%" r="55%">
+      <stop offset="0%" stop-color="#242E42"/>
+      <stop offset="70%" stop-color="#121824"/>
+      <stop offset="100%" stop-color="#080B11"/>
+    </radialGradient>
+    <radialGradient id="cdbl-dish-TGL 4" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#182030"/>
+      <stop offset="65%" stop-color="#0E131D"/>
+      <stop offset="100%" stop-color="#070A10"/>
+    </radialGradient>
+    <linearGradient id="cdbl-knob-TGL 4" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#384862"/>
+      <stop offset="50%" stop-color="#202A3C"/>
+      <stop offset="100%" stop-color="#111722"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 1. Marco circular exterior -->
+  <circle cx="150" cy="150" r="144" fill="url(#cdbl-rim-TGL 4)" stroke="#2E3C56" stroke-width="2.5"/>
+  <circle cx="150" cy="150" r="134" fill="none" stroke="#0B0F17" stroke-width="2.5"/>
+  <circle cx="150" cy="150" r="120" fill="url(#cdbl-dish-TGL 4)" stroke="#1E283A" stroke-width="2"/>
+
+  <!-- Guardas curvas laterales -->
+  <path d="M 82 90 A 84 84 0 0 0 68 142 L 76 146 L 76 154 L 68 158 A 84 84 0 0 0 82 210" fill="none" stroke="#28374E" stroke-width="4" stroke-linecap="round"/>
+  <path d="M 218 90 A 84 84 0 0 1 232 142 L 224 146 L 224 154 L 232 158 A 84 84 0 0 1 218 210" fill="none" stroke="#28374E" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- 2. Pozo vertical central -->
+  <rect x="112" y="64" width="76" height="172" rx="38" fill="#06090F" stroke="#1F293B" stroke-width="2"/>
+  <line x1="150" y1="150" x2="150" y2="150" stroke="#1E293B" stroke-width="6" stroke-linecap="round"/>
+
+  <!-- Marcas de centro neutro -->
+  <line x1="88" y1="150" x2="108" y2="150" stroke="#00F0FF" stroke-width="2.5"/>
+  <line x1="192" y1="150" x2="212" y2="150" stroke="#00F0FF" stroke-width="2.5"/>
+
+  <!-- 3. Indicador Superior (Número o Flecha) -->
+  <polygon points="150,20 130,50 170,50" fill="#1E293B" stroke="#00F0FF" stroke-width="2" stroke-linejoin="round"/>
+
+  <!-- 4. Indicador Inferior (Número o Flecha) -->
+  <polygon points="150,280 130,250 170,250" fill="#1E293B" stroke="#00F0FF" stroke-width="2" stroke-linejoin="round"/>
+
+  <!-- 5. Pomo / Actuador central con etiqueta -->
+  <g transform="translate(150, 150)">
+    <circle cx="0" cy="4" r="35" fill="#000000" opacity="0.65"/>
+    <circle cx="0" cy="0" r="34" fill="url(#cdbl-knob-TGL 4)" stroke="#475B7C" stroke-width="2"/>
+    <polygon points="-14,-27 14,-27 27,-14 27,14 14,27 -14,27 -27,14 -27,-14" fill="#141C29" stroke="#334155" stroke-width="1.2"/>
+    <text x="0" y="2" fill="#FFFFFF" font-family="Chakra Petch, sans-serif" font-size="18" font-weight="700" text-anchor="middle" dominant-baseline="central">TGL 4</text>
+  </g>
+</svg></g>
+  <g transform="translate(887, 301) scale(0.34)"><svg viewBox="0 0 300 300" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg" class="select-none cursor-pointer">
+  <defs>
+    <radialGradient id="cdbl-rim-TGL 3" cx="50%" cy="40%" r="55%">
+      <stop offset="0%" stop-color="#242E42"/>
+      <stop offset="70%" stop-color="#121824"/>
+      <stop offset="100%" stop-color="#080B11"/>
+    </radialGradient>
+    <radialGradient id="cdbl-dish-TGL 3" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#182030"/>
+      <stop offset="65%" stop-color="#0E131D"/>
+      <stop offset="100%" stop-color="#070A10"/>
+    </radialGradient>
+    <linearGradient id="cdbl-knob-TGL 3" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#384862"/>
+      <stop offset="50%" stop-color="#202A3C"/>
+      <stop offset="100%" stop-color="#111722"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 1. Marco circular exterior -->
+  <circle cx="150" cy="150" r="144" fill="url(#cdbl-rim-TGL 3)" stroke="#2E3C56" stroke-width="2.5"/>
+  <circle cx="150" cy="150" r="134" fill="none" stroke="#0B0F17" stroke-width="2.5"/>
+  <circle cx="150" cy="150" r="120" fill="url(#cdbl-dish-TGL 3)" stroke="#1E283A" stroke-width="2"/>
+
+  <!-- Guardas curvas laterales -->
+  <path d="M 82 90 A 84 84 0 0 0 68 142 L 76 146 L 76 154 L 68 158 A 84 84 0 0 0 82 210" fill="none" stroke="#28374E" stroke-width="4" stroke-linecap="round"/>
+  <path d="M 218 90 A 84 84 0 0 1 232 142 L 224 146 L 224 154 L 232 158 A 84 84 0 0 1 218 210" fill="none" stroke="#28374E" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- 2. Pozo vertical central -->
+  <rect x="112" y="64" width="76" height="172" rx="38" fill="#06090F" stroke="#1F293B" stroke-width="2"/>
+  <line x1="150" y1="150" x2="150" y2="150" stroke="#1E293B" stroke-width="6" stroke-linecap="round"/>
+
+  <!-- Marcas de centro neutro -->
+  <line x1="88" y1="150" x2="108" y2="150" stroke="#00F0FF" stroke-width="2.5"/>
+  <line x1="192" y1="150" x2="212" y2="150" stroke="#00F0FF" stroke-width="2.5"/>
+
+  <!-- 3. Indicador Superior (Número o Flecha) -->
+  <polygon points="150,20 130,50 170,50" fill="#1E293B" stroke="#00F0FF" stroke-width="2" stroke-linejoin="round"/>
+
+  <!-- 4. Indicador Inferior (Número o Flecha) -->
+  <polygon points="150,280 130,250 170,250" fill="#1E293B" stroke="#00F0FF" stroke-width="2" stroke-linejoin="round"/>
+
+  <!-- 5. Pomo / Actuador central con etiqueta -->
+  <g transform="translate(150, 150)">
+    <circle cx="0" cy="4" r="35" fill="#000000" opacity="0.65"/>
+    <circle cx="0" cy="0" r="34" fill="url(#cdbl-knob-TGL 3)" stroke="#475B7C" stroke-width="2"/>
+    <polygon points="-14,-27 14,-27 27,-14 27,14 14,27 -14,27 -27,14 -27,-14" fill="#141C29" stroke="#334155" stroke-width="1.2"/>
+    <text x="0" y="2" fill="#FFFFFF" font-family="Chakra Petch, sans-serif" font-size="18" font-weight="700" text-anchor="middle" dominant-baseline="central">TGL 3</text>
+  </g>
+</svg></g>
+  <g transform="translate(984, 421) scale(0.34)"><svg viewBox="0 0 300 300" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg" class="select-none cursor-pointer">
+  <defs>
+    <radialGradient id="cdbl-rim-TGL 2" cx="50%" cy="40%" r="55%">
+      <stop offset="0%" stop-color="#242E42"/>
+      <stop offset="70%" stop-color="#121824"/>
+      <stop offset="100%" stop-color="#080B11"/>
+    </radialGradient>
+    <radialGradient id="cdbl-dish-TGL 2" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#182030"/>
+      <stop offset="65%" stop-color="#0E131D"/>
+      <stop offset="100%" stop-color="#070A10"/>
+    </radialGradient>
+    <linearGradient id="cdbl-knob-TGL 2" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#384862"/>
+      <stop offset="50%" stop-color="#202A3C"/>
+      <stop offset="100%" stop-color="#111722"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 1. Marco circular exterior -->
+  <circle cx="150" cy="150" r="144" fill="url(#cdbl-rim-TGL 2)" stroke="#2E3C56" stroke-width="2.5"/>
+  <circle cx="150" cy="150" r="134" fill="none" stroke="#0B0F17" stroke-width="2.5"/>
+  <circle cx="150" cy="150" r="120" fill="url(#cdbl-dish-TGL 2)" stroke="#1E283A" stroke-width="2"/>
+
+  <!-- Guardas curvas laterales -->
+  <path d="M 82 90 A 84 84 0 0 0 68 142 L 76 146 L 76 154 L 68 158 A 84 84 0 0 0 82 210" fill="none" stroke="#28374E" stroke-width="4" stroke-linecap="round"/>
+  <path d="M 218 90 A 84 84 0 0 1 232 142 L 224 146 L 224 154 L 232 158 A 84 84 0 0 1 218 210" fill="none" stroke="#28374E" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- 2. Pozo vertical central -->
+  <rect x="112" y="64" width="76" height="172" rx="38" fill="#06090F" stroke="#1F293B" stroke-width="2"/>
+  <line x1="150" y1="150" x2="150" y2="150" stroke="#1E293B" stroke-width="6" stroke-linecap="round"/>
+
+  <!-- Marcas de centro neutro -->
+  <line x1="88" y1="150" x2="108" y2="150" stroke="#00F0FF" stroke-width="2.5"/>
+  <line x1="192" y1="150" x2="212" y2="150" stroke="#00F0FF" stroke-width="2.5"/>
+
+  <!-- 3. Indicador Superior (Número o Flecha) -->
+  <polygon points="150,20 130,50 170,50" fill="#1E293B" stroke="#00F0FF" stroke-width="2" stroke-linejoin="round"/>
+
+  <!-- 4. Indicador Inferior (Número o Flecha) -->
+  <polygon points="150,280 130,250 170,250" fill="#1E293B" stroke="#00F0FF" stroke-width="2" stroke-linejoin="round"/>
+
+  <!-- 5. Pomo / Actuador central con etiqueta -->
+  <g transform="translate(150, 150)">
+    <circle cx="0" cy="4" r="35" fill="#000000" opacity="0.65"/>
+    <circle cx="0" cy="0" r="34" fill="url(#cdbl-knob-TGL 2)" stroke="#475B7C" stroke-width="2"/>
+    <polygon points="-14,-27 14,-27 27,-14 27,14 14,27 -14,27 -27,14 -27,-14" fill="#141C29" stroke="#334155" stroke-width="1.2"/>
+    <text x="0" y="2" fill="#FFFFFF" font-family="Chakra Petch, sans-serif" font-size="18" font-weight="700" text-anchor="middle" dominant-baseline="central">TGL 2</text>
+  </g>
+</svg></g>
+  <g transform="translate(887, 511) scale(0.34)"><svg viewBox="0 0 300 300" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg" class="select-none cursor-pointer">
+  <defs>
+    <radialGradient id="cdbl-rim-TGL 1" cx="50%" cy="40%" r="55%">
+      <stop offset="0%" stop-color="#242E42"/>
+      <stop offset="70%" stop-color="#121824"/>
+      <stop offset="100%" stop-color="#080B11"/>
+    </radialGradient>
+    <radialGradient id="cdbl-dish-TGL 1" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#182030"/>
+      <stop offset="65%" stop-color="#0E131D"/>
+      <stop offset="100%" stop-color="#070A10"/>
+    </radialGradient>
+    <linearGradient id="cdbl-knob-TGL 1" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#384862"/>
+      <stop offset="50%" stop-color="#202A3C"/>
+      <stop offset="100%" stop-color="#111722"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 1. Marco circular exterior -->
+  <circle cx="150" cy="150" r="144" fill="url(#cdbl-rim-TGL 1)" stroke="#2E3C56" stroke-width="2.5"/>
+  <circle cx="150" cy="150" r="134" fill="none" stroke="#0B0F17" stroke-width="2.5"/>
+  <circle cx="150" cy="150" r="120" fill="url(#cdbl-dish-TGL 1)" stroke="#1E283A" stroke-width="2"/>
+
+  <!-- Guardas curvas laterales -->
+  <path d="M 82 90 A 84 84 0 0 0 68 142 L 76 146 L 76 154 L 68 158 A 84 84 0 0 0 82 210" fill="none" stroke="#28374E" stroke-width="4" stroke-linecap="round"/>
+  <path d="M 218 90 A 84 84 0 0 1 232 142 L 224 146 L 224 154 L 232 158 A 84 84 0 0 1 218 210" fill="none" stroke="#28374E" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- 2. Pozo vertical central -->
+  <rect x="112" y="64" width="76" height="172" rx="38" fill="#06090F" stroke="#1F293B" stroke-width="2"/>
+  <line x1="150" y1="150" x2="150" y2="150" stroke="#1E293B" stroke-width="6" stroke-linecap="round"/>
+
+  <!-- Marcas de centro neutro -->
+  <line x1="88" y1="150" x2="108" y2="150" stroke="#00F0FF" stroke-width="2.5"/>
+  <line x1="192" y1="150" x2="212" y2="150" stroke="#00F0FF" stroke-width="2.5"/>
+
+  <!-- 3. Indicador Superior (Número o Flecha) -->
+  <polygon points="150,20 130,50 170,50" fill="#1E293B" stroke="#00F0FF" stroke-width="2" stroke-linejoin="round"/>
+
+  <!-- 4. Indicador Inferior (Número o Flecha) -->
+  <polygon points="150,280 130,250 170,250" fill="#1E293B" stroke="#00F0FF" stroke-width="2" stroke-linejoin="round"/>
+
+  <!-- 5. Pomo / Actuador central con etiqueta -->
+  <g transform="translate(150, 150)">
+    <circle cx="0" cy="4" r="35" fill="#000000" opacity="0.65"/>
+    <circle cx="0" cy="0" r="34" fill="url(#cdbl-knob-TGL 1)" stroke="#475B7C" stroke-width="2"/>
+    <polygon points="-14,-27 14,-27 27,-14 27,14 14,27 -14,27 -27,14 -27,-14" fill="#141C29" stroke="#334155" stroke-width="1.2"/>
+    <text x="0" y="2" fill="#FFFFFF" font-family="Chakra Petch, sans-serif" font-size="18" font-weight="700" text-anchor="middle" dominant-baseline="central">TGL 1</text>
+  </g>
+</svg></g>
+
+  <!-- SW 1/2, 3/4, 5/6 (Con números) -->
+  <g transform="translate(291, 631) scale(0.36)"><svg viewBox="0 0 300 300" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg" class="select-none cursor-pointer">
+  <defs>
+    <radialGradient id="cdbl-rim-SW" cx="50%" cy="40%" r="55%">
+      <stop offset="0%" stop-color="#242E42"/>
+      <stop offset="70%" stop-color="#121824"/>
+      <stop offset="100%" stop-color="#080B11"/>
+    </radialGradient>
+    <radialGradient id="cdbl-dish-SW" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#182030"/>
+      <stop offset="65%" stop-color="#0E131D"/>
+      <stop offset="100%" stop-color="#070A10"/>
+    </radialGradient>
+    <linearGradient id="cdbl-knob-SW" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#384862"/>
+      <stop offset="50%" stop-color="#202A3C"/>
+      <stop offset="100%" stop-color="#111722"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 1. Marco circular exterior -->
+  <circle cx="150" cy="150" r="144" fill="url(#cdbl-rim-SW)" stroke="#2E3C56" stroke-width="2.5"/>
+  <circle cx="150" cy="150" r="134" fill="none" stroke="#0B0F17" stroke-width="2.5"/>
+  <circle cx="150" cy="150" r="120" fill="url(#cdbl-dish-SW)" stroke="#1E283A" stroke-width="2"/>
+
+  <!-- Guardas curvas laterales -->
+  <path d="M 82 90 A 84 84 0 0 0 68 142 L 76 146 L 76 154 L 68 158 A 84 84 0 0 0 82 210" fill="none" stroke="#28374E" stroke-width="4" stroke-linecap="round"/>
+  <path d="M 218 90 A 84 84 0 0 1 232 142 L 224 146 L 224 154 L 232 158 A 84 84 0 0 1 218 210" fill="none" stroke="#28374E" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- 2. Pozo vertical central -->
+  <rect x="112" y="64" width="76" height="172" rx="38" fill="#06090F" stroke="#1F293B" stroke-width="2"/>
+  <line x1="150" y1="150" x2="150" y2="150" stroke="#1E293B" stroke-width="6" stroke-linecap="round"/>
+
+  <!-- Marcas de centro neutro -->
+  <line x1="88" y1="150" x2="108" y2="150" stroke="#00F0FF" stroke-width="2.5"/>
+  <line x1="192" y1="150" x2="212" y2="150" stroke="#00F0FF" stroke-width="2.5"/>
+
+  <!-- 3. Indicador Superior (Número o Flecha) -->
+  <polygon points="150,14 124,54 176,54" fill="#0B101B" stroke="#475569" stroke-width="2" stroke-linejoin="round"/>
+           <text x="150" y="47" fill="#CBD5E1" font-family="Chakra Petch, sans-serif" font-size="22" font-weight="700" text-anchor="middle">1</text>
+
+  <!-- 4. Indicador Inferior (Número o Flecha) -->
+  <polygon points="150,286 124,246 176,246" fill="#0B101B" stroke="#475569" stroke-width="2" stroke-linejoin="round"/>
+           <text x="150" y="269" fill="#CBD5E1" font-family="Chakra Petch, sans-serif" font-size="22" font-weight="700" text-anchor="middle">2</text>
+
+  <!-- 5. Pomo / Actuador central con etiqueta -->
+  <g transform="translate(150, 150)">
+    <circle cx="0" cy="4" r="35" fill="#000000" opacity="0.65"/>
+    <circle cx="0" cy="0" r="34" fill="url(#cdbl-knob-SW)" stroke="#475B7C" stroke-width="2"/>
+    <polygon points="-14,-27 14,-27 27,-14 27,14 14,27 -14,27 -27,14 -27,-14" fill="#141C29" stroke="#334155" stroke-width="1.2"/>
+    <text x="0" y="2" fill="#FFFFFF" font-family="Chakra Petch, sans-serif" font-size="18" font-weight="700" text-anchor="middle" dominant-baseline="central">SW</text>
+  </g>
+</svg></g>
+  <g transform="translate(491, 631) scale(0.36)"><svg viewBox="0 0 300 300" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg" class="select-none cursor-pointer">
+  <defs>
+    <radialGradient id="cdbl-rim-SW" cx="50%" cy="40%" r="55%">
+      <stop offset="0%" stop-color="#242E42"/>
+      <stop offset="70%" stop-color="#121824"/>
+      <stop offset="100%" stop-color="#080B11"/>
+    </radialGradient>
+    <radialGradient id="cdbl-dish-SW" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#182030"/>
+      <stop offset="65%" stop-color="#0E131D"/>
+      <stop offset="100%" stop-color="#070A10"/>
+    </radialGradient>
+    <linearGradient id="cdbl-knob-SW" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#384862"/>
+      <stop offset="50%" stop-color="#202A3C"/>
+      <stop offset="100%" stop-color="#111722"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 1. Marco circular exterior -->
+  <circle cx="150" cy="150" r="144" fill="url(#cdbl-rim-SW)" stroke="#2E3C56" stroke-width="2.5"/>
+  <circle cx="150" cy="150" r="134" fill="none" stroke="#0B0F17" stroke-width="2.5"/>
+  <circle cx="150" cy="150" r="120" fill="url(#cdbl-dish-SW)" stroke="#1E283A" stroke-width="2"/>
+
+  <!-- Guardas curvas laterales -->
+  <path d="M 82 90 A 84 84 0 0 0 68 142 L 76 146 L 76 154 L 68 158 A 84 84 0 0 0 82 210" fill="none" stroke="#28374E" stroke-width="4" stroke-linecap="round"/>
+  <path d="M 218 90 A 84 84 0 0 1 232 142 L 224 146 L 224 154 L 232 158 A 84 84 0 0 1 218 210" fill="none" stroke="#28374E" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- 2. Pozo vertical central -->
+  <rect x="112" y="64" width="76" height="172" rx="38" fill="#06090F" stroke="#1F293B" stroke-width="2"/>
+  <line x1="150" y1="150" x2="150" y2="150" stroke="#1E293B" stroke-width="6" stroke-linecap="round"/>
+
+  <!-- Marcas de centro neutro -->
+  <line x1="88" y1="150" x2="108" y2="150" stroke="#00F0FF" stroke-width="2.5"/>
+  <line x1="192" y1="150" x2="212" y2="150" stroke="#00F0FF" stroke-width="2.5"/>
+
+  <!-- 3. Indicador Superior (Número o Flecha) -->
+  <polygon points="150,14 124,54 176,54" fill="#0B101B" stroke="#475569" stroke-width="2" stroke-linejoin="round"/>
+           <text x="150" y="47" fill="#CBD5E1" font-family="Chakra Petch, sans-serif" font-size="22" font-weight="700" text-anchor="middle">3</text>
+
+  <!-- 4. Indicador Inferior (Número o Flecha) -->
+  <polygon points="150,286 124,246 176,246" fill="#0B101B" stroke="#475569" stroke-width="2" stroke-linejoin="round"/>
+           <text x="150" y="269" fill="#CBD5E1" font-family="Chakra Petch, sans-serif" font-size="22" font-weight="700" text-anchor="middle">4</text>
+
+  <!-- 5. Pomo / Actuador central con etiqueta -->
+  <g transform="translate(150, 150)">
+    <circle cx="0" cy="4" r="35" fill="#000000" opacity="0.65"/>
+    <circle cx="0" cy="0" r="34" fill="url(#cdbl-knob-SW)" stroke="#475B7C" stroke-width="2"/>
+    <polygon points="-14,-27 14,-27 27,-14 27,14 14,27 -14,27 -27,14 -27,-14" fill="#141C29" stroke="#334155" stroke-width="1.2"/>
+    <text x="0" y="2" fill="#FFFFFF" font-family="Chakra Petch, sans-serif" font-size="18" font-weight="700" text-anchor="middle" dominant-baseline="central">SW</text>
+  </g>
+</svg></g>
+  <g transform="translate(691, 631) scale(0.36)"><svg viewBox="0 0 300 300" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg" class="select-none cursor-pointer">
+  <defs>
+    <radialGradient id="cdbl-rim-SW" cx="50%" cy="40%" r="55%">
+      <stop offset="0%" stop-color="#242E42"/>
+      <stop offset="70%" stop-color="#121824"/>
+      <stop offset="100%" stop-color="#080B11"/>
+    </radialGradient>
+    <radialGradient id="cdbl-dish-SW" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#182030"/>
+      <stop offset="65%" stop-color="#0E131D"/>
+      <stop offset="100%" stop-color="#070A10"/>
+    </radialGradient>
+    <linearGradient id="cdbl-knob-SW" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#384862"/>
+      <stop offset="50%" stop-color="#202A3C"/>
+      <stop offset="100%" stop-color="#111722"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 1. Marco circular exterior -->
+  <circle cx="150" cy="150" r="144" fill="url(#cdbl-rim-SW)" stroke="#2E3C56" stroke-width="2.5"/>
+  <circle cx="150" cy="150" r="134" fill="none" stroke="#0B0F17" stroke-width="2.5"/>
+  <circle cx="150" cy="150" r="120" fill="url(#cdbl-dish-SW)" stroke="#1E283A" stroke-width="2"/>
+
+  <!-- Guardas curvas laterales -->
+  <path d="M 82 90 A 84 84 0 0 0 68 142 L 76 146 L 76 154 L 68 158 A 84 84 0 0 0 82 210" fill="none" stroke="#28374E" stroke-width="4" stroke-linecap="round"/>
+  <path d="M 218 90 A 84 84 0 0 1 232 142 L 224 146 L 224 154 L 232 158 A 84 84 0 0 1 218 210" fill="none" stroke="#28374E" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- 2. Pozo vertical central -->
+  <rect x="112" y="64" width="76" height="172" rx="38" fill="#06090F" stroke="#1F293B" stroke-width="2"/>
+  <line x1="150" y1="150" x2="150" y2="150" stroke="#1E293B" stroke-width="6" stroke-linecap="round"/>
+
+  <!-- Marcas de centro neutro -->
+  <line x1="88" y1="150" x2="108" y2="150" stroke="#00F0FF" stroke-width="2.5"/>
+  <line x1="192" y1="150" x2="212" y2="150" stroke="#00F0FF" stroke-width="2.5"/>
+
+  <!-- 3. Indicador Superior (Número o Flecha) -->
+  <polygon points="150,14 124,54 176,54" fill="#0B101B" stroke="#475569" stroke-width="2" stroke-linejoin="round"/>
+           <text x="150" y="47" fill="#CBD5E1" font-family="Chakra Petch, sans-serif" font-size="22" font-weight="700" text-anchor="middle">5</text>
+
+  <!-- 4. Indicador Inferior (Número o Flecha) -->
+  <polygon points="150,286 124,246 176,246" fill="#0B101B" stroke="#475569" stroke-width="2" stroke-linejoin="round"/>
+           <text x="150" y="269" fill="#CBD5E1" font-family="Chakra Petch, sans-serif" font-size="22" font-weight="700" text-anchor="middle">6</text>
+
+  <!-- 5. Pomo / Actuador central con etiqueta -->
+  <g transform="translate(150, 150)">
+    <circle cx="0" cy="4" r="35" fill="#000000" opacity="0.65"/>
+    <circle cx="0" cy="0" r="34" fill="url(#cdbl-knob-SW)" stroke="#475B7C" stroke-width="2"/>
+    <polygon points="-14,-27 14,-27 27,-14 27,14 14,27 -14,27 -27,14 -27,-14" fill="#141C29" stroke="#334155" stroke-width="1.2"/>
+    <text x="0" y="2" fill="#FFFFFF" font-family="Chakra Petch, sans-serif" font-size="18" font-weight="700" text-anchor="middle" dominant-baseline="central">SW</text>
+  </g>
+</svg></g>
+</svg>

@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>X56 Throttle Vector UI Suite</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            display: ['Chakra Petch', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    :root {
+      --accent-color: #00F0FF;
+      --accent-glow: rgba(0, 240, 255, 0.45);
+      --accent-dim: rgba(0, 240, 255, 0.15);
+    }
+
+    body {
+      background-color: #06080D;
+      background-image: 
+        radial-gradient(circle at 50% 15%, rgba(16, 28, 48, 0.65) 0%, transparent 65%),
+        radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+      background-size: 100% 100%, 24px 24px;
+    }
+
+    .dpad-perspective-box {
+      perspective: 600px;
+      transform-style: preserve-3d;
+    }
+
+    .dpad-plate {
+      transition: transform 0.12s cubic-bezier(0.2, 0.8, 0.4, 1);
+      will-change: transform;
+    }
+
+    .tilt-up { transform: rotateX(10deg) translateY(-2px); }
+    .tilt-down { transform: rotateX(-10deg) translateY(2px); }
+    .tilt-left { transform: rotateY(-10deg) translateX(-2px); }
+    .tilt-right { transform: rotateY(10deg) translateX(2px); }
+    .tilt-up-left { transform: rotateX(8deg) rotateY(-8deg); }
+    .tilt-up-right { transform: rotateX(8deg) rotateY(8deg); }
+    .tilt-down-left { transform: rotateX(-8deg) rotateY(-8deg); }
+    .tilt-down-right { transform: rotateX(-8deg) rotateY(8deg); }
+    .tilt-center { transform: scale(0.95); }
+
+    .dpad-btn {
+      cursor: pointer;
+      transition: fill 0.1s ease, filter 0.15s ease;
+      touch-action: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .dpad-btn:hover { filter: brightness(1.25); }
+    .dpad-btn.active { filter: drop-shadow(0 0 10px var(--accent-glow)); }
+
+    /* Nodo posicionado en el mapa del X56 Throttle */
+    .x56-node {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      user-select: none;
+      z-index: 10;
+      transition: filter 0.15s ease;
+    }
+
+    .x56-node:hover {
+      z-index: 20;
+    }
+
+    .x56-tag {
+      font-family: 'Chakra Petch', sans-serif;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: rgba(9, 13, 22, 0.9);
+      border: 1px solid rgba(51, 65, 85, 0.7);
+      color: #94A3B8;
+      margin-top: 3px;
+      pointer-events: none;
+      white-space: nowrap;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.6);
+    }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #090C12; }
+    ::-webkit-scrollbar-thumb { background: #1F2839; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #2E3C54; }
+  </style>
+</head>
+<body class="min-h-screen text-slate-200 antialiased flex flex-col justify-between selection:bg-cyan-500 selection:text-black">
+
+  <!-- ==================== TOP NAVIGATION / HUD HEADER ==================== -->
+  <header class="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+      
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="9"/>
+            <path d="M12 7v10M7 12h10"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="font-display font-bold text-base sm:text-lg tracking-wider text-slate-100 flex items-center gap-2">
+            X56 THROTTLE DECK <span class="hidden sm:inline-block text-[10px] px-2 py-0.5 rounded border border-cyan-500/40 text-cyan-400 font-mono font-medium">HOTAS LAYOUT</span>
+          </h1>
+          <p class="text-[11px] text-slate-400 font-mono tracking-tight hidden sm:block">Distribución Vectorial Interactiva: SC, K1, I, H, F, G, SLD, E, H3, H4, SW (1-6) y TGL (1-4)</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2.5">
+        <button id="reset-suite-btn" class="px-2.5 sm:px-3 py-1.5 rounded-lg border border-slate-800 hover:border-cyan-500/50 bg-slate-900/80 text-xs font-mono text-slate-300 hover:text-cyan-300 flex items-center gap-1.5 transition-colors">
+          <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          <span class="hidden md:inline">Reiniciar HOTAS</span>
+        </button>
+        <button id="audio-toggle-btn" class="px-2.5 sm:px-3 py-1.5 rounded-lg border border-slate-800 hover:border-slate-700 bg-slate-900/80 text-xs font-mono text-slate-300 flex items-center gap-1.5 transition-colors">
+          <span id="audio-icon">🔊</span>
+          <span id="audio-label" class="hidden sm:inline">Audio: ON</span>
+        </button>
+        <button id="header-export-btn" class="px-3 py-1.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/50 text-cyan-300 text-xs font-mono font-semibold flex items-center gap-1.5 transition-all active:scale-95">
+          <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+          </svg>
+          <span class="hidden sm:inline">Exportar</span> Mapa SVG
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- ==================== MAIN CONTENT CONTAINER ==================== -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 py-5 flex-1 flex flex-col gap-5 w-full">
+
+    <!-- TOP CONTROL TOOLBAR: THEMES, SCALE & TELEMETRY -->
+    <div class="bg-slate-900/50 border border-slate-800/80 rounded-2xl p-3.5 backdrop-blur-sm flex flex-wrap items-center justify-between gap-4">
+      <!-- Theme Palettes -->
+      <div class="flex items-center gap-1.5 flex-wrap">
+        <span class="text-xs font-mono text-slate-400 uppercase tracking-wider mr-1">Color HUD:</span>
+        <button data-theme="cyan" class="theme-btn px-2.5 py-1 rounded-lg bg-slate-950/80 border-2 border-cyan-400 text-cyan-300 text-xs font-mono font-medium flex items-center gap-1.5 transition-all">
+          <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(0,240,255,0.7)]"></span>Cian
+        </button>
+        <button data-theme="amber" class="theme-btn px-2.5 py-1 rounded-lg bg-slate-950/80 border border-slate-800 hover:border-slate-700 text-amber-300 text-xs font-mono font-medium flex items-center gap-1.5 transition-all">
+          <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>Ámbar
+        </button>
+        <button data-theme="emerald" class="theme-btn px-2.5 py-1 rounded-lg bg-slate-950/80 border border-slate-800 hover:border-slate-700 text-emerald-300 text-xs font-mono font-medium flex items-center gap-1.5 transition-all">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>Matrix
+        </button>
+        <button data-theme="crimson" class="theme-btn px-2.5 py-1 rounded-lg bg-slate-950/80 border border-slate-800 hover:border-slate-700 text-rose-300 text-xs font-mono font-medium flex items-center gap-1.5 transition-all">
+          <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>Carmesí
+        </button>
+        <button data-theme="mono" class="theme-btn px-2.5 py-1 rounded-lg bg-slate-950/80 border border-slate-800 hover:border-slate-700 text-slate-300 text-xs font-mono font-medium flex items-center gap-1.5 transition-all">
+          <span class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>Stealth
+        </button>
+      </div>
+
+      <!-- Live Telemetry Readout & Scale Control -->
+      <div class="flex items-center gap-4 flex-wrap text-xs font-mono">
+        <div class="flex items-center gap-2 bg-slate-950/90 border border-slate-800 px-3 py-1 rounded-lg">
+          <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" id="telemetry-dot"></span>
+          <span class="text-slate-500">INPUT:</span>
+          <span id="telemetry-readout" class="text-cyan-400 font-bold">SISTEMA LISTO // X56</span>
+        </div>
+
+        <div class="flex items-center gap-2 text-slate-400">
+          <span>Escala:</span>
+          <input id="scale-slider" type="range" min="80" max="115" value="100" class="w-20 accent-cyan-400 cursor-pointer">
+          <span id="scale-label" class="text-slate-300 w-9">100%</span>
+        </div>
+
+        <label class="flex items-center gap-1.5 cursor-pointer text-slate-400 hover:text-slate-200">
+          <input type="checkbox" id="guides-toggle" checked class="rounded border-slate-700 bg-slate-900 accent-cyan-400 cursor-pointer">
+          <span>Guías HUD</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- ==================== X56 THROTTLE INTERACTIVE LAYOUT BOARD ==================== -->
+    <section class="bg-slate-900/45 border border-slate-800/90 rounded-2xl p-3 sm:p-5 backdrop-blur-sm relative overflow-x-auto">
+      
+      <!-- Contenedor proporcional 1180 x 800 que replica el mapa exacto de la imagen -->
+      <div class="min-w-[920px] w-full max-w-[1180px] mx-auto relative select-none" style="height: 790px;">
+        
+        <!-- CAPA DE FONDO VECTORIAL: RETÍCULA LIMPIA SIN CUADROS DE TEXTO -->
+        <svg id="x56-hud-guides" viewBox="0 0 1180 790" class="w-full h-full absolute inset-0 pointer-events-none transition-opacity duration-300">
+          <defs>
+            <pattern id="x56-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#38BDF8" stroke-width="0.4" stroke-opacity="0.22"/>
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" rx="16" fill="url(#x56-grid)" />
+        </svg>
+
+        <!-- ==================== 1. ZONA SUPERIOR IZQUIERDA: SC & K1 ==================== -->
+        <!-- SC = Scroll Wheel -->
+        <div class="x56-node" style="left: 138px; top: 210px;">
+          <div id="host-sc" class="x56-scalable w-[76px] filter drop-shadow-[0_10px_20px_rgba(0,0,0,0.85)]"></div>
+        </div>
+
+        <!-- K1 = Toggle Doble Vertical -->
+        <div class="x56-node" style="left: 235px; top: 210px;">
+          <div id="host-k1" class="x56-scalable w-[72px] filter drop-shadow-[0_10px_20px_rgba(0,0,0,0.85)]"></div>
+        </div>
+
+        <!-- ==================== 2. CLUSTER CENTRAL DEL GRIP: I, H, F, SLD, G, E, H3, H4 ==================== -->
+        <!-- I = Botón Circular con letra I -->
+        <div class="x56-node" style="left: 485px; top: 185px;">
+          <div id="host-btn-I" class="x56-scalable w-[82px] filter drop-shadow-[0_10px_20px_rgba(0,0,0,0.85)]"></div>
+        </div>
+
+        <!-- H = Botón Circular con letra H -->
+        <div class="x56-node" style="left: 595px; top: 185px;">
+          <div id="host-btn-H" class="x56-scalable w-[82px] filter drop-shadow-[0_10px_20px_rgba(0,0,0,0.85)]"></div>
+        </div>
+
+        <!-- F = Botón Circular grande con letra F -->
+        <div class="x56-node" style="left: 745px; top: 118px;">
+          <div id="host-btn-F" class="x56-scalable w-[112px] filter drop-shadow-[0_12px_24px_rgba(0,0,0,0.85)]"></div>
+        </div>
+
+        <!-- SLD = Toggle Horizontal -->
+        <div class="x56-node" style="left: 595px; top: 290px;">
+          <div id="host-sld" class="x56-scalable w-[114px] filter drop-shadow-[0_10px_20px_rgba(0,0,0,0.85)]"></div>
+        </div>
+
+        <!-- G = Botón Circular grande con letra G -->
+        <div class="x56-node" style="left: 745px; top: 272px;">
+          <div id="host-btn-G" class="x56-scalable w-[112px] filter drop-shadow-[0_12px_24px_rgba(0,0,0,0.85)]"></div>
+        </div>
+
+        <!-- E = Botón Cuadrado con letra E -->
+        <div class="x56-node" style="left: 582px; top: 392px;">
+          <div id="host-btn-E" class="x56-scalable w-[82px] filter drop-shadow-[0_10px_20px_rgba(0,0,0,0.85)]"></div>
+        </div>
+
+        <!-- H3 = Cruceta Circular -->
+        <div class="x56-node" style="left: 695px; top: 395px;">
+          <div class="dpad-perspective-box">
+            <div id="plate-h3" class="dpad-plate">
+              <div id="host-h3" class="x56-scalable w-[106px] filter drop-shadow-[0_12px_22px_rgba(0,0,0,0.85)]"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- H4 = Cruceta Circular -->
+        <div class="x56-node" style="left: 648px; top: 510px;">
+          <div class="dpad-perspective-box">
+            <div id="plate-h4" class="dpad-plate">
+              <div id="host-h4" class="x56-scalable w-[106px] filter drop-shadow-[0_12px_22px_rgba(0,0,0,0.85)]"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ==================== 3. COLUMNA DERECHA ESCALONADA: TGL 4, TGL 3, TGL 2, TGL 1 ==================== -->
+        <!-- TGL 4 (Doble Marco Circular sin números, solo flechas) -->
+        <div class="x56-node" style="left: 1035px; top: 262px;">
+          <div id="host-tgl4" class="x56-scalable w-[102px] filter drop-shadow-[0_12px_22px_rgba(0,0,0,0.85)]"></div>
+        </div>
+
+        <!-- TGL 3 (Doble Marco Circular sin números, solo flechas) -->
+        <div class="x56-node" style="left: 938px; top: 352px;">
+          <div id="host-tgl3" class="x56-scalable w-[102px] filter drop-shadow-[0_12px_22px_rgba(0,0,0,0.85)]"></div>
+        </div>
+
+        <!-- TGL 2 (Doble Marco Circular sin números, solo flechas) -->
+        <div class="x56-node" style="left: 1035px; top: 472px;">
+          <div id="host-tgl2" class="x56-scalable w-[102px] filter drop-shadow-[0_12px_22px_rgba(0,0,0,0.85)]"></div>
+        </div>
+
+        <!-- TGL 1 (Doble Marco Circular sin números, solo flechas) -->
+        <div class="x56-node" style="left: 938px; top: 562px;">
+          <div id="host-tgl1" class="x56-scalable w-[102px] filter drop-shadow-[0_12px_22px_rgba(0,0,0,0.85)]"></div>
+        </div>
+
+        <!-- ==================== 4. FILA INFERIOR: SW (1/2), SW (3/4), SW (5/6) ==================== -->
+        <!-- SW 1/2 (Doble Marco Circular con números 1 y 2) -->
+        <div class="x56-node" style="left: 345px; top: 685px;">
+          <div id="host-sw12" class="x56-scalable w-[108px] filter drop-shadow-[0_12px_22px_rgba(0,0,0,0.85)]"></div>
+        </div>
+
+        <!-- SW 3/4 (Doble Marco Circular con números 3 y 4) -->
+        <div class="x56-node" style="left: 545px; top: 685px;">
+          <div id="host-sw34" class="x56-scalable w-[108px] filter drop-shadow-[0_12px_22px_rgba(0,0,0,0.85)]"></div>
+        </div>
+
+        <!-- SW 5/6 (Doble Marco Circular con números 5 y 6) -->
+        <div class="x56-node" style="left: 745px; top: 685px;">
+          <div id="host-sw56" class="x56-scalable w-[108px] filter drop-shadow-[0_12px_22px_rgba(0,0,0,0.85)]"></div>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ==================== BOTTOM PANEL: SVG CODE INSPECTOR & EXPORTER ==================== -->
+    <section class="bg-slate-900/60 border border-slate-800/90 rounded-2xl p-5 backdrop-blur-sm flex flex-col gap-4">
+      
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+        <div class="flex items-center gap-3 flex-wrap">
+          <h3 class="text-xs font-display tracking-widest text-slate-300 uppercase font-bold">
+            INSPECTOR SVG VECTORIAL
+          </h3>
+          <div class="inline-flex rounded-lg p-0.5 bg-slate-950/80 border border-slate-800 text-[11px] font-mono flex-wrap">
+            <button data-tab="full-x56" class="code-tab-btn px-2.5 py-1 rounded bg-slate-800 text-cyan-400 font-bold transition-all">MAPA X56 COMPLETO</button>
+            <button data-tab="sc" class="code-tab-btn px-2.5 py-1 rounded text-slate-400 hover:text-slate-200 transition-all">SC (WHEEL)</button>
+            <button data-tab="k1" class="code-tab-btn px-2.5 py-1 rounded text-slate-400 hover:text-slate-200 transition-all">K1 (VERT)</button>
+            <button data-tab="sw" class="code-tab-btn px-2.5 py-1 rounded text-slate-400 hover:text-slate-200 transition-all">SW (1-6)</button>
+            <button data-tab="tgl" class="code-tab-btn px-2.5 py-1 rounded text-slate-400 hover:text-slate-200 transition-all">TGL (FLECHAS)</button>
+            <button data-tab="btns" class="code-tab-btn px-2.5 py-1 rounded text-slate-400 hover:text-slate-200 transition-all">BOTONES (I,H,F,G,E)</button>
+            <button data-tab="sld" class="code-tab-btn px-2.5 py-1 rounded text-slate-400 hover:text-slate-200 transition-all">SLD (HORIZ)</button>
+            <button data-tab="hats" class="code-tab-btn px-2.5 py-1 rounded text-slate-400 hover:text-slate-200 transition-all">H3 / H4 (D-PAD)</button>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button id="copy-active-tab-code" class="px-3 py-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-xs font-mono flex items-center gap-1.5 transition-all active:scale-95">
+            Copiar Código SVG
+          </button>
+          <button id="download-active-tab-svg" class="px-3 py-1.5 rounded-lg border border-slate-800 hover:border-slate-700 bg-slate-950/80 text-xs font-mono text-slate-300 flex items-center gap-1.5 transition-colors">
+            Descargar .svg
+          </button>
+        </div>
+      </div>
+
+      <div class="relative bg-slate-950 rounded-xl border border-slate-800/90 overflow-hidden">
+        <div class="flex items-center justify-between px-3 py-1.5 border-b border-slate-800/60 bg-slate-900/40 text-[10px] font-mono text-slate-400">
+          <span id="code-viewer-filename">x56-throttle-layout.svg</span>
+          <span class="text-slate-500">100% Vectorial • Primitivas Geométricas</span>
+        </div>
+        <pre id="svg-code-view" class="p-4 text-[11px] font-mono text-cyan-300/80 overflow-x-auto max-h-48 leading-relaxed select-all"></pre>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- ==================== FOOTER ==================== -->
+  <footer class="border-t border-slate-800/80 bg-slate-950/60 py-3 text-center text-xs font-mono text-slate-500">
+    X56 Throttle Vector Layout • SC, K1, SW 1-6, TGL 1-4, SLD, E, I/H/F/G &amp; H3/H4 Hats
+  </footer>
+
+  <!-- ==================== TOAST NOTIFICATION ==================== -->
+  <div id="toast-notify" class="fixed bottom-6 right-6 translate-y-20 opacity-0 pointer-events-none transition-all duration-300 z-50 bg-slate-900 border border-cyan-500/50 text-cyan-300 px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-2 font-mono text-xs">
+    <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+    </svg>
+    <span id="toast-message">Notificación</span>
+  </div>
+
+</body>
+</html>
