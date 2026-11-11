@@ -788,13 +788,19 @@ impl ProgrammingTab {
     // COLUMNA IZQUIERDA: TARJETA 2 - MAPA VECTORIAL DE ENTRADAS 2D
     // ========================================================================
 
-    /// Compacta el espaciado horizontal de los controles del mapa vectorial hacia el centro (0.5)
-    /// preservando la proporción física original de los botones dentro del canvas de fondo.
+    /// Posiciona horizontalmente los controles del mapa vectorial dentro del canvas.
+    /// Para el Throttle respeta las coordenadas normalizadas del diagrama vectorial (viewBox 792x612).
+    /// Para el Stick compacta el espaciado hacia el centro preservando el margen lateral.
     #[inline]
-    fn compact_vector_map_x(rect: egui::Rect, norm_x: f32) -> f32 {
-        let center_x = rect.min.x + rect.width() * 0.50;
-        let factor = 0.80; // Compacta un 20% el ancho de dispersión horizontal
-        center_x + (norm_x - 0.50) * rect.width() * factor
+    fn compact_vector_map_x(rect: egui::Rect, norm_x: f32, device: DeviceKind) -> f32 {
+        match device {
+            DeviceKind::Throttle => rect.min.x + norm_x * rect.width(),
+            DeviceKind::Stick => {
+                let center_x = rect.min.x + rect.width() * 0.50;
+                let factor = 0.88;
+                center_x + (norm_x - 0.50) * rect.width() * factor
+            }
+        }
     }
 
     fn render_vector_map_card(&mut self, ui: &mut Ui, snapshot: &LiveButtonsSnapshot) {
@@ -828,7 +834,12 @@ impl ProgrammingTab {
             ui.add_space(4.0);
 
             // Canvas de dibujo vectorial con egui::Painter
-            let canvas_height = (ui.available_width() * 0.72).clamp(280.0, 420.0);
+            // El Throttle usa la relación de aspecto exacta del SVG (612/792 ≈ 0.7727)
+            let aspect = match self.selected_device {
+                DeviceKind::Throttle => 612.0 / 792.0,
+                DeviceKind::Stick => 0.72,
+            };
+            let canvas_height = (ui.available_width() * aspect).clamp(280.0, 440.0);
             let canvas_size = Vec2::new(ui.available_width(), canvas_height);
             let (response, painter) = ui.allocate_painter(canvas_size, egui::Sense::click());
             let rect = response.rect;
@@ -941,7 +952,7 @@ impl ProgrammingTab {
 
             for node in &nodes {
                 let center = egui::pos2(
-                    Self::compact_vector_map_x(rect, node.norm_x),
+                    Self::compact_vector_map_x(rect, node.norm_x, self.selected_device),
                     rect.min.y + node.norm_y * rect.height(),
                 );
 
@@ -1145,11 +1156,11 @@ impl ProgrammingTab {
         // Cabezal superior del Stick (enmarca B, Witch, A, POV y Castle)
         let head_rect = egui::Rect::from_min_max(
             egui::pos2(
-                Self::compact_vector_map_x(rect, 0.14),
+                Self::compact_vector_map_x(rect, 0.14, DeviceKind::Stick),
                 rect.min.y + rect.height() * 0.04,
             ),
             egui::pos2(
-                Self::compact_vector_map_x(rect, 0.86),
+                Self::compact_vector_map_x(rect, 0.86, DeviceKind::Stick),
                 rect.min.y + rect.height() * 0.38,
             ),
         );
@@ -1158,7 +1169,7 @@ impl ProgrammingTab {
         // Biseles circulares de fondo para los 3 Hats (según diagrama de usuario)
         // 1. POV 8-Way (Cluster POV)
         let pov_c = egui::pos2(
-            Self::compact_vector_map_x(rect, 0.246),
+            Self::compact_vector_map_x(rect, 0.246, DeviceKind::Stick),
             rect.min.y + rect.height() * 0.242,
         );
         painter.circle_stroke(pov_c, 24.0, Stroke::new(0.8, COLOR_OUTLINE_VARIANT));
@@ -1172,7 +1183,7 @@ impl ProgrammingTab {
 
         // 2. Witch-Hat (HAT 1)
         let witch_c = egui::pos2(
-            Self::compact_vector_map_x(rect, 0.587),
+            Self::compact_vector_map_x(rect, 0.587, DeviceKind::Stick),
             rect.min.y + rect.height() * 0.121,
         );
         painter.circle_stroke(witch_c, 24.0, Stroke::new(0.8, COLOR_OUTLINE_VARIANT));
@@ -1186,7 +1197,7 @@ impl ProgrammingTab {
 
         // 3. Castle-Hat (HAT 2)
         let castle_c = egui::pos2(
-            Self::compact_vector_map_x(rect, 0.690),
+            Self::compact_vector_map_x(rect, 0.690, DeviceKind::Stick),
             rect.min.y + rect.height() * 0.285,
         );
         painter.circle_stroke(castle_c, 24.0, Stroke::new(0.8, COLOR_OUTLINE_VARIANT));
@@ -1201,64 +1212,166 @@ impl ProgrammingTab {
         // Mástil y empuñadura ergonómica centrada (cubre Trigger, C, Pinky y D)
         let shaft_rect = egui::Rect::from_min_max(
             egui::pos2(
-                Self::compact_vector_map_x(rect, 0.30),
+                Self::compact_vector_map_x(rect, 0.30, DeviceKind::Stick),
                 rect.min.y + rect.height() * 0.36,
             ),
             egui::pos2(
-                Self::compact_vector_map_x(rect, 0.70),
+                Self::compact_vector_map_x(rect, 0.70, DeviceKind::Stick),
                 rect.min.y + rect.height() * 0.92,
             ),
         );
         painter.rect_stroke(shaft_rect, 6.0, outline, egui::StrokeKind::Inside);
     }
 
-    /// Dibuja la silueta técnica del Throttle en el mapa vectorial.
+    /// Dibuja la silueta técnica y carcasas del Throttle en el mapa vectorial (coincide con diagrama SVG de hardware).
     fn draw_vector_throttle_silhouette(&self, painter: &egui::Painter, rect: egui::Rect) {
         let outline = Stroke::new(1.0, COLOR_OUTLINE_VARIANT);
         let accent = Stroke::new(1.2, COLOR_PRIMARY_CONTAINER);
+        let label_col = COLOR_ON_SURFACE_VARIANT;
 
-        // Doble cuadrante de gases
-        let lever_rect = egui::Rect::from_min_max(
+        let p = |nx: f32, ny: f32| {
             egui::pos2(
-                Self::compact_vector_map_x(rect, 0.14),
-                rect.min.y + rect.height() * 0.08,
-            ),
-            egui::pos2(
-                Self::compact_vector_map_x(rect, 0.86),
-                rect.min.y + rect.height() * 0.46,
-            ),
-        );
-        painter.rect_stroke(lever_rect, 6.0, outline, egui::StrokeKind::Inside);
+                rect.min.x + nx * rect.width(),
+                rect.min.y + ny * rect.height(),
+            )
+        };
+        let rx = |r_px: f32| (r_px / 792.0) * rect.width();
+        let ry = |r_px: f32| (r_px / 612.0) * rect.height();
 
-        let sep_x = Self::compact_vector_map_x(rect, 0.50);
-        // Separador central de palancas gemelas
-        painter.line_segment(
-            [
-                egui::pos2(sep_x, rect.min.y + rect.height() * 0.08),
-                egui::pos2(sep_x, rect.min.y + rect.height() * 0.46),
-            ],
-            Stroke::new(1.0, COLOR_OUTLINE_VARIANT),
-        );
-
-        // Base del Throttle con bahía de conmutadores SW 1-6 y TGL 1-4
-        let base_rect = egui::Rect::from_min_max(
-            egui::pos2(
-                Self::compact_vector_map_x(rect, 0.10),
-                rect.min.y + rect.height() * 0.50,
-            ),
-            egui::pos2(
-                Self::compact_vector_map_x(rect, 0.90),
-                rect.min.y + rect.height() * 0.93,
-            ),
-        );
-        painter.rect_stroke(base_rect, 6.0, accent, egui::StrokeKind::Inside);
-
+        // 1. SC Cápsula (cx: 0.1454, cy: 0.2110, w: 33.5, h: 68.2)
+        let sc_rect =
+            egui::Rect::from_center_size(p(0.1454, 0.2110), egui::vec2(rx(33.52), ry(68.20)));
+        painter.rect_stroke(sc_rect, 10.0, outline, egui::StrokeKind::Inside);
         painter.text(
-            egui::pos2(sep_x, rect.min.y + rect.height() * 0.53),
+            p(0.1454, 0.2110),
             egui::Align2::CENTER_CENTER,
-            "DUAL THROTTLE CONSOLE // SW 1-6 & TGL 1-4 BAY",
-            egui::FontId::monospace(8.5),
-            COLOR_OUTLINE,
+            "SC",
+            egui::FontId::monospace(9.5),
+            label_col,
+        );
+
+        // 2. K1 Cápsula (cx: 0.2147, cy: 0.2110, w: 33.5, h: 50.3)
+        let k1_rect =
+            egui::Rect::from_center_size(p(0.2147, 0.2110), egui::vec2(rx(33.52), ry(50.34)));
+        painter.rect_stroke(k1_rect, 8.0, outline, egui::StrokeKind::Inside);
+        painter.text(
+            p(0.2147, 0.2110),
+            egui::Align2::CENTER_CENTER,
+            "K1",
+            egui::FontId::monospace(9.5),
+            label_col,
+        );
+
+        // 3. I Anillo exterior (cx: 0.4397, cy: 0.2110, r: 21.0)
+        painter.circle_stroke(p(0.4397, 0.2110), rx(20.99), outline);
+
+        // 4. H Anillo exterior (cx: 0.5197, cy: 0.2110, r: 21.0)
+        painter.circle_stroke(p(0.5197, 0.2110), rx(20.99), outline);
+
+        // 5. SLD Carcasa redondeada (cx: 0.5197, cy: 0.2995, w: 50.3, h: 33.5)
+        let sld_rect =
+            egui::Rect::from_center_size(p(0.5197, 0.2995), egui::vec2(rx(50.34), ry(33.52)));
+        painter.rect_stroke(sld_rect, 6.0, outline, egui::StrokeKind::Inside);
+
+        // 6. E Carcasa cuadrada (cx: 0.5119, cy: 0.3811, size: 38.1)
+        let e_rect =
+            egui::Rect::from_center_size(p(0.5119, 0.3811), egui::vec2(rx(38.13), ry(38.13)));
+        painter.rect_stroke(e_rect, 3.0, outline, egui::StrokeKind::Inside);
+
+        // 7. F Giratorio Superior (cx: 0.6627, cy: 0.1293, r: 29.0)
+        painter.circle_stroke(p(0.6627, 0.1293), rx(28.99), accent);
+
+        // 8. G Giratorio Inferior (cx: 0.6627, cy: 0.2995, r: 29.0)
+        painter.circle_stroke(p(0.6627, 0.2995), rx(28.99), accent);
+
+        // 9. H3 Carcasa circular (cx: 0.5995, cy: 0.3843, r: 21.0)
+        painter.circle_stroke(p(0.5995, 0.3843), rx(20.99), outline);
+        painter.text(
+            p(0.5995, 0.3843),
+            egui::Align2::CENTER_CENTER,
+            "H3",
+            egui::FontId::monospace(9.0),
+            label_col,
+        );
+
+        // 10. H4 Carcasa circular (cx: 0.5730, cy: 0.4657, r: 21.0)
+        painter.circle_stroke(p(0.5730, 0.4657), rx(20.99), outline);
+        painter.text(
+            p(0.5730, 0.4657),
+            egui::Align2::CENTER_CENTER,
+            "H4",
+            egui::FontId::monospace(9.0),
+            label_col,
+        );
+
+        // 11. TGL 4 (cx: 0.8381, cy: 0.3188, r: 24.2)
+        painter.circle_stroke(p(0.8381, 0.3188), rx(24.22), outline);
+        painter.text(
+            p(0.8381, 0.3188),
+            egui::Align2::CENTER_CENTER,
+            "TGL 4",
+            egui::FontId::monospace(8.0),
+            label_col,
+        );
+
+        // 12. TGL 3 (cx: 0.7770, cy: 0.3979, r: 24.2)
+        painter.circle_stroke(p(0.7770, 0.3979), rx(24.22), outline);
+        painter.text(
+            p(0.7770, 0.3979),
+            egui::Align2::CENTER_CENTER,
+            "TGL 3",
+            egui::FontId::monospace(8.0),
+            label_col,
+        );
+
+        // 13. TGL 2 (cx: 0.8381, cy: 0.5335, r: 24.2)
+        painter.circle_stroke(p(0.8381, 0.5335), rx(24.22), outline);
+        painter.text(
+            p(0.8381, 0.5335),
+            egui::Align2::CENTER_CENTER,
+            "TGL 2",
+            egui::FontId::monospace(8.0),
+            label_col,
+        );
+
+        // 14. TGL 1 (cx: 0.7770, cy: 0.6126, r: 24.2)
+        painter.circle_stroke(p(0.7770, 0.6126), rx(24.22), outline);
+        painter.text(
+            p(0.7770, 0.6126),
+            egui::Align2::CENTER_CENTER,
+            "TGL 1",
+            egui::FontId::monospace(8.0),
+            label_col,
+        );
+
+        // 15. SW 1/2 (cx: 0.3134, cy: 0.7543, r: 25.2)
+        painter.circle_stroke(p(0.3134, 0.7543), rx(25.22), outline);
+        painter.text(
+            p(0.3134, 0.7543),
+            egui::Align2::CENTER_CENTER,
+            "SW",
+            egui::FontId::monospace(9.0),
+            label_col,
+        );
+
+        // 16. SW 3/4 (cx: 0.4879, cy: 0.7543, r: 25.2)
+        painter.circle_stroke(p(0.4879, 0.7543), rx(25.22), outline);
+        painter.text(
+            p(0.4879, 0.7543),
+            egui::Align2::CENTER_CENTER,
+            "SW",
+            egui::FontId::monospace(9.0),
+            label_col,
+        );
+
+        // 17. SW 5/6 (cx: 0.6623, cy: 0.7543, r: 25.2)
+        painter.circle_stroke(p(0.6623, 0.7543), rx(25.22), outline);
+        painter.text(
+            p(0.6623, 0.7543),
+            egui::Align2::CENTER_CENTER,
+            "SW",
+            egui::FontId::monospace(9.0),
+            label_col,
         );
     }
 
@@ -2596,14 +2709,14 @@ fn default_mapping_for(id: &str) -> DefaultMappingInfo {
             icon: icons::JOYSTICK,
         },
         "thr_rty_f_push" => DefaultMappingInfo {
-            action: "LIMITADOR DE VELOCIDAD PUSH (RTY 5)",
+            action: "LIMITADOR DE VELOCIDAD PUSH (F)",
             key_display: "[BACKSPACE]",
             map_type: "TOGGLE",
             group_sc: "SC: PROPULSION",
             icon: icons::SETTINGS,
         },
         "thr_rty_g_push" => DefaultMappingInfo {
-            action: "LÁSER DE EXTRACCIÓN PUSH (RTY 6)",
+            action: "LÁSER DE EXTRACCIÓN PUSH (G)",
             key_display: "[MOUSE1]",
             map_type: "HOLD",
             group_sc: "SC: MINING",
@@ -3013,108 +3126,56 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
             },
         ],
         DeviceKind::Throttle => vec![
-            // Lado Izquierdo: Rueda Scroll (SC) donde estaban antes los RTY
+            // 1. Lado Izquierdo: Rueda Scroll (SC)
             SchematicNode {
                 id: "thr_scroll_fwd",
-                short_label: "SC▲",
+                short_label: "▲",
                 full_name: "Rueda Scroll Adelante",
-                norm_x: 0.22,
-                norm_y: 0.13,
-                radius: 9.0,
+                norm_x: 0.145,
+                norm_y: 0.186,
+                radius: 7.5,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
             SchematicNode {
                 id: "thr_scroll_bck",
-                short_label: "SC▼",
+                short_label: "▼",
                 full_name: "Rueda Scroll Atrás",
-                norm_x: 0.22,
-                norm_y: 0.21,
-                radius: 9.0,
+                norm_x: 0.145,
+                norm_y: 0.236,
+                radius: 7.5,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
-            // Lado Izquierdo: Interruptor K1 donde estaba antes la Rueda Scroll
+            // 2. Lado Izquierdo: Interruptor K1
             SchematicNode {
                 id: "thr_k1_up",
-                short_label: "K1▲",
+                short_label: "▲",
                 full_name: "Interruptor K1 Arriba",
-                norm_x: 0.22,
-                norm_y: 0.28,
-                radius: 9.0,
+                norm_x: 0.215,
+                norm_y: 0.189,
+                radius: 7.5,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
             SchematicNode {
                 id: "thr_k1_down",
-                short_label: "K1▼",
+                short_label: "▼",
                 full_name: "Interruptor K1 Abajo",
-                norm_x: 0.22,
-                norm_y: 0.35,
-                radius: 9.0,
+                norm_x: 0.215,
+                norm_y: 0.232,
+                radius: 7.5,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
-            // Lado Derecho: Control Deslizante (SLD)
-            SchematicNode {
-                id: "thr_sld",
-                short_label: "SLD",
-                full_name: "Control Deslizante SLD (2 Posiciones)",
-                norm_x: 0.78,
-                norm_y: 0.13,
-                radius: 11.0,
-                is_rect: true,
-                rect_size: Vec2::new(32.0, 16.0),
-            },
-            // Lado Derecho: Giratorios RTY 5 y RTY 6
-            SchematicNode {
-                id: "thr_rty_f_push",
-                short_label: "RTY 5",
-                full_name: "Giratorio F Push (RTY 5)",
-                norm_x: 0.78,
-                norm_y: 0.22,
-                radius: 11.0,
-                is_rect: false,
-                rect_size: Vec2::ZERO,
-            },
-            SchematicNode {
-                id: "thr_rty_g_push",
-                short_label: "RTY 6",
-                full_name: "Giratorio G Push (RTY 6)",
-                norm_x: 0.78,
-                norm_y: 0.30,
-                radius: 11.0,
-                is_rect: false,
-                rect_size: Vec2::ZERO,
-            },
-            // Sección C: Botones Pulgar E, H, I, Minipalanca
-            SchematicNode {
-                id: "thr_btn_e",
-                short_label: "E",
-                full_name: "Botón E (Pulgar)",
-                norm_x: 0.43,
-                norm_y: 0.15,
-                radius: 11.0,
-                is_rect: false,
-                rect_size: Vec2::ZERO,
-            },
+            // 3. Empuñadura Central Superior: Botones I, H, SLD, E
             SchematicNode {
                 id: "thr_btn_i",
                 short_label: "I",
                 full_name: "Botón I",
-                norm_x: 0.57,
-                norm_y: 0.15,
-                radius: 11.0,
-                is_rect: false,
-                rect_size: Vec2::ZERO,
-            },
-            SchematicNode {
-                id: "thr_ministick_push",
-                short_label: "MINI",
-                full_name: "Minipalanca Push (Pulgar)",
-                norm_x: 0.69,
-                norm_y: 0.15,
-                radius: 11.0,
+                norm_x: 0.440,
+                norm_y: 0.211,
+                radius: 12.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -3122,235 +3183,324 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "thr_btn_h",
                 short_label: "H",
                 full_name: "Botón H",
-                norm_x: 0.50,
-                norm_y: 0.22,
-                radius: 11.0,
+                norm_x: 0.520,
+                norm_y: 0.211,
+                radius: 12.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
-            // Sección C: HAT 3
+            SchematicNode {
+                id: "thr_sld",
+                short_label: "SLD",
+                full_name: "Control Deslizante SLD (2 Posiciones)",
+                norm_x: 0.520,
+                norm_y: 0.299,
+                radius: 11.0,
+                is_rect: true,
+                rect_size: Vec2::new(32.0, 16.0),
+            },
+            SchematicNode {
+                id: "thr_btn_e",
+                short_label: "E",
+                full_name: "Botón E (Pulgar)",
+                norm_x: 0.512,
+                norm_y: 0.381,
+                radius: 11.0,
+                is_rect: true,
+                rect_size: Vec2::new(22.0, 22.0),
+            },
+            // 4. Giratorios Superiores F y G (Reemplazan RTY 5 y RTY 6)
+            SchematicNode {
+                id: "thr_rty_f_push",
+                short_label: "F",
+                full_name: "Giratorio F Push (RTY 5)",
+                norm_x: 0.663,
+                norm_y: 0.129,
+                radius: 15.0,
+                is_rect: false,
+                rect_size: Vec2::ZERO,
+            },
+            SchematicNode {
+                id: "thr_rty_g_push",
+                short_label: "G",
+                full_name: "Giratorio G Push (RTY 6)",
+                norm_x: 0.663,
+                norm_y: 0.299,
+                radius: 15.0,
+                is_rect: false,
+                rect_size: Vec2::ZERO,
+            },
+            // 5. HAT 3 (H3) - 4 Direcciones (H3▲, H3▶, H3▼, H3◀)
             SchematicNode {
                 id: "thr_h3_up",
-                short_label: "3▲",
-                full_name: "HAT 3 Arriba",
-                norm_x: 0.43,
-                norm_y: 0.30,
-                radius: 9.0,
+                short_label: "▲",
+                full_name: "HAT 3 Arriba (H3▲)",
+                norm_x: 0.600,
+                norm_y: 0.365,
+                radius: 6.5,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
             SchematicNode {
                 id: "thr_h3_right",
-                short_label: "3▶",
-                full_name: "HAT 3 Derecha",
-                norm_x: 0.49,
-                norm_y: 0.33,
-                radius: 9.0,
+                short_label: "▶",
+                full_name: "HAT 3 Derecha (H3▶)",
+                norm_x: 0.614,
+                norm_y: 0.384,
+                radius: 6.5,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
             SchematicNode {
                 id: "thr_h3_down",
-                short_label: "3▼",
-                full_name: "HAT 3 Abajo",
-                norm_x: 0.43,
-                norm_y: 0.36,
-                radius: 9.0,
+                short_label: "▼",
+                full_name: "HAT 3 Abajo (H3▼)",
+                norm_x: 0.600,
+                norm_y: 0.404,
+                radius: 6.5,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
             SchematicNode {
                 id: "thr_h3_left",
-                short_label: "3◀",
-                full_name: "HAT 3 Izquierda",
-                norm_x: 0.37,
-                norm_y: 0.33,
-                radius: 9.0,
+                short_label: "◀",
+                full_name: "HAT 3 Izquierda (H3◀)",
+                norm_x: 0.585,
+                norm_y: 0.384,
+                radius: 6.5,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
-            // Sección C: HAT 4
+            // 6. HAT 4 (H4) - 4 Direcciones (H4▲, H4▶, H4▼, H4◀)
             SchematicNode {
                 id: "thr_h4_up",
-                short_label: "4▲",
-                full_name: "HAT 4 Arriba",
-                norm_x: 0.65,
-                norm_y: 0.30,
-                radius: 9.0,
+                short_label: "▲",
+                full_name: "HAT 4 Arriba (H4▲)",
+                norm_x: 0.573,
+                norm_y: 0.446,
+                radius: 6.5,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
             SchematicNode {
                 id: "thr_h4_right",
-                short_label: "4▶",
-                full_name: "HAT 4 Derecha",
-                norm_x: 0.71,
-                norm_y: 0.33,
-                radius: 9.0,
+                short_label: "▶",
+                full_name: "HAT 4 Derecha (H4▶)",
+                norm_x: 0.587,
+                norm_y: 0.466,
+                radius: 6.5,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
             SchematicNode {
                 id: "thr_h4_down",
-                short_label: "4▼",
-                full_name: "HAT 4 Abajo",
-                norm_x: 0.65,
-                norm_y: 0.36,
-                radius: 9.0,
+                short_label: "▼",
+                full_name: "HAT 4 Abajo (H4▼)",
+                norm_x: 0.573,
+                norm_y: 0.485,
+                radius: 6.5,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
             SchematicNode {
                 id: "thr_h4_left",
-                short_label: "4◀",
-                full_name: "HAT 4 Izquierda",
-                norm_x: 0.59,
-                norm_y: 0.33,
-                radius: 9.0,
+                short_label: "◀",
+                full_name: "HAT 4 Izquierda (H4◀)",
+                norm_x: 0.559,
+                norm_y: 0.466,
+                radius: 6.5,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
-            // Sección G: Conmutadores de Base SW 1 a 6 (Arriba nones, Abajo pares) y TGL 1 a 4 (Up / Down)
-            SchematicNode {
-                id: "thr_sw_1",
-                short_label: "SW 1",
-                full_name: "Switch 1 Arriba (SW 1)",
-                norm_x: 0.32,
-                norm_y: 0.60,
-                radius: 9.0,
-                is_rect: true,
-                rect_size: Vec2::new(30.0, 15.0),
-            },
-            SchematicNode {
-                id: "thr_sw_2",
-                short_label: "SW 2",
-                full_name: "Switch 2 Abajo (SW 2)",
-                norm_x: 0.32,
-                norm_y: 0.66,
-                radius: 9.0,
-                is_rect: true,
-                rect_size: Vec2::new(30.0, 15.0),
-            },
-            SchematicNode {
-                id: "thr_sw_3",
-                short_label: "SW 3",
-                full_name: "Switch 3 Arriba (SW 3)",
-                norm_x: 0.50,
-                norm_y: 0.60,
-                radius: 9.0,
-                is_rect: true,
-                rect_size: Vec2::new(30.0, 15.0),
-            },
-            SchematicNode {
-                id: "thr_sw_4",
-                short_label: "SW 4",
-                full_name: "Switch 4 Abajo (SW 4)",
-                norm_x: 0.50,
-                norm_y: 0.66,
-                radius: 9.0,
-                is_rect: true,
-                rect_size: Vec2::new(30.0, 15.0),
-            },
-            SchematicNode {
-                id: "thr_sw_5",
-                short_label: "SW 5",
-                full_name: "Switch 5 Arriba (SW 5)",
-                norm_x: 0.68,
-                norm_y: 0.60,
-                radius: 9.0,
-                is_rect: true,
-                rect_size: Vec2::new(30.0, 15.0),
-            },
-            SchematicNode {
-                id: "thr_sw_6",
-                short_label: "SW 6",
-                full_name: "Switch 6 Abajo (SW 6)",
-                norm_x: 0.68,
-                norm_y: 0.66,
-                radius: 9.0,
-                is_rect: true,
-                rect_size: Vec2::new(30.0, 15.0),
-            },
-            SchematicNode {
-                id: "thr_sw_7",
-                short_label: "TGL1 Up",
-                full_name: "Toggle 1 Arriba (TGL 1 Up)",
-                norm_x: 0.23,
-                norm_y: 0.78,
-                radius: 9.0,
-                is_rect: true,
-                rect_size: Vec2::new(36.0, 15.0),
-            },
-            SchematicNode {
-                id: "thr_sw_8",
-                short_label: "TGL1 Dn",
-                full_name: "Toggle 1 Abajo (TGL 1 Down)",
-                norm_x: 0.23,
-                norm_y: 0.84,
-                radius: 9.0,
-                is_rect: true,
-                rect_size: Vec2::new(36.0, 15.0),
-            },
-            SchematicNode {
-                id: "thr_sw_9",
-                short_label: "TGL2 Up",
-                full_name: "Toggle 2 Arriba (TGL 2 Up)",
-                norm_x: 0.41,
-                norm_y: 0.78,
-                radius: 9.0,
-                is_rect: true,
-                rect_size: Vec2::new(36.0, 15.0),
-            },
-            SchematicNode {
-                id: "thr_sw_10",
-                short_label: "TGL2 Dn",
-                full_name: "Toggle 2 Abajo (TGL 2 Down)",
-                norm_x: 0.41,
-                norm_y: 0.84,
-                radius: 9.0,
-                is_rect: true,
-                rect_size: Vec2::new(36.0, 15.0),
-            },
-            SchematicNode {
-                id: "thr_sw_11",
-                short_label: "TGL3 Up",
-                full_name: "Toggle 3 Arriba (TGL 3 Up)",
-                norm_x: 0.59,
-                norm_y: 0.78,
-                radius: 9.0,
-                is_rect: true,
-                rect_size: Vec2::new(36.0, 15.0),
-            },
-            SchematicNode {
-                id: "thr_sw_12",
-                short_label: "TGL3 Dn",
-                full_name: "Toggle 3 Abajo (TGL 3 Down)",
-                norm_x: 0.59,
-                norm_y: 0.84,
-                radius: 9.0,
-                is_rect: true,
-                rect_size: Vec2::new(36.0, 15.0),
-            },
+            // 7. Columna Derecha de Toggles: TGL 4, TGL 3, TGL 2, TGL 1
             SchematicNode {
                 id: "thr_sw_13",
-                short_label: "TGL4 Up",
+                short_label: "▲",
                 full_name: "Toggle 4 Arriba (TGL 4 Up)",
-                norm_x: 0.77,
-                norm_y: 0.78,
-                radius: 9.0,
-                is_rect: true,
-                rect_size: Vec2::new(36.0, 15.0),
+                norm_x: 0.838,
+                norm_y: 0.296,
+                radius: 7.5,
+                is_rect: false,
+                rect_size: Vec2::ZERO,
             },
             SchematicNode {
                 id: "thr_sw_14",
-                short_label: "TGL4 Dn",
+                short_label: "▼",
                 full_name: "Toggle 4 Abajo (TGL 4 Down)",
-                norm_x: 0.77,
-                norm_y: 0.84,
-                radius: 9.0,
-                is_rect: true,
-                rect_size: Vec2::new(36.0, 15.0),
+                norm_x: 0.838,
+                norm_y: 0.341,
+                radius: 7.5,
+                is_rect: false,
+                rect_size: Vec2::ZERO,
+            },
+            SchematicNode {
+                id: "thr_sw_11",
+                short_label: "▲",
+                full_name: "Toggle 3 Arriba (TGL 3 Up)",
+                norm_x: 0.777,
+                norm_y: 0.375,
+                radius: 7.5,
+                is_rect: false,
+                rect_size: Vec2::ZERO,
+            },
+            SchematicNode {
+                id: "thr_sw_12",
+                short_label: "▼",
+                full_name: "Toggle 3 Abajo (TGL 3 Down)",
+                norm_x: 0.777,
+                norm_y: 0.420,
+                radius: 7.5,
+                is_rect: false,
+                rect_size: Vec2::ZERO,
+            },
+            SchematicNode {
+                id: "thr_sw_9",
+                short_label: "▲",
+                full_name: "Toggle 2 Arriba (TGL 2 Up)",
+                norm_x: 0.838,
+                norm_y: 0.511,
+                radius: 7.5,
+                is_rect: false,
+                rect_size: Vec2::ZERO,
+            },
+            SchematicNode {
+                id: "thr_sw_10",
+                short_label: "▼",
+                full_name: "Toggle 2 Abajo (TGL 2 Down)",
+                norm_x: 0.838,
+                norm_y: 0.556,
+                radius: 7.5,
+                is_rect: false,
+                rect_size: Vec2::ZERO,
+            },
+            SchematicNode {
+                id: "thr_sw_7",
+                short_label: "▲",
+                full_name: "Toggle 1 Arriba (TGL 1 Up)",
+                norm_x: 0.777,
+                norm_y: 0.590,
+                radius: 7.5,
+                is_rect: false,
+                rect_size: Vec2::ZERO,
+            },
+            SchematicNode {
+                id: "thr_sw_8",
+                short_label: "▼",
+                full_name: "Toggle 1 Abajo (TGL 1 Down)",
+                norm_x: 0.777,
+                norm_y: 0.635,
+                radius: 7.5,
+                is_rect: false,
+                rect_size: Vec2::ZERO,
+            },
+            // 8. Fila Inferior de Conmutadores: SW 1/2, SW 3/4, SW 5/6
+            SchematicNode {
+                id: "thr_sw_1",
+                short_label: "1",
+                full_name: "Switch 1 Arriba (SW 1)",
+                norm_x: 0.313,
+                norm_y: 0.731,
+                radius: 7.5,
+                is_rect: false,
+                rect_size: Vec2::ZERO,
+            },
+            SchematicNode {
+                id: "thr_sw_2",
+                short_label: "2",
+                full_name: "Switch 2 Abajo (SW 2)",
+                norm_x: 0.313,
+                norm_y: 0.778,
+                radius: 7.5,
+                is_rect: false,
+                rect_size: Vec2::ZERO,
+            },
+            SchematicNode {
+                id: "thr_sw_3",
+                short_label: "3",
+                full_name: "Switch 3 Arriba (SW 3)",
+                norm_x: 0.488,
+                norm_y: 0.731,
+                radius: 7.5,
+                is_rect: false,
+                rect_size: Vec2::ZERO,
+            },
+            SchematicNode {
+                id: "thr_sw_4",
+                short_label: "4",
+                full_name: "Switch 4 Abajo (SW 4)",
+                norm_x: 0.488,
+                norm_y: 0.778,
+                radius: 7.5,
+                is_rect: false,
+                rect_size: Vec2::ZERO,
+            },
+            SchematicNode {
+                id: "thr_sw_5",
+                short_label: "5",
+                full_name: "Switch 5 Arriba (SW 5)",
+                norm_x: 0.662,
+                norm_y: 0.731,
+                radius: 7.5,
+                is_rect: false,
+                rect_size: Vec2::ZERO,
+            },
+            SchematicNode {
+                id: "thr_sw_6",
+                short_label: "6",
+                full_name: "Switch 6 Abajo (SW 6)",
+                norm_x: 0.662,
+                norm_y: 0.778,
+                radius: 7.5,
+                is_rect: false,
+                rect_size: Vec2::ZERO,
             },
         ],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_throttle_schematic_nodes_match_svg_spec() {
+        let nodes = get_device_schematic_nodes(DeviceKind::Throttle);
+        assert_eq!(nodes.len(), 32);
+
+        // Verifica que RTY 5 y RTY 6 hayan sido reemplazados por F y G
+        let node_f = nodes.iter().find(|n| n.id == "thr_rty_f_push").unwrap();
+        assert_eq!(node_f.short_label, "F");
+        assert!((node_f.norm_x - 0.663).abs() < 1e-3);
+        assert!((node_f.norm_y - 0.129).abs() < 1e-3);
+
+        let node_g = nodes.iter().find(|n| n.id == "thr_rty_g_push").unwrap();
+        assert_eq!(node_g.short_label, "G");
+        assert!((node_g.norm_x - 0.663).abs() < 1e-3);
+        assert!((node_g.norm_y - 0.299).abs() < 1e-3);
+
+        // Verifica HAT 3 y HAT 4
+        let h3_up = nodes.iter().find(|n| n.id == "thr_h3_up").unwrap();
+        assert!(h3_up.full_name.contains("H3▲"));
+        assert!((h3_up.norm_x - 0.600).abs() < 1e-3);
+
+        let h4_up = nodes.iter().find(|n| n.id == "thr_h4_up").unwrap();
+        assert!(h4_up.full_name.contains("H4▲"));
+        assert!((h4_up.norm_x - 0.573).abs() < 1e-3);
+
+        // Verifica SC y K1 en lado izquierdo
+        let sc_fwd = nodes.iter().find(|n| n.id == "thr_scroll_fwd").unwrap();
+        assert!((sc_fwd.norm_x - 0.145).abs() < 1e-3);
+
+        let k1_up = nodes.iter().find(|n| n.id == "thr_k1_up").unwrap();
+        assert!((k1_up.norm_x - 0.215).abs() < 1e-3);
+
+        // Verifica TGL 1..4 en lado derecho
+        let tgl4_up = nodes.iter().find(|n| n.id == "thr_sw_13").unwrap();
+        assert!((tgl4_up.norm_x - 0.838).abs() < 1e-3);
+
+        // Verifica SW 1..6 en fila inferior
+        let sw1 = nodes.iter().find(|n| n.id == "thr_sw_1").unwrap();
+        assert_eq!(sw1.short_label, "1");
+        assert!((sw1.norm_y - 0.731).abs() < 1e-3);
     }
 }
