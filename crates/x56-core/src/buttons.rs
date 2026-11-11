@@ -210,7 +210,7 @@ fn throttle_catalog() -> Vec<ButtonDescriptor> {
     const GC: &str = "C. Controles de Pulgar";
     const GCH: &str = "C. Controles de Pulgar (HATs)";
     const GA: &str = "A. Controles Giratorios";
-    const GG: &str = "G. Conmutadores de Base (TGL 1-7)";
+    const GG: &str = "G. Conmutadores de Base (SW 1-6 / TGL 1-4)";
 
     let mut v = vec![
         btn("thr_btn_e", T, 0, "C", "Botón E (Pulgar)", GC),
@@ -221,20 +221,20 @@ fn throttle_catalog() -> Vec<ButtonDescriptor> {
     ];
 
     const SW: [(&str, &str); 14] = [
-        ("thr_sw_1", "TGL 1 Arriba (SW 1)"),
-        ("thr_sw_2", "TGL 1 Abajo (SW 2)"),
-        ("thr_sw_3", "TGL 2 Arriba (SW 3)"),
-        ("thr_sw_4", "TGL 2 Abajo (SW 4)"),
-        ("thr_sw_5", "TGL 3 Arriba (SW 5)"),
-        ("thr_sw_6", "TGL 3 Abajo (SW 6)"),
-        ("thr_sw_7", "TGL 4 Arriba (SW 7)"),
-        ("thr_sw_8", "TGL 4 Abajo (SW 8)"),
-        ("thr_sw_9", "TGL 5 Arriba (SW 9)"),
-        ("thr_sw_10", "TGL 5 Abajo (SW 10)"),
-        ("thr_sw_11", "TGL 6 Arriba (SW 11)"),
-        ("thr_sw_12", "TGL 6 Abajo (SW 12)"),
-        ("thr_sw_13", "TGL 7 Arriba (SW 13)"),
-        ("thr_sw_14", "TGL 7 Abajo (SW 14)"),
+        ("thr_sw_1", "Switch 1 Arriba (SW 1)"),
+        ("thr_sw_2", "Switch 2 Abajo (SW 2)"),
+        ("thr_sw_3", "Switch 3 Arriba (SW 3)"),
+        ("thr_sw_4", "Switch 4 Abajo (SW 4)"),
+        ("thr_sw_5", "Switch 5 Arriba (SW 5)"),
+        ("thr_sw_6", "Switch 6 Abajo (SW 6)"),
+        ("thr_sw_7", "Toggle 1 Arriba (TGL 1 Up)"),
+        ("thr_sw_8", "Toggle 1 Abajo (TGL 1 Down)"),
+        ("thr_sw_9", "Toggle 2 Arriba (TGL 2 Up)"),
+        ("thr_sw_10", "Toggle 2 Abajo (TGL 2 Down)"),
+        ("thr_sw_11", "Toggle 3 Arriba (TGL 3 Up)"),
+        ("thr_sw_12", "Toggle 3 Abajo (TGL 3 Down)"),
+        ("thr_sw_13", "Toggle 4 Arriba (TGL 4 Up)"),
+        ("thr_sw_14", "Toggle 4 Abajo (TGL 4 Down)"),
     ];
     for (i, (id, label)) in SW.into_iter().enumerate() {
         v.push(btn(id, T, 5 + i as u8, "G", label, GG));
@@ -1508,7 +1508,10 @@ mod tests {
         assert_eq!(find(&c, "thr_sw_11").evdev_code, 0x12f);
         assert_eq!(find(&c, "thr_sw_12").evdev_code, 0x2c0);
         assert_eq!(find(&c, "thr_sw_14").evdev_code, 0x2c2);
-        assert_eq!(find(&c, "thr_sw_14").label, "TGL 7 Abajo (SW 14)");
+        assert_eq!(find(&c, "thr_sw_1").label, "Switch 1 Arriba (SW 1)");
+        assert_eq!(find(&c, "thr_sw_6").label, "Switch 6 Abajo (SW 6)");
+        assert_eq!(find(&c, "thr_sw_7").label, "Toggle 1 Arriba (TGL 1 Up)");
+        assert_eq!(find(&c, "thr_sw_14").label, "Toggle 4 Abajo (TGL 4 Down)");
         assert_eq!(find(&c, "thr_h3_up").evdev_code, 0x2c3);
         assert_eq!(find(&c, "thr_h4_left").evdev_code, 0x2ca);
         assert_eq!(find(&c, "thr_k1_up").evdev_code, 0x2cb);
