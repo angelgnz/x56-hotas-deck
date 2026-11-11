@@ -1205,6 +1205,25 @@ impl X56App {
                         .size(11.0)
                         .monospace(),
                     );
+                    let (t_mag, t_deg) = live_axes.throttle_gimbal_vector();
+                    let t_push = snap.pressed_buttons.contains("thr_ministick_push");
+                    ui.label(
+                        RichText::new(format!(
+                            "THR MINI-GIMB -> SLEW X: {:+.3} | SLEW Y: {:+.3} | VECT: {:.3} ({:02.0}°) | PUSH: {}",
+                            live_axes.throttle_ministick_x,
+                            live_axes.throttle_ministick_y,
+                            t_mag,
+                            t_deg,
+                            if t_push { "[PULSADO]" } else { "[REPOSO]" }
+                        ))
+                        .color(if t_push {
+                            COLOR_TERTIARY_CONTAINER
+                        } else {
+                            COLOR_PRIMARY_CONTAINER
+                        })
+                        .size(11.0)
+                        .monospace(),
+                    );
                 });
 
                 ui.add_space(6.0);
@@ -1275,8 +1294,13 @@ impl eframe::App for X56App {
                     .inner_margin(Margin::same(14)),
             )
             .show(ui, |ui| match self.active_subsystem {
-                ActiveSubsystem::Curves => self.curves_tab.ui(ui, &self.poller),
-                ActiveSubsystem::Mapping => self.programming_tab.ui(ui, &self.button_monitor),
+                ActiveSubsystem::Curves => {
+                    self.curves_tab.ui(ui, &self.poller, &self.button_monitor)
+                }
+                ActiveSubsystem::Mapping => {
+                    self.programming_tab
+                        .ui(ui, &self.button_monitor, &self.poller)
+                }
                 ActiveSubsystem::RgbCalibrate => self.render_rgb_calibrate_subsystem(ui),
                 ActiveSubsystem::Profiles => self.render_profiles_subsystem(ui),
             });

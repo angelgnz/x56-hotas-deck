@@ -17,6 +17,7 @@ use x56_core::{
     LiveButtonsSnapshot, ModeSlot, ProgrammingProfile, TriggeredCommandEvent,
 };
 
+use crate::curve_math::{LiveAxesState, LiveInputPoller};
 use crate::icons;
 use crate::theme::{self, *};
 
@@ -148,12 +149,13 @@ impl ProgrammingTab {
     }
 
     /// Renderizado principal de la pestaña de programación.
-    pub fn ui(&mut self, ui: &mut Ui, monitor: &ButtonMonitor) {
+    pub fn ui(&mut self, ui: &mut Ui, monitor: &ButtonMonitor, poller: &LiveInputPoller) {
         // Establecer el ancho máximo disponible para evitar cualquier desbordamiento horizontal
         let avail_w = ui.available_width();
         ui.set_max_width(avail_w);
 
         let snapshot = monitor.snapshot();
+        let live_axes = poller.get_state();
 
         // 1. Sincronización física de hardware si está activo el seguimiento automático
         if self.follow_hardware_mode {
@@ -239,8 +241,14 @@ impl ProgrammingTab {
                                     self.render_vector_map_card(ui, &snapshot);
                                     ui.add_space(8.0);
 
-                                    // C. POV Hat 1 Live Matrix (Brújula octogonal)
-                                    self.render_pov_compass_card(ui, &snapshot);
+                                    // C. POV Hat 1 Live Matrix (Stick) o Throttle Mini-Gimbal 2D (Throttle)
+                                    if self.selected_device == DeviceKind::Stick {
+                                        self.render_pov_compass_card(ui, &snapshot);
+                                    } else {
+                                        self.render_throttle_ministick_card(
+                                            ui, &snapshot, &live_axes,
+                                        );
+                                    }
                                     ui.add_space(8.0);
 
                                     // D. Botones de acción rápida de macros
@@ -295,8 +303,12 @@ impl ProgrammingTab {
                         self.render_vector_map_card(ui, &snapshot);
                         ui.add_space(8.0);
 
-                        // POV Hat 1 Live Matrix (Brújula octogonal)
-                        self.render_pov_compass_card(ui, &snapshot);
+                        // POV Hat 1 Live Matrix (Stick) o Throttle Mini-Gimbal 2D (Throttle)
+                        if self.selected_device == DeviceKind::Stick {
+                            self.render_pov_compass_card(ui, &snapshot);
+                        } else {
+                            self.render_throttle_ministick_card(ui, &snapshot, &live_axes);
+                        }
                         ui.add_space(8.0);
 
                         // Botones de acción rápida de macros
@@ -1383,6 +1395,130 @@ impl ProgrammingTab {
                         "ABS_HAT0Y",
                         &format!("{:+}", abs_y),
                         COLOR_PRIMARY_CONTAINER,
+                    );
+                });
+            });
+        });
+    }
+
+    /// Radar 2D del Mini-Gimbal del Throttle (Slew analógico X/Y y botón físico de pulsación).
+    fn render_throttle_ministick_card(
+        &self,
+        ui: &mut Ui,
+        snapshot: &LiveButtonsSnapshot,
+        live_state: &LiveAxesState,
+    ) {
+        theme::card_frame().show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal_wrapped(|ui| {
+                ui.label(
+                    RichText::new(format!(
+                        "{} THROTTLE MINI-GIMBAL // ANALOG SLEW & PUSH",
+                        icons::ACTIVITY
+                    ))
+                    .color(COLOR_PRIMARY)
+                    .size(11.0)
+                    .strong()
+                    .monospace(),
+                );
+            });
+
+            ui.add_space(4.0);
+
+            let is_pushed = snapshot.pressed_buttons.contains("thr_ministick_push");
+            let (mag, deg) = live_state.throttle_gimbal_vector();
+            let gx = live_state.throttle_ministick_x as f32;
+            let gy = live_state.throttle_ministick_y as f32;
+
+            ui.horizontal(|ui| {
+                // Radar 2D de 110x110
+                let radar_size = Vec2::new(120.0, 110.0);
+                let (_, painter) = ui.allocate_painter(radar_size, egui::Sense::hover());
+                let c = painter.clip_rect().center();
+                let r = 42.0;
+
+                // Anillos y retícula
+                painter.circle_stroke(c, r, Stroke::new(1.0, COLOR_OUTLINE_VARIANT));
+                painter.circle_stroke(c, r * 0.5, Stroke::new(0.8, COLOR_GRID_HUD));
+                painter.line_segment(
+                    [egui::pos2(c.x - r, c.y), egui::pos2(c.x + r, c.y)],
+                    Stroke::new(0.5, COLOR_GRID_HUD),
+                );
+                painter.line_segment(
+                    [egui::pos2(c.x, c.y - r), egui::pos2(c.x, c.y + r)],
+                    Stroke::new(0.5, COLOR_GRID_HUD),
+                );
+
+                // Punto en vivo
+                let dot_pos = egui::pos2(c.x + gx * r, c.y - gy * r);
+                painter.line_segment(
+                    [c, dot_pos],
+                    Stroke::new(1.5, Color32::from_rgba_unmultiplied(52, 248, 133, 160)),
+                );
+
+                let dot_col = if is_pushed {
+                    COLOR_PRIMARY_CONTAINER
+                } else {
+                    COLOR_TERTIARY_CONTAINER
+                };
+                if is_pushed {
+                    painter.circle_stroke(dot_pos, 8.0, Stroke::new(2.0, COLOR_PRIMARY_CONTAINER));
+                }
+                painter.circle_stroke(dot_pos, 5.5, Stroke::new(1.5, dot_col));
+                painter.circle_filled(dot_pos, 2.5, dot_col);
+
+                ui.add_space(8.0);
+
+                // Telemetría y estado de pulsación
+                ui.vertical(|ui| {
+                    ui.label(
+                        RichText::new("DEFLEXIÓN ANALÓGICA:")
+                            .color(COLOR_OUTLINE)
+                            .size(9.5)
+                            .monospace(),
+                    );
+                    ui.label(
+                        RichText::new(format!(
+                            "X:{:+.3}  Y:{:+.3}",
+                            live_state.throttle_ministick_x, live_state.throttle_ministick_y
+                        ))
+                        .color(COLOR_TERTIARY_CONTAINER)
+                        .size(11.0)
+                        .strong()
+                        .monospace(),
+                    );
+                    ui.label(
+                        RichText::new(format!("VECT: {:.3} ({:02.0}°)", mag, deg))
+                            .color(COLOR_PRIMARY_FIXED)
+                            .size(10.0)
+                            .monospace(),
+                    );
+                    ui.add_space(4.0);
+                    ui.horizontal_wrapped(|ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(4.0, 2.0);
+                        telemetry_badge(
+                            ui,
+                            "ABS_RX",
+                            &format!("{:+.2}", live_state.throttle_ministick_x),
+                            COLOR_PRIMARY_CONTAINER,
+                        );
+                        telemetry_badge(
+                            ui,
+                            "ABS_RY",
+                            &format!("{:+.2}", live_state.throttle_ministick_y),
+                            COLOR_PRIMARY_CONTAINER,
+                        );
+                    });
+                    ui.add_space(3.0);
+                    telemetry_badge(
+                        ui,
+                        "BOTÓN PUSH",
+                        if is_pushed { "¡PULSADO!" } else { "REPOSO" },
+                        if is_pushed {
+                            COLOR_TERTIARY_CONTAINER
+                        } else {
+                            COLOR_OUTLINE
+                        },
                     );
                 });
             });

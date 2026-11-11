@@ -266,12 +266,14 @@ pub struct LiveAxesState {
     pub raw_adc_z: u16,
 
     // Cuadrante de Gases (Throttle)
-    pub throttle_left: f64,  // 0.0 .. 1.0 (Unipolar)
-    pub throttle_right: f64, // 0.0 .. 1.0 (Unipolar)
-    pub rotary_1: f64,       // -1.0 .. 1.0 (Rotary 1 - 0x32)
-    pub rotary_2: f64,       // -1.0 .. 1.0 (Rotary 2 - 0x35)
-    pub rotary_3: f64,       // -1.0 .. 1.0 (Rotary 3 - 0x37)
-    pub rotary_4: f64,       // -1.0 .. 1.0 (Rotary 4 - 0x36)
+    pub throttle_left: f64,        // 0.0 .. 1.0 (Unipolar)
+    pub throttle_right: f64,       // 0.0 .. 1.0 (Unipolar)
+    pub throttle_ministick_x: f64, // -1.0 .. 1.0 (Throttle Slew X / Mini-Gimbal)
+    pub throttle_ministick_y: f64, // -1.0 .. 1.0 (Throttle Slew Y / Mini-Gimbal)
+    pub rotary_1: f64,             // -1.0 .. 1.0 (Rotary 1 - 0x32)
+    pub rotary_2: f64,             // -1.0 .. 1.0 (Rotary 2 - 0x35)
+    pub rotary_3: f64,             // -1.0 .. 1.0 (Rotary 3 - 0x37)
+    pub rotary_4: f64,             // -1.0 .. 1.0 (Rotary 4 - 0x36)
 
     // Estado de conexión evdev
     pub stick_connected: bool,
@@ -296,6 +298,8 @@ impl Default for LiveAxesState {
             raw_adc_z: 2048,
             throttle_left: 0.0,
             throttle_right: 0.0,
+            throttle_ministick_x: 0.0,
+            throttle_ministick_y: 0.0,
             rotary_1: 0.0,
             rotary_2: 0.0,
             rotary_3: 0.0,
@@ -308,12 +312,26 @@ impl Default for LiveAxesState {
 }
 
 impl LiveAxesState {
-    /// Calcula la magnitud vectorial $\sqrt{x^2 + y^2}$ y el ángulo polar en grados $[0^\circ, 360^\circ)$.
+    /// Calcula la magnitud vectorial $\sqrt{x^2 + y^2}$ y el ángulo polar en grados $[0^\circ, 360^\circ)$ del Gimbal principal (Stick).
     pub fn gimbal_vector(&self) -> (f64, f64) {
         let mag = (self.stick_x * self.stick_x + self.stick_y * self.stick_y)
             .sqrt()
             .min(std::f64::consts::SQRT_2);
         let angle_rad = self.stick_y.atan2(self.stick_x);
+        let mut deg = angle_rad.to_degrees();
+        if deg < 0.0 {
+            deg += 360.0;
+        }
+        (mag, deg)
+    }
+
+    /// Calcula la magnitud vectorial y el ángulo polar en grados $[0^\circ, 360^\circ)$ del Mini-Gimbal del Throttle (Slew X / Slew Y).
+    pub fn throttle_gimbal_vector(&self) -> (f64, f64) {
+        let mag = (self.throttle_ministick_x * self.throttle_ministick_x
+            + self.throttle_ministick_y * self.throttle_ministick_y)
+            .sqrt()
+            .min(std::f64::consts::SQRT_2);
+        let angle_rad = self.throttle_ministick_y.atan2(self.throttle_ministick_x);
         let mut deg = angle_rad.to_degrees();
         if deg < 0.0 {
             deg += 360.0;
@@ -470,6 +488,8 @@ impl LiveInputPoller {
 
             let mut new_tl = None;
             let mut new_tr = None;
+            let mut new_thr_mini_x = None;
+            let mut new_thr_mini_y = None;
             let mut new_r1 = None;
             let mut new_r2 = None;
             let mut new_r3 = None;
@@ -523,6 +543,17 @@ impl LiveInputPoller {
                 if let Some(info) = query_abs_axis(file, 1) {
                     // ABS_Y -> Throttle Right (0..1023)
                     new_tr = Some(((info.value as f64) / 1023.0).clamp(0.0, 1.0));
+                }
+                // Mini-gimbal del Throttle (ABS_RX = 3, ABS_RY = 4, rango 0..255, centro 128)
+                if let Some(info) = query_abs_axis(file, 3) {
+                    if info.maximum > info.minimum {
+                        new_thr_mini_x = Some(normalize_bipolar(&info, 128.0));
+                    }
+                }
+                if let Some(info) = query_abs_axis(file, 4) {
+                    if info.maximum > info.minimum {
+                        new_thr_mini_y = Some(-normalize_bipolar(&info, 128.0));
+                    }
                 }
                 if let Some(info) = query_abs_axis(file, 2) {
                     // ABS_Z -> Rotary 1 (0..255, centro 128)
@@ -582,6 +613,12 @@ impl LiveInputPoller {
                 }
                 if let Some(v) = new_tr {
                     lock.throttle_right = v;
+                }
+                if let Some(v) = new_thr_mini_x {
+                    lock.throttle_ministick_x = v;
+                }
+                if let Some(v) = new_thr_mini_y {
+                    lock.throttle_ministick_y = v;
                 }
                 if let Some(v) = new_r1 {
                     lock.rotary_1 = v;
@@ -680,5 +717,23 @@ mod tests {
         assert!((p.evaluate(0.5) - -0.5).abs() < 1e-4);
         p.invert = false;
         assert!((p.evaluate(0.5) - 0.5).abs() < 1e-4);
+    }
+
+    #[test]
+    fn throttle_gimbal_vector_computation() {
+        let mut state = LiveAxesState::default();
+        assert_eq!(state.throttle_gimbal_vector(), (0.0, 0.0));
+
+        state.throttle_ministick_x = 1.0;
+        state.throttle_ministick_y = 0.0;
+        let (mag, deg) = state.throttle_gimbal_vector();
+        assert!((mag - 1.0).abs() < 1e-4);
+        assert!((deg - 0.0).abs() < 1e-4);
+
+        state.throttle_ministick_x = 0.0;
+        state.throttle_ministick_y = 1.0;
+        let (mag, deg) = state.throttle_gimbal_vector();
+        assert!((mag - 1.0).abs() < 1e-4);
+        assert!((deg - 90.0).abs() < 1e-4);
     }
 }

@@ -200,6 +200,8 @@ pub fn axis_name(axis_id: u8, kind: DeviceKind) -> &'static str {
             0x30 => "X (Roll)",
             0x31 => "Y (Pitch)",
             0x35 => "Z (Twist/Yaw)",
+            0x38 => "Ministick X (Slew)",
+            0x39 => "Ministick Y (Slew)",
             _ => "Unknown Stick Axis",
         },
         DeviceKind::Throttle => match axis_id {
@@ -209,6 +211,8 @@ pub fn axis_name(axis_id: u8, kind: DeviceKind) -> &'static str {
             0x35 => "Rotary 2",
             0x36 => "Rotary 4",
             0x37 => "Rotary 3",
+            0x3a => "Mini-Gimbal X (Slew)",
+            0x3b => "Mini-Gimbal Y (Slew)",
             _ => "Unknown Throttle Axis",
         },
     }

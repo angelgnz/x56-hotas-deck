@@ -17,9 +17,11 @@ use crate::theme::{
     COLOR_TERTIARY_FIXED_DIM, COLOR_WARNING_AMBER,
 };
 
-/// IDs virtuales de UI para los ejes del Ministick analógico C-Stick.
+/// IDs virtuales de UI para los ejes del Ministick analógico C-Stick y Throttle Mini-Gimbal.
 pub const AXIS_MINISTICK_X: u8 = 0x38;
 pub const AXIS_MINISTICK_Y: u8 = 0x39;
+pub const AXIS_THROTTLE_MINISTICK_X: u8 = 0x3a;
+pub const AXIS_THROTTLE_MINISTICK_Y: u8 = 0x3b;
 
 pub struct CurvesTab {
     pub selected_device: DeviceKind,
@@ -50,12 +52,17 @@ impl Default for CurvesTab {
 impl CurvesTab {
     /// Lee los parámetros del eje activo desde la EEPROM del hardware si está conectado.
     pub fn read_from_hardware(&mut self) {
-        if self.selected_device == DeviceKind::Stick
-            && matches!(self.selected_axis_id, AXIS_MINISTICK_X | AXIS_MINISTICK_Y)
+        if (self.selected_device == DeviceKind::Stick
+            && matches!(self.selected_axis_id, AXIS_MINISTICK_X | AXIS_MINISTICK_Y))
+            || (self.selected_device == DeviceKind::Throttle
+                && matches!(
+                    self.selected_axis_id,
+                    AXIS_THROTTLE_MINISTICK_X | AXIS_THROTTLE_MINISTICK_Y
+                ))
         {
             self.eeprom_synced = true;
             self.status_message = Some((
-                "Ministick C-Stick sincronizado con pipeline uinput.".into(),
+                "Mini-Gimbal analógico sincronizado con pipeline uinput.".into(),
                 false,
             ));
             return;
@@ -102,12 +109,17 @@ impl CurvesTab {
 
     /// Escribe los parámetros de la curva actual en el hardware físico.
     pub fn apply_to_hardware(&mut self) {
-        if self.selected_device == DeviceKind::Stick
-            && matches!(self.selected_axis_id, AXIS_MINISTICK_X | AXIS_MINISTICK_Y)
+        if (self.selected_device == DeviceKind::Stick
+            && matches!(self.selected_axis_id, AXIS_MINISTICK_X | AXIS_MINISTICK_Y))
+            || (self.selected_device == DeviceKind::Throttle
+                && matches!(
+                    self.selected_axis_id,
+                    AXIS_THROTTLE_MINISTICK_X | AXIS_THROTTLE_MINISTICK_Y
+                ))
         {
             self.eeprom_synced = true;
             self.status_message = Some((
-                "Curva de Ministick aplicada al traductor uinput.".into(),
+                "Curva de Mini-Gimbal aplicada al traductor uinput.".into(),
                 false,
             ));
             return;
@@ -211,11 +223,23 @@ impl CurvesTab {
                     .clamp(0.0, 65535.0) as u16;
                 (state.rotary_3, adc)
             }
+            (DeviceKind::Throttle, AXIS_THROTTLE_MINISTICK_X) => {
+                let adc16 = ((state.throttle_ministick_x + 1.0) * 0.5 * 65535.0)
+                    .round()
+                    .clamp(0.0, 65535.0) as u16;
+                (state.throttle_ministick_x, adc16)
+            }
+            (DeviceKind::Throttle, AXIS_THROTTLE_MINISTICK_Y) => {
+                let adc16 = ((state.throttle_ministick_y + 1.0) * 0.5 * 65535.0)
+                    .round()
+                    .clamp(0.0, 65535.0) as u16;
+                (state.throttle_ministick_y, adc16)
+            }
             _ => (0.0, 32768),
         }
     }
 
-    pub fn ui(&mut self, ui: &mut Ui, poller: &LiveInputPoller) {
+    pub fn ui(&mut self, ui: &mut Ui, poller: &LiveInputPoller, monitor: &x56_core::ButtonMonitor) {
         let viewport_w = ui.available_width();
         ui.set_max_width(viewport_w);
 
@@ -262,7 +286,7 @@ impl CurvesTab {
                                 ui.add_space(10.0);
                                 self.render_telemetry_cards(ui, &live_state);
                                 ui.add_space(10.0);
-                                self.render_gimbal_and_secondary_axes(ui, &live_state);
+                                self.render_gimbal_and_secondary_axes(ui, &live_state, monitor);
                             },
                         );
 
@@ -287,7 +311,7 @@ impl CurvesTab {
                     ui.add_space(10.0);
                     self.render_telemetry_cards(ui, &live_state);
                     ui.add_space(10.0);
-                    self.render_gimbal_and_secondary_axes(ui, &live_state);
+                    self.render_gimbal_and_secondary_axes(ui, &live_state, monitor);
                     ui.add_space(12.0);
                     ui.separator();
                     ui.add_space(12.0);
@@ -431,6 +455,8 @@ impl CurvesTab {
                             (0x35, "Rotary 2 (G)"),
                             (0x37, "Rotary 3"),
                             (0x36, "Rotary 4"),
+                            (AXIS_THROTTLE_MINISTICK_X, "Mini-Gimbal X"),
+                            (AXIS_THROTTLE_MINISTICK_Y, "Mini-Gimbal Y"),
                         ],
                         (DeviceKind::Throttle, true) => &[
                             (0x30, "Thr L"),
@@ -439,6 +465,8 @@ impl CurvesTab {
                             (0x35, "Rot 2"),
                             (0x37, "Rot 3"),
                             (0x36, "Rot 4"),
+                            (AXIS_THROTTLE_MINISTICK_X, "Mini X"),
+                            (AXIS_THROTTLE_MINISTICK_Y, "Mini Y"),
                         ],
                     };
 
@@ -1018,7 +1046,13 @@ impl CurvesTab {
     }
 
     /// Dibuja el radar de coordenadas 2D Gimbal con retícula, zona muerta y vector de deflexión.
-    fn render_gimbal_radar(&self, ui: &mut Ui, box_size: f32, live_state: &LiveAxesState) {
+    fn render_gimbal_radar(
+        &self,
+        ui: &mut Ui,
+        box_size: f32,
+        live_state: &LiveAxesState,
+        is_pushed: Option<bool>,
+    ) {
         ui.vertical_centered(|ui| {
             let (resp, painter) =
                 ui.allocate_painter(Vec2::new(box_size, box_size), Sense::hover());
@@ -1065,9 +1099,25 @@ impl CurvesTab {
             );
             painter.circle_stroke(center, dz_radius, Stroke::new(1.0, COLOR_ERROR));
 
-            // Punto de posición reticular verde animado en vivo
-            let gx = live_state.stick_x as f32;
-            let gy = live_state.stick_y as f32;
+            // Punto de posición reticular según dispositivo
+            let (gx, gy, vect_mag, vect_deg) = if self.selected_device == DeviceKind::Throttle {
+                let (mag, deg) = live_state.throttle_gimbal_vector();
+                (
+                    live_state.throttle_ministick_x as f32,
+                    live_state.throttle_ministick_y as f32,
+                    mag,
+                    deg,
+                )
+            } else {
+                let (mag, deg) = live_state.gimbal_vector();
+                (
+                    live_state.stick_x as f32,
+                    live_state.stick_y as f32,
+                    mag,
+                    deg,
+                )
+            };
+
             let dot_pos = Pos2::new(center.x + gx * half, center.y - gy * half);
 
             // Vector desde el origen
@@ -1075,21 +1125,26 @@ impl CurvesTab {
                 [center, dot_pos],
                 Stroke::new(1.5, Color32::from_rgba_unmultiplied(52, 248, 133, 140)),
             );
-            painter.circle_stroke(dot_pos, 6.5, Stroke::new(1.5, COLOR_TERTIARY_CONTAINER));
-            painter.circle_filled(dot_pos, 3.0, COLOR_TERTIARY_CONTAINER);
+
+            let dot_col = if is_pushed == Some(true) {
+                COLOR_PRIMARY_CONTAINER
+            } else {
+                COLOR_TERTIARY_CONTAINER
+            };
+            if is_pushed == Some(true) {
+                painter.circle_stroke(dot_pos, 9.0, Stroke::new(2.0, COLOR_PRIMARY_CONTAINER));
+            }
+            painter.circle_stroke(dot_pos, 6.5, Stroke::new(1.5, dot_col));
+            painter.circle_filled(dot_pos, 3.0, dot_col);
 
             ui.add_space(4.0);
-            let (vect_mag, vect_deg) = live_state.gimbal_vector();
             let coord_lbl = if box_size >= 170.0 {
                 format!(
                     "X: {:+.3} Y: {:+.3} VECT: {:.3} ({:02.0}°)",
-                    live_state.stick_x, live_state.stick_y, vect_mag, vect_deg
+                    gx, gy, vect_mag, vect_deg
                 )
             } else {
-                format!(
-                    "X:{:+.2} Y:{:+.2} V:{:.2}",
-                    live_state.stick_x, live_state.stick_y, vect_mag
-                )
+                format!("X:{:+.2} Y:{:+.2} V:{:.2}", gx, gy, vect_mag)
             };
             ui.add(
                 egui::Label::new(
@@ -1101,6 +1156,220 @@ impl CurvesTab {
                 )
                 .truncate(),
             );
+
+            if let Some(pushed) = is_pushed {
+                ui.add_space(2.0);
+                let (push_lbl, push_col) = if pushed {
+                    ("[PUSH: PULSADO]", COLOR_TERTIARY_CONTAINER)
+                } else {
+                    ("[PUSH: REPOSO]", COLOR_OUTLINE)
+                };
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(push_lbl)
+                            .color(push_col)
+                            .size(9.0)
+                            .strong()
+                            .monospace(),
+                    )
+                    .truncate(),
+                );
+            }
+        });
+    }
+
+    /// Medidores secundarios del Throttle: Throttle Dual (L/R), Mini-Gimbal (Slew X/Y + Push) y Rotatorios (R1..R4).
+    fn render_throttle_secondary_meters(
+        &self,
+        ui: &mut Ui,
+        live_state: &LiveAxesState,
+        container_w: f32,
+        is_pushed: bool,
+    ) {
+        ui.set_max_width(container_w);
+        ui.set_width(container_w);
+
+        ui.vertical(|ui| {
+            ui.set_max_width(container_w);
+            let sub_inner_w = (container_w - 22.0).max(60.0);
+
+            // 1. Acelerador dual (Izquierdo / Derecho)
+            let thr_lbl = if sub_inner_w >= 260.0 {
+                "ACELERADOR DUAL (THROTTLE L / R)"
+            } else {
+                "DUAL THROTTLE"
+            };
+            Frame::new()
+                .fill(COLOR_SURFACE_LOWEST)
+                .stroke(Stroke::new(1.0, COLOR_OUTLINE_VARIANT))
+                .corner_radius(CornerRadius::same(6))
+                .inner_margin(Margin::symmetric(10, 8))
+                .show(ui, |ui| {
+                    ui.set_max_width(sub_inner_w);
+                    ui.set_width(sub_inner_w);
+
+                    ui.horizontal_wrapped(|ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(6.0, 2.0);
+                        ui.label(
+                            RichText::new(thr_lbl)
+                                .color(COLOR_ON_SURFACE)
+                                .size(10.5)
+                                .strong()
+                                .monospace(),
+                        );
+                        ui.label(
+                            RichText::new(format!(
+                                "L: {:.1}% | R: {:.1}%",
+                                live_state.throttle_left * 100.0,
+                                live_state.throttle_right * 100.0
+                            ))
+                            .color(COLOR_PRIMARY_CONTAINER)
+                            .size(10.0)
+                            .monospace(),
+                        );
+                    });
+                    ui.add_space(4.0);
+                    render_unipolar_bar(
+                        ui,
+                        sub_inner_w,
+                        "THR L",
+                        live_state.throttle_left,
+                        COLOR_PRIMARY_CONTAINER,
+                    );
+                    ui.add_space(3.0);
+                    render_unipolar_bar(
+                        ui,
+                        sub_inner_w,
+                        "THR R",
+                        live_state.throttle_right,
+                        COLOR_PRIMARY_CONTAINER,
+                    );
+                });
+
+            ui.add_space(8.0);
+
+            // 2. Mini-Gimbal Slew & Push (Botón pulsador físico)
+            let ministick_lbl = if sub_inner_w >= 250.0 {
+                "MINI-GIMBAL ANALÓGICO // SLEW & PUSH"
+            } else {
+                "MINI-GIMBAL (SLEW)"
+            };
+            Frame::new()
+                .fill(COLOR_SURFACE_LOWEST)
+                .stroke(Stroke::new(1.0, COLOR_OUTLINE_VARIANT))
+                .corner_radius(CornerRadius::same(6))
+                .inner_margin(Margin::symmetric(10, 8))
+                .show(ui, |ui| {
+                    ui.set_max_width(sub_inner_w);
+                    ui.set_width(sub_inner_w);
+
+                    ui.horizontal_wrapped(|ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(6.0, 2.0);
+                        ui.label(
+                            RichText::new(ministick_lbl)
+                                .color(COLOR_ON_SURFACE)
+                                .size(10.5)
+                                .strong()
+                                .monospace(),
+                        );
+                        ui.label(
+                            RichText::new(format!(
+                                "X:{:+.2} Y:{:+.2}",
+                                live_state.throttle_ministick_x, live_state.throttle_ministick_y
+                            ))
+                            .color(COLOR_WARNING_AMBER)
+                            .size(10.0)
+                            .monospace(),
+                        );
+                        theme::telemetry_badge(
+                            ui,
+                            "PUSH:",
+                            if is_pushed { "PULSADO" } else { "REPOSO" },
+                            if is_pushed {
+                                COLOR_TERTIARY_CONTAINER
+                            } else {
+                                COLOR_OUTLINE
+                            },
+                        );
+                    });
+                    ui.add_space(4.0);
+                    render_compact_dual_bar(
+                        ui,
+                        sub_inner_w,
+                        "SLEW X",
+                        live_state.throttle_ministick_x,
+                        COLOR_WARNING_AMBER,
+                    );
+                    ui.add_space(3.0);
+                    render_compact_dual_bar(
+                        ui,
+                        sub_inner_w,
+                        "SLEW Y",
+                        live_state.throttle_ministick_y,
+                        COLOR_WARNING_AMBER,
+                    );
+                });
+
+            ui.add_space(8.0);
+
+            // 3. Selectores rotativos (R1, R2, R3, R4)
+            let rot_lbl = if sub_inner_w >= 260.0 {
+                "SELECTORES ROTATIVOS (R1, R2, R3, R4)"
+            } else {
+                "ROTATORIOS (R1..R4)"
+            };
+            Frame::new()
+                .fill(COLOR_SURFACE_LOWEST)
+                .stroke(Stroke::new(1.0, COLOR_OUTLINE_VARIANT))
+                .corner_radius(CornerRadius::same(6))
+                .inner_margin(Margin::symmetric(10, 8))
+                .show(ui, |ui| {
+                    ui.set_max_width(sub_inner_w);
+                    ui.set_width(sub_inner_w);
+
+                    ui.horizontal_wrapped(|ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(6.0, 2.0);
+                        ui.label(
+                            RichText::new(rot_lbl)
+                                .color(COLOR_ON_SURFACE)
+                                .size(10.5)
+                                .strong()
+                                .monospace(),
+                        );
+                    });
+                    ui.add_space(4.0);
+                    render_compact_dual_bar(
+                        ui,
+                        sub_inner_w,
+                        "RTY 1",
+                        live_state.rotary_1,
+                        COLOR_TERTIARY_CONTAINER,
+                    );
+                    ui.add_space(2.0);
+                    render_compact_dual_bar(
+                        ui,
+                        sub_inner_w,
+                        "RTY 2",
+                        live_state.rotary_2,
+                        COLOR_TERTIARY_CONTAINER,
+                    );
+                    ui.add_space(2.0);
+                    render_compact_dual_bar(
+                        ui,
+                        sub_inner_w,
+                        "RTY 3",
+                        live_state.rotary_3,
+                        COLOR_TERTIARY_CONTAINER,
+                    );
+                    ui.add_space(2.0);
+                    render_compact_dual_bar(
+                        ui,
+                        sub_inner_w,
+                        "RTY 4",
+                        live_state.rotary_4,
+                        COLOR_TERTIARY_CONTAINER,
+                    );
+                });
         });
     }
 
@@ -1222,8 +1491,16 @@ impl CurvesTab {
 
     /// "MONITOR GIMBAL 2D & EJES SECUNDARIOS EN VIVO":
     /// Adapta el Gimbal radar y medidores secundarios lado a lado (>= 430px) o apilados (< 430px).
-    fn render_gimbal_and_secondary_axes(&self, ui: &mut Ui, live_state: &LiveAxesState) {
+    fn render_gimbal_and_secondary_axes(
+        &self,
+        ui: &mut Ui,
+        live_state: &LiveAxesState,
+        monitor: &x56_core::ButtonMonitor,
+    ) {
         let outer_w = ui.available_width();
+        let snapshot = monitor.snapshot();
+        let is_thr_pushed = snapshot.pressed_buttons.contains("thr_ministick_push");
+
         theme::card_frame().show(ui, |ui| {
             let inner_w = (outer_w - 26.0).max(120.0);
             ui.set_max_width(inner_w);
@@ -1231,15 +1508,25 @@ impl CurvesTab {
 
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing = Vec2::new(8.0, 4.0);
-                let title = if inner_w >= 480.0 {
-                    format!(
+                let title = match (self.selected_device, inner_w >= 480.0, inner_w >= 320.0) {
+                    (DeviceKind::Throttle, true, _) => format!(
+                        "{} MONITOR MINI-GIMBAL THROTTLE & EJES EN VIVO",
+                        icons::ACTIVITY
+                    ),
+                    (DeviceKind::Throttle, false, true) => {
+                        format!("{} MINI-GIMBAL THROTTLE & EJES", icons::ACTIVITY)
+                    }
+                    (DeviceKind::Throttle, false, false) => {
+                        format!("{} MINI-GIMBAL THR", icons::ACTIVITY)
+                    }
+                    (DeviceKind::Stick, true, _) => format!(
                         "{} MONITOR GIMBAL 2D & EJES SECUNDARIOS EN VIVO",
                         icons::ACTIVITY
-                    )
-                } else if inner_w >= 320.0 {
-                    format!("{} GIMBAL 2D & EJES SECUNDARIOS", icons::ACTIVITY)
-                } else {
-                    format!("{} GIMBAL 2D", icons::ACTIVITY)
+                    ),
+                    (DeviceKind::Stick, false, true) => {
+                        format!("{} GIMBAL 2D & EJES SECUNDARIOS", icons::ACTIVITY)
+                    }
+                    (DeviceKind::Stick, false, false) => format!("{} GIMBAL 2D", icons::ACTIVITY),
                 };
                 ui.label(
                     RichText::new(title)
@@ -1258,6 +1545,12 @@ impl CurvesTab {
 
             ui.add_space(8.0);
 
+            let push_opt = if self.selected_device == DeviceKind::Throttle {
+                Some(is_thr_pushed)
+            } else {
+                None
+            };
+
             if inner_w >= 430.0 {
                 let gap = 12.0;
                 let box_size = (inner_w * 0.36).clamp(140.0, 186.0).floor();
@@ -1271,22 +1564,35 @@ impl CurvesTab {
                         |ui| {
                             ui.set_max_width(box_size);
                             ui.set_width(box_size);
-                            self.render_gimbal_radar(ui, box_size, live_state);
+                            self.render_gimbal_radar(ui, box_size, live_state, push_opt);
                         },
                     );
                     ui.allocate_ui_with_layout(
                         Vec2::new(right_w, 10.0),
                         egui::Layout::top_down(egui::Align::Min),
                         |ui| {
-                            self.render_secondary_meters(ui, live_state, right_w);
+                            if self.selected_device == DeviceKind::Throttle {
+                                self.render_throttle_secondary_meters(
+                                    ui,
+                                    live_state,
+                                    right_w,
+                                    is_thr_pushed,
+                                );
+                            } else {
+                                self.render_secondary_meters(ui, live_state, right_w);
+                            }
                         },
                     );
                 });
             } else {
                 let box_size = (inner_w - 16.0).clamp(120.0, 180.0).floor();
-                self.render_gimbal_radar(ui, box_size, live_state);
+                self.render_gimbal_radar(ui, box_size, live_state, push_opt);
                 ui.add_space(10.0);
-                self.render_secondary_meters(ui, live_state, inner_w);
+                if self.selected_device == DeviceKind::Throttle {
+                    self.render_throttle_secondary_meters(ui, live_state, inner_w, is_thr_pushed);
+                } else {
+                    self.render_secondary_meters(ui, live_state, inner_w);
+                }
             }
         });
     }
@@ -1855,6 +2161,35 @@ fn render_compact_dual_bar(ui: &mut Ui, row_w: f32, axis_lbl: &str, value: f64, 
 
         ui.label(
             RichText::new(format!("{:+.0}%", value * 100.0))
+                .color(COLOR_ON_SURFACE_VARIANT)
+                .size(9.5)
+                .monospace(),
+        );
+    });
+}
+
+/// Barra horizontal compacta unipolar (0.0 .. 1.0) para aceleradores.
+fn render_unipolar_bar(ui: &mut Ui, row_w: f32, label: &str, value: f64, col: Color32) {
+    ui.horizontal(|ui| {
+        ui.set_max_width(row_w);
+        ui.label(
+            RichText::new(label)
+                .color(COLOR_OUTLINE)
+                .size(9.5)
+                .monospace(),
+        );
+        let bar_w = (ui.available_width() - 52.0).max(24.0);
+        let (rect, _) = ui.allocate_exact_size(Vec2::new(bar_w, 8.0), Sense::hover());
+        let painter = ui.painter();
+        painter.rect_filled(rect, 2.0, COLOR_SURFACE_CONTAINER);
+
+        let v = (value as f32).clamp(0.0, 1.0);
+        let fill_w = rect.width() * v;
+        let fill_rect = Rect::from_min_size(rect.min, Vec2::new(fill_w, rect.height()));
+        painter.rect_filled(fill_rect, 2.0, col);
+
+        ui.label(
+            RichText::new(format!("{:.0}%", value * 100.0))
                 .color(COLOR_ON_SURFACE_VARIANT)
                 .size(9.5)
                 .monospace(),
