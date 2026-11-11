@@ -788,19 +788,10 @@ impl ProgrammingTab {
     // COLUMNA IZQUIERDA: TARJETA 2 - MAPA VECTORIAL DE ENTRADAS 2D
     // ========================================================================
 
-    /// Posiciona horizontalmente los controles del mapa vectorial dentro del canvas.
-    /// Para el Throttle respeta las coordenadas normalizadas del diagrama vectorial (viewBox 792x612).
-    /// Para el Stick compacta el espaciado hacia el centro preservando el margen lateral.
+    /// Posiciona horizontalmente los controles del mapa vectorial dentro del canvas de forma proporcional.
     #[inline]
-    fn compact_vector_map_x(rect: egui::Rect, norm_x: f32, device: DeviceKind) -> f32 {
-        match device {
-            DeviceKind::Throttle => rect.min.x + norm_x * rect.width(),
-            DeviceKind::Stick => {
-                let center_x = rect.min.x + rect.width() * 0.50;
-                let factor = 0.88;
-                center_x + (norm_x - 0.50) * rect.width() * factor
-            }
-        }
+    fn compact_vector_map_x(rect: egui::Rect, norm_x: f32, _device: DeviceKind) -> f32 {
+        rect.min.x + norm_x * rect.width()
     }
 
     fn render_vector_map_card(&mut self, ui: &mut Ui, snapshot: &LiveButtonsSnapshot) {
@@ -834,11 +825,8 @@ impl ProgrammingTab {
             ui.add_space(4.0);
 
             // Canvas de dibujo vectorial con egui::Painter
-            // El Throttle usa la relación de aspecto exacta de la suite vectorial (1180x790 ≈ 0.6695)
-            let aspect = match self.selected_device {
-                DeviceKind::Throttle => 790.0 / 1180.0,
-                DeviceKind::Stick => 0.72,
-            };
+            // Ambos dispositivos usan la relación de aspecto exacta de la suite vectorial (1180x790 ≈ 0.6695)
+            let aspect = 790.0 / 1180.0;
             let canvas_height = (ui.available_width() * aspect).clamp(280.0, 540.0);
             let canvas_size = Vec2::new(ui.available_width(), canvas_height);
             let (response, painter) = ui.allocate_painter(canvas_size, egui::Sense::click());
@@ -936,9 +924,9 @@ impl ProgrammingTab {
                 bracket_stroke,
             );
 
-            // Dibujar siluetas vectoriales de fondo
+            // Dibujar siluetas vectoriales y componentes tácticos interactivos
             match self.selected_device {
-                DeviceKind::Stick => self.draw_vector_stick_silhouette(&painter, rect),
+                DeviceKind::Stick => self.draw_vector_stick_silhouette(&painter, rect, snapshot),
                 DeviceKind::Throttle => {
                     self.draw_vector_throttle_silhouette(&painter, rect, snapshot)
                 }
@@ -987,108 +975,26 @@ impl ProgrammingTab {
                     .get_cell(self.selected_mode, node.id)
                     .is_some_and(|c| c.is_assigned());
 
-                if self.selected_device == DeviceKind::Throttle {
-                    // Para Throttle: los componentes SVG detallados ya están dibujados y animados.
-                    // Aquí dibujamos el halo de interacción táctil y el indicador de asignación.
-                    if is_pressed {
-                        painter.circle_stroke(
-                            center,
-                            node.radius + 4.0,
-                            Stroke::new(2.5, COLOR_TERTIARY_CONTAINER),
-                        );
-                    } else if is_hovered {
-                        painter.circle_stroke(
-                            center,
-                            node.radius + 3.0,
-                            Stroke::new(2.0, COLOR_PRIMARY_CONTAINER),
-                        );
-                    }
-                    if is_assigned {
-                        painter.circle_filled(
-                            egui::pos2(center.x + node.radius * 0.7, center.y - node.radius * 0.7),
-                            3.5,
-                            COLOR_WARNING_AMBER,
-                        );
-                    }
-                } else {
-                    // Para Stick: renderizado estándar de pines sólidos con etiqueta
-                    let (fill, border, glow_col, glow_radius) = if is_pressed {
-                        (
-                            COLOR_TERTIARY_CONTAINER,
-                            Color32::WHITE,
-                            COLOR_TERTIARY_CONTAINER,
-                            node.radius + 6.0,
-                        )
-                    } else if is_hovered {
-                        (
-                            COLOR_PRIMARY_CONTAINER,
-                            Color32::WHITE,
-                            COLOR_PRIMARY_CONTAINER,
-                            node.radius + 5.0,
-                        )
-                    } else if is_assigned {
-                        (
-                            COLOR_WARNING_AMBER,
-                            Color32::from_rgb(255, 235, 170),
-                            COLOR_WARNING_AMBER,
-                            node.radius + 3.0,
-                        )
-                    } else {
-                        (
-                            COLOR_SURFACE_CONTAINER,
-                            COLOR_OUTLINE_VARIANT,
-                            Color32::TRANSPARENT,
-                            0.0,
-                        )
-                    };
-
-                    if glow_radius > 0.0 {
-                        painter.circle_stroke(
-                            center,
-                            glow_radius,
-                            Stroke::new(
-                                1.5,
-                                Color32::from_rgba_premultiplied(
-                                    glow_col.r(),
-                                    glow_col.g(),
-                                    glow_col.b(),
-                                    70,
-                                ),
-                            ),
-                        );
-                    }
-
-                    if node.is_rect {
-                        let node_rect = egui::Rect::from_center_size(center, node.rect_size);
-                        painter.rect_filled(node_rect, 3.0, fill);
-                        painter.rect_stroke(
-                            node_rect,
-                            3.0,
-                            Stroke::new(1.0, border),
-                            egui::StrokeKind::Inside,
-                        );
-                    } else {
-                        painter.circle_filled(center, node.radius, fill);
-                        painter.circle_stroke(center, node.radius, Stroke::new(1.0, border));
-                    }
-
-                    let text_col = if is_pressed || is_hovered || is_assigned {
-                        COLOR_SURFACE_LOWEST
-                    } else {
-                        COLOR_ON_SURFACE_VARIANT
-                    };
-
-                    let node_font_size = if node.short_label.chars().count() > 5 {
-                        7.5
-                    } else {
-                        9.0
-                    };
-                    painter.text(
+                // Ambos dispositivos cuentan con arte vectorial táctico fotorrealista y animaciones.
+                // Aquí dibujamos el halo de interacción táctil y el indicador de asignación.
+                if is_pressed {
+                    painter.circle_stroke(
                         center,
-                        egui::Align2::CENTER_CENTER,
-                        node.short_label,
-                        egui::FontId::monospace(node_font_size),
-                        text_col,
+                        node.radius + 4.0,
+                        Stroke::new(2.5, COLOR_TERTIARY_CONTAINER),
+                    );
+                } else if is_hovered {
+                    painter.circle_stroke(
+                        center,
+                        node.radius + 3.0,
+                        Stroke::new(2.0, COLOR_PRIMARY_CONTAINER),
+                    );
+                }
+                if is_assigned {
+                    painter.circle_filled(
+                        egui::pos2(center.x + node.radius * 0.7, center.y - node.radius * 0.7),
+                        3.5,
+                        COLOR_WARNING_AMBER,
                     );
                 }
 
@@ -1173,78 +1079,301 @@ impl ProgrammingTab {
         });
     }
 
-    /// Dibuja la silueta técnica del Stick en el mapa vectorial según la distribución física.
-    fn draw_vector_stick_silhouette(&self, painter: &egui::Painter, rect: egui::Rect) {
-        let outline = Stroke::new(1.0, COLOR_OUTLINE_VARIANT);
-
-        // Cabezal superior del Stick (enmarca B, Witch, A, POV y Castle)
-        let head_rect = egui::Rect::from_min_max(
+    /// Dibuja la silueta técnica, carcasas y componentes interactivos animados del Stick
+    /// con la misma estética táctil y fotorrealista que el Throttle Deck (viewBox 1180x790).
+    fn draw_vector_stick_silhouette(
+        &self,
+        painter: &egui::Painter,
+        rect: egui::Rect,
+        snapshot: &LiveButtonsSnapshot,
+    ) {
+        let outline = Stroke::new(1.2, COLOR_OUTLINE_VARIANT);
+        let accent = Stroke::new(1.4, COLOR_PRIMARY_CONTAINER);
+        let s = rect.width() / 1180.0;
+        let p = |nx: f32, ny: f32| {
             egui::pos2(
-                Self::compact_vector_map_x(rect, 0.14, DeviceKind::Stick),
-                rect.min.y + rect.height() * 0.04,
-            ),
-            egui::pos2(
-                Self::compact_vector_map_x(rect, 0.86, DeviceKind::Stick),
-                rect.min.y + rect.height() * 0.38,
-            ),
-        );
-        painter.rect_stroke(head_rect, 8.0, outline, egui::StrokeKind::Inside);
+                rect.min.x + nx * rect.width(),
+                rect.min.y + ny * rect.height(),
+            )
+        };
 
-        // Biseles circulares de fondo para los 3 Hats (según diagrama de usuario)
-        // 1. POV 8-Way (Cluster POV)
-        let pov_c = egui::pos2(
-            Self::compact_vector_map_x(rect, 0.246, DeviceKind::Stick),
-            rect.min.y + rect.height() * 0.242,
+        // 1. Cabezal superior del Stick (enmarca POV, A, H1, B, H2)
+        let head_rect = egui::Rect::from_min_max(p(0.16, 0.04), p(0.86, 0.36));
+        painter.rect_filled(head_rect, 18.0 * s, Color32::from_rgb(14, 19, 30));
+        painter.rect_stroke(head_rect, 18.0 * s, outline, egui::StrokeKind::Inside);
+
+        // Bisel interior decorativo del cabezal
+        let inner_head = egui::Rect::from_min_max(p(0.18, 0.06), p(0.84, 0.34));
+        painter.rect_stroke(
+            inner_head,
+            12.0 * s,
+            Stroke::new(1.0 * s, Color32::from_rgb(29, 38, 54)),
+            egui::StrokeKind::Inside,
         );
-        painter.circle_stroke(pov_c, 24.0, Stroke::new(0.8, COLOR_OUTLINE_VARIANT));
+
+        // 2. Mástil y empuñadura ergonómica centrada
+        let shaft_rect = egui::Rect::from_min_max(p(0.35, 0.34), p(0.65, 0.78));
+        painter.rect_filled(shaft_rect, 14.0 * s, Color32::from_rgb(10, 14, 23));
+        painter.rect_stroke(shaft_rect, 14.0 * s, outline, egui::StrokeKind::Inside);
+
+        // Paneles laterales del mástil
+        painter.line_segment(
+            [p(0.38, 0.38), p(0.38, 0.74)],
+            Stroke::new(1.5 * s, Color32::from_rgb(26, 35, 50)),
+        );
+        painter.line_segment(
+            [p(0.62, 0.38), p(0.62, 0.74)],
+            Stroke::new(1.5 * s, Color32::from_rgb(26, 35, 50)),
+        );
+
+        // 3. Base del Stick / Reposamanos ergonómico
+        let base_rect = egui::Rect::from_min_max(p(0.26, 0.77), p(0.74, 0.93));
+        painter.rect_filled(base_rect, 16.0 * s, Color32::from_rgb(15, 20, 31));
+        painter.rect_stroke(base_rect, 16.0 * s, accent, egui::StrokeKind::Inside);
+
         painter.text(
-            pov_c,
+            p(0.50, 0.90),
             egui::Align2::CENTER_CENTER,
+            "X-56 RHINO FLIGHT STICK // 16-BIT HALL SENSOR CORE",
+            egui::FontId::monospace(8.5),
+            COLOR_OUTLINE,
+        );
+
+        // ==================== COMPONENTES TÁCTILES DEL STICK ====================
+
+        // 4. POV 1: Selector de Vista 8-Way (cx: 0.246, cy: 0.242, scale: 0.30)
+        let pov_u = snapshot.pressed_buttons.contains("stick_pov_up");
+        let pov_r = snapshot.pressed_buttons.contains("stick_pov_right");
+        let pov_d = snapshot.pressed_buttons.contains("stick_pov_down");
+        let pov_l = snapshot.pressed_buttons.contains("stick_pov_left");
+        Self::draw_dpad(
+            painter,
+            p(0.246, 0.242),
+            0.30 * s,
+            pov_u,
+            pov_r,
+            pov_d,
+            pov_l,
             "POV",
-            egui::FontId::monospace(8.0),
-            COLOR_OUTLINE,
         );
 
-        // 2. Witch-Hat (HAT 1)
-        let witch_c = egui::pos2(
-            Self::compact_vector_map_x(rect, 0.587, DeviceKind::Stick),
-            rect.min.y + rect.height() * 0.121,
-        );
-        painter.circle_stroke(witch_c, 24.0, Stroke::new(0.8, COLOR_OUTLINE_VARIANT));
-        painter.text(
-            witch_c,
-            egui::Align2::CENTER_CENTER,
-            "WITCH",
-            egui::FontId::monospace(7.5),
-            COLOR_OUTLINE,
-        );
-
-        // 3. Castle-Hat (HAT 2)
-        let castle_c = egui::pos2(
-            Self::compact_vector_map_x(rect, 0.690, DeviceKind::Stick),
-            rect.min.y + rect.height() * 0.285,
-        );
-        painter.circle_stroke(castle_c, 24.0, Stroke::new(0.8, COLOR_OUTLINE_VARIANT));
-        painter.text(
-            castle_c,
-            egui::Align2::CENTER_CENTER,
-            "CASTLE",
-            egui::FontId::monospace(7.5),
-            COLOR_OUTLINE,
+        // 5. Botón A: Cabezal Superior (cx: 0.351, cy: 0.138, scale: 0.32)
+        let a_pressed = snapshot.pressed_buttons.contains("stick_btn_a");
+        let a_hovered = self.hovered_button_id.as_deref() == Some("stick_btn_a");
+        Self::draw_circular_button(
+            painter,
+            p(0.351, 0.138),
+            0.32 * s,
+            a_pressed,
+            a_hovered,
+            "A",
+            true,
         );
 
-        // Mástil y empuñadura ergonómica centrada (cubre Trigger, C, Pinky y D)
-        let shaft_rect = egui::Rect::from_min_max(
-            egui::pos2(
-                Self::compact_vector_map_x(rect, 0.30, DeviceKind::Stick),
-                rect.min.y + rect.height() * 0.36,
+        // 6. HAT 1: Witches Hat (cx: 0.587, cy: 0.121, scale: 0.30)
+        let h1_u = snapshot.pressed_buttons.contains("stick_h1_up");
+        let h1_r = snapshot.pressed_buttons.contains("stick_h1_right");
+        let h1_d = snapshot.pressed_buttons.contains("stick_h1_down");
+        let h1_l = snapshot.pressed_buttons.contains("stick_h1_left");
+        Self::draw_dpad(
+            painter,
+            p(0.587, 0.121),
+            0.30 * s,
+            h1_u,
+            h1_r,
+            h1_d,
+            h1_l,
+            "H1",
+        );
+
+        // 7. Botón B: Lateral Pulgar (cx: 0.781, cy: 0.072, scale: 0.30)
+        let b_pressed = snapshot.pressed_buttons.contains("stick_btn_b");
+        let b_hovered = self.hovered_button_id.as_deref() == Some("stick_btn_b");
+        Self::draw_circular_button(
+            painter,
+            p(0.781, 0.072),
+            0.30 * s,
+            b_pressed,
+            b_hovered,
+            "B",
+            false,
+        );
+
+        // 8. HAT 2: Castle Hat (cx: 0.690, cy: 0.285, scale: 0.30)
+        let h2_u = snapshot.pressed_buttons.contains("stick_h2_up");
+        let h2_r = snapshot.pressed_buttons.contains("stick_h2_right");
+        let h2_d = snapshot.pressed_buttons.contains("stick_h2_down");
+        let h2_l = snapshot.pressed_buttons.contains("stick_h2_left");
+        Self::draw_dpad(
+            painter,
+            p(0.690, 0.285),
+            0.30 * s,
+            h2_u,
+            h2_r,
+            h2_d,
+            h2_l,
+            "H2",
+        );
+
+        // 9. Gatillo Principal (TRG: cx: 0.500, cy: 0.420)
+        let trg_pressed = snapshot.pressed_buttons.contains("stick_trigger");
+        let trg_hovered = self.hovered_button_id.as_deref() == Some("stick_trigger");
+        Self::draw_stick_trigger(painter, p(0.500, 0.420), s, trg_pressed, trg_hovered);
+
+        // 10. Botón C: Minipalanca Analógica / C-Stick Push (cx: 0.400, cy: 0.560, scale: 0.28)
+        let c_pressed = snapshot.pressed_buttons.contains("stick_btn_c");
+        let c_hovered = self.hovered_button_id.as_deref() == Some("stick_btn_c");
+        Self::draw_circular_button(
+            painter,
+            p(0.400, 0.560),
+            0.28 * s,
+            c_pressed,
+            c_hovered,
+            "C",
+            false,
+        );
+
+        // 11. Palanca Meñique (PNK: cx: 0.500, cy: 0.700)
+        let pnk_pressed = snapshot.pressed_buttons.contains("stick_pinkie");
+        let pnk_hovered = self.hovered_button_id.as_deref() == Some("stick_pinkie");
+        Self::draw_stick_pinkie_lever(painter, p(0.500, 0.700), s, pnk_pressed, pnk_hovered);
+
+        // 12. Botón D: Meñique / Base Rest (cx: 0.600, cy: 0.840, scale: 0.28)
+        let d_pressed = snapshot.pressed_buttons.contains("stick_btn_d");
+        let d_hovered = self.hovered_button_id.as_deref() == Some("stick_btn_d");
+        Self::draw_circular_button(
+            painter,
+            p(0.600, 0.840),
+            0.28 * s,
+            d_pressed,
+            d_hovered,
+            "D",
+            false,
+        );
+    }
+
+    /// Dibuja el gatillo principal (Trigger) del Stick con protector y hoja móvil iluminada.
+    fn draw_stick_trigger(
+        painter: &egui::Painter,
+        center: egui::Pos2,
+        s: f32,
+        is_pressed: bool,
+        is_hovered: bool,
+    ) {
+        let cyan = COLOR_PRIMARY_CONTAINER;
+        let guard_w = 68.0 * s;
+        let guard_h = 36.0 * s;
+
+        // Guarda exterior del gatillo
+        let guard_rect = egui::Rect::from_center_size(center, egui::vec2(guard_w, guard_h));
+        painter.rect_filled(guard_rect, 6.0 * s, Color32::from_rgb(14, 19, 30));
+        painter.rect_stroke(
+            guard_rect,
+            6.0 * s,
+            Stroke::new(
+                2.0 * s,
+                if is_pressed || is_hovered {
+                    cyan
+                } else {
+                    Color32::from_rgb(38, 53, 77)
+                },
             ),
-            egui::pos2(
-                Self::compact_vector_map_x(rect, 0.70, DeviceKind::Stick),
-                rect.min.y + rect.height() * 0.92,
-            ),
+            egui::StrokeKind::Inside,
         );
-        painter.rect_stroke(shaft_rect, 6.0, outline, egui::StrokeKind::Inside);
+
+        // Hoja del gatillo
+        let blade_w = 52.0 * s;
+        let blade_h = 24.0 * s;
+        let blade_y = if is_pressed {
+            center.y - 3.0 * s
+        } else {
+            center.y
+        };
+        let blade_rect = egui::Rect::from_center_size(
+            egui::pos2(center.x, blade_y),
+            egui::vec2(blade_w, blade_h),
+        );
+
+        let (fill_col, stroke_col, text_col) = if is_pressed {
+            (
+                Color32::from_rgb(180, 32, 42),
+                Color32::WHITE,
+                Color32::WHITE,
+            )
+        } else if is_hovered {
+            (Color32::from_rgb(32, 45, 65), cyan, cyan)
+        } else {
+            (
+                Color32::from_rgb(24, 32, 46),
+                Color32::from_rgb(67, 86, 117),
+                Color32::from_rgb(203, 213, 225),
+            )
+        };
+
+        painter.rect_filled(blade_rect, 4.0 * s, fill_col);
+        painter.rect_stroke(
+            blade_rect,
+            4.0 * s,
+            Stroke::new(1.8 * s, stroke_col),
+            egui::StrokeKind::Inside,
+        );
+        painter.text(
+            egui::pos2(center.x, blade_y),
+            egui::Align2::CENTER_CENTER,
+            "TRG",
+            egui::FontId::monospace(14.0 * s),
+            text_col,
+        );
+    }
+
+    /// Dibuja la palanca meñique (Pinkie Lever) del Stick en la parte inferior del mástil.
+    fn draw_stick_pinkie_lever(
+        painter: &egui::Painter,
+        center: egui::Pos2,
+        s: f32,
+        is_pressed: bool,
+        is_hovered: bool,
+    ) {
+        let cyan = COLOR_PRIMARY_CONTAINER;
+        let lever_w = 64.0 * s;
+        let lever_h = 26.0 * s;
+
+        let lever_y = if is_pressed {
+            center.y - 2.0 * s
+        } else {
+            center.y
+        };
+        let lever_rect = egui::Rect::from_center_size(
+            egui::pos2(center.x, lever_y),
+            egui::vec2(lever_w, lever_h),
+        );
+
+        let (fill_col, stroke_col, text_col) = if is_pressed {
+            (cyan, Color32::WHITE, Color32::from_rgb(6, 8, 13))
+        } else if is_hovered {
+            (Color32::from_rgb(32, 45, 65), cyan, cyan)
+        } else {
+            (
+                Color32::from_rgb(24, 32, 46),
+                Color32::from_rgb(67, 86, 117),
+                Color32::from_rgb(203, 213, 225),
+            )
+        };
+
+        painter.rect_filled(lever_rect, 6.0 * s, fill_col);
+        painter.rect_stroke(
+            lever_rect,
+            6.0 * s,
+            Stroke::new(1.8 * s, stroke_col),
+            egui::StrokeKind::Inside,
+        );
+        painter.text(
+            egui::pos2(center.x, lever_y),
+            egui::Align2::CENTER_CENTER,
+            "PNK",
+            egui::FontId::monospace(14.0 * s),
+            text_col,
+        );
     }
 
     /// Dibuja la silueta técnica, carcasas y componentes interactivos animados del Throttle
@@ -3984,44 +4113,44 @@ struct SchematicNode {
 fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
     match kind {
         DeviceKind::Stick => vec![
-            // 1. Sección A: POV 8-Way (Cluster POV: cx = 0.246, cy = 0.242)
+            // 1. Sección A: Selector de Vista POV 8-Way (cx = 0.246, cy = 0.242)
             SchematicNode {
                 id: "stick_pov_up",
-                short_label: "P▲",
+                short_label: "▲",
                 full_name: "POV Vista Arriba",
                 norm_x: 0.246,
                 norm_y: 0.198,
-                radius: 9.0,
+                radius: 12.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
             SchematicNode {
                 id: "stick_pov_right",
-                short_label: "P▶",
+                short_label: "▶",
                 full_name: "POV Vista Derecha",
                 norm_x: 0.292,
                 norm_y: 0.242,
-                radius: 9.0,
+                radius: 12.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
             SchematicNode {
                 id: "stick_pov_down",
-                short_label: "P▼",
+                short_label: "▼",
                 full_name: "POV Vista Abajo",
                 norm_x: 0.246,
                 norm_y: 0.286,
-                radius: 9.0,
+                radius: 12.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
             SchematicNode {
                 id: "stick_pov_left",
-                short_label: "P◀",
+                short_label: "◀",
                 full_name: "POV Vista Izquierda",
                 norm_x: 0.200,
                 norm_y: 0.242,
-                radius: 9.0,
+                radius: 12.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -4032,48 +4161,48 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 full_name: "Botón A (Cabezal Superior)",
                 norm_x: 0.351,
                 norm_y: 0.138,
-                radius: 11.5,
+                radius: 24.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
             // 3. Sección C: HAT 1 (Witches) (Cluster Witch-Hat: cx = 0.587, cy = 0.121)
             SchematicNode {
                 id: "stick_h1_up",
-                short_label: "1▲",
+                short_label: "▲",
                 full_name: "HAT 1 (Witches) Arriba",
                 norm_x: 0.587,
                 norm_y: 0.077,
-                radius: 9.0,
+                radius: 12.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
             SchematicNode {
                 id: "stick_h1_right",
-                short_label: "1▶",
+                short_label: "▶",
                 full_name: "HAT 1 (Witches) Derecha",
                 norm_x: 0.633,
                 norm_y: 0.121,
-                radius: 9.0,
+                radius: 12.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
             SchematicNode {
                 id: "stick_h1_down",
-                short_label: "1▼",
+                short_label: "▼",
                 full_name: "HAT 1 (Witches) Abajo",
                 norm_x: 0.587,
                 norm_y: 0.165,
-                radius: 9.0,
+                radius: 12.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
             SchematicNode {
                 id: "stick_h1_left",
-                short_label: "1◀",
+                short_label: "◀",
                 full_name: "HAT 1 (Witches) Izquierda",
                 norm_x: 0.541,
                 norm_y: 0.121,
-                radius: 9.0,
+                radius: 12.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -4084,48 +4213,48 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 full_name: "Botón B (Lateral Pulgar)",
                 norm_x: 0.781,
                 norm_y: 0.072,
-                radius: 11.5,
+                radius: 22.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
             // 5. Sección C: HAT 2 (Castle) (Cluster Castle-Hat: cx = 0.690, cy = 0.285)
             SchematicNode {
                 id: "stick_h2_up",
-                short_label: "2▲",
+                short_label: "▲",
                 full_name: "HAT 2 (Castle) Arriba",
                 norm_x: 0.690,
                 norm_y: 0.241,
-                radius: 9.0,
+                radius: 12.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
             SchematicNode {
                 id: "stick_h2_right",
-                short_label: "2▶",
+                short_label: "▶",
                 full_name: "HAT 2 (Castle) Derecha",
                 norm_x: 0.736,
                 norm_y: 0.285,
-                radius: 9.0,
+                radius: 12.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
             SchematicNode {
                 id: "stick_h2_down",
-                short_label: "2▼",
+                short_label: "▼",
                 full_name: "HAT 2 (Castle) Abajo",
                 norm_x: 0.690,
                 norm_y: 0.329,
-                radius: 9.0,
+                radius: 12.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
             SchematicNode {
                 id: "stick_h2_left",
-                short_label: "2◀",
+                short_label: "◀",
                 full_name: "HAT 2 (Castle) Izquierda",
                 norm_x: 0.644,
                 norm_y: 0.285,
-                radius: 9.0,
+                radius: 12.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -4136,9 +4265,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 full_name: "Gatillo Principal (Trigger)",
                 norm_x: 0.500,
                 norm_y: 0.420,
-                radius: 12.0,
+                radius: 16.0,
                 is_rect: true,
-                rect_size: Vec2::new(34.0, 18.0),
+                rect_size: Vec2::new(54.0, 26.0),
             },
             // 7. Sección B: Botón C (Minipalanca Push: cx = 0.400, cy = 0.560)
             SchematicNode {
@@ -4147,7 +4276,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 full_name: "Botón C (Minipalanca Push)",
                 norm_x: 0.400,
                 norm_y: 0.560,
-                radius: 11.5,
+                radius: 20.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
@@ -4158,9 +4287,9 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 full_name: "Palanca Meñique (Pinkie Lever)",
                 norm_x: 0.500,
                 norm_y: 0.700,
-                radius: 11.5,
-                is_rect: false,
-                rect_size: Vec2::ZERO,
+                radius: 16.0,
+                is_rect: true,
+                rect_size: Vec2::new(64.0, 26.0),
             },
             // 9. Sección D: Botón D (Meñique: cx = 0.600, cy = 0.840)
             SchematicNode {
@@ -4169,7 +4298,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 full_name: "Botón D (Meñique)",
                 norm_x: 0.600,
                 norm_y: 0.840,
-                radius: 11.5,
+                radius: 22.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
