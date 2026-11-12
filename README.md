@@ -13,6 +13,9 @@ The suite provides dual interface binaries:
 
 Specifically engineered to operate on Linux **without root privileges (`sudo`)** and **without detaching the kernel joystick driver (`usbhid`/`joydev`/`evdev`)**, ensuring that flight and space simulators (*DCS World, X-Plane, Microsoft Flight Simulator, Star Citizen, Elite Dangerous, FlightGear*) continue receiving uninterrupted axis and button inputs while adjusting configuration live.
 
+![X56 HOTAS Deck — Avionics Vector Control Center](doc/screenshots/01-curves-editor.png)
+*X56 HOTAS Deck (`x56-deck`) — Response Curve Editor, Live 2D Gimbal Monitor, and Physical Spring Selector*
+
 ---
 
 ## Table of Contents
@@ -535,9 +538,15 @@ The selected spring is automatically stored and serialized within the active TOM
 - Deviation (Delta) calculation and drift threshold evaluation (< 1000 = Excellent, 1000..3000 = Acceptable, > 3000 = High Deviation).
 - Safe `--dry-run` mode to preview values before committing to EEPROM.
 
+![RGB Lighting & Hall Sensor Neutral Calibration](doc/screenshots/04-rgb-calibrate.png)
+*RGB PWM Lighting Manager (per-mode `M1`/`M2`/`S1` presets) and Hall-Effect Sensor Neutral Calibration*
+
 ### 4. Integrated System Diagnostics
 - Visual dashboard for real-time system health checks.
 - 6-layer inspection: udev permissions, `/dev/hidraw*` nodes, USB device detection, simulator support (`/dev/input/js*`), and bidirectional firmware handshake.
+
+![TOML Profile Manager & System Diagnostics](doc/screenshots/05-diagnostics-profiles.png)
+*TOML Profile Management & 6-Layer System Diagnostics (`Doctor`)*
 
 ### 5. Button and Mode Programming (Manual Section 8)
 Directly inspired by **Section 8 of the Official Logitech G X56 HOTAS User Manual**, this tab provides a professional environment for creating command mappings, macros, and keybindings with full support for the three rotary mode positions (`M1`, `M2`, `S1`) and the `SLD` slider switch.
@@ -548,8 +557,7 @@ Directly inspired by **Section 8 of the Official Logitech G X56 HOTAS User Manua
     - **Throttle**: Section A (*Push Rotary F/G and Scroll Wheel*), Section B (*2-Position SLD Slider Switch*), Section C (*E, H, I Buttons, Push Mini-Stick, and H3/H4 HATs*), Section D (*Twin Dual Throttles*), Section F (*Rotary Mode Switch M1/M2/S1*), Section G (*Base TGL 1 to 7 with SW 1 to 14*).
   - **Live Visual Feedback**:
     - **Neon Green**: Illuminates instantly when a button is physically pressed on the hardware.
-    - **Bright Cyan**: Highlights when hovering over the corresponding command cell or node.
-    - **Amber**: Indicates that the button already has a key or command bound in the currently visible mode.
+    - **Bright Cyan**: Highlights hovered nodes as well as bound button labels and unfilled directional triangle outlines in the currently visible mode (unbound elements remain crisp white).
   - **Direct Interaction**: Clicking any schematic node immediately opens the corresponding cell for editing.
 - **Command Cells per Mode (`M1`, `M2`, `S1`)**:
   - Organized by functional groups with a dropdown filter and binding counters.
@@ -567,6 +575,12 @@ Directly inspired by **Section 8 of the Official Logitech G X56 HOTAS User Manua
   - Accessible via the `⚙️ Test Profile` gear icon.
   - Live monitors all triggered commands with local timestamp (`HH:MM:SS`), active mode, pressed physical button, command name, emitted key tiles, and `uinput` verification status.
   - Includes an interactive test input field to immediately verify that keystrokes are properly typed and dispatched without needing an external application.
+
+![Flight Stick Button & Mode Programming](doc/screenshots/02-button-mapping-stick.png)
+*Flight Stick 2D Vector Schematic, Live evdev Hook Monitor, and `M1`/`M2`/`S1` Command Matrix*
+
+![Throttle Quadrant Button & Mode Programming](doc/screenshots/03-button-mapping-throttle.png)
+*Throttle Quadrant 2D Vector Map with Toggle Switches (`SW 1–14`), `SLD` Slider, and Push Rotaries*
 
 ### 6. TOML Profile Management
 - Direct top-bar access to `Save TOML Profile` or `Load TOML Profile`.
@@ -615,6 +629,8 @@ x56linux/
 ├── .github/workflows/
 │   └── release.yml              # Multi-distro CI/CD (deb, rpm, arch, tarball)
 ├── Cargo.toml
+├── doc/
+│   └── screenshots/             # GUI screenshots embedded in README.md
 ├── packaging/
 │   ├── 70-x56.rules             # Modern uaccess udev rule
 │   ├── com.saitek.x56.desktop   # Linux desktop entry
