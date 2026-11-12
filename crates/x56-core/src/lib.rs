@@ -12,6 +12,7 @@ pub use x56_proto::{AxisConfig, CurveProfile, ProtoError, RgbColor};
 pub mod buttons;
 pub mod calibrate;
 pub mod doctor;
+pub mod i18n;
 pub mod profile;
 
 pub use buttons::{
@@ -21,6 +22,7 @@ pub use buttons::{
 };
 pub use calibrate::{Calibrator, HallCalibrationResult};
 pub use doctor::{CheckStatus, Doctor, DoctorCheck, DoctorReport};
+pub use i18n::Language;
 pub use profile::{
     AxisProfileEntry, DeviceProfile, FullProfile, ProfileApplySummary, ProfileManager,
 };

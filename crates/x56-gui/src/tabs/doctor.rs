@@ -23,15 +23,13 @@ impl DoctorTab {
     }
 
     pub fn ui(&mut self, ui: &mut Ui) {
-        ui.heading("Diagnóstico del Sistema e Integridad (`x56 doctor`)");
-        ui.label(
-            "Verifica que las reglas udev, permisos sin root y drivers del kernel estén listos.",
-        );
+        ui.heading(x56_core::t!("doc-title"));
+        ui.label(x56_core::t!("doc-subtitle"));
 
         ui.add_space(8.0);
 
         ui.horizontal(|ui| {
-            let refresh_lbl = format!("{} Re-analizar Sistema", icons::REFRESH_CW);
+            let refresh_lbl = format!("{} {}", icons::REFRESH_CW, x56_core::t!("doc-refresh"));
             if ui.button(refresh_lbl).clicked() {
                 self.refresh();
             }
@@ -39,25 +37,25 @@ impl DoctorTab {
             let status_badge = if self.report.is_healthy() {
                 (
                     Color32::from_rgb(40, 160, 40),
-                    format!("{} SISTEMA 100% OPERATIVO", icons::CHECK),
+                    format!("{} {}", icons::CHECK, x56_core::t!("doc-status-ok")),
                 )
             } else if self.report.fail_count > 0 {
                 (
                     Color32::from_rgb(200, 40, 40),
-                    format!("{} SE REQUIEREN ACCIONES CORRECTIVAS", icons::X),
+                    format!("{} {}", icons::X, x56_core::t!("doc-status-fail")),
                 )
             } else {
                 (
                     Color32::from_rgb(200, 150, 20),
-                    format!("{} ADVERTENCIAS DETECTADAS", icons::ALERT_TRIANGLE),
+                    format!("{} {}", icons::ALERT_TRIANGLE, x56_core::t!("doc-status-warn")),
                 )
             };
 
             ui.colored_label(status_badge.0, status_badge.1);
-            ui.label(format!(
-                "({} OK, {} advertencias, {} fallos)",
-                self.report.ok_count, self.report.warn_count, self.report.fail_count
-            ));
+            let ok_str = self.report.ok_count.to_string();
+            let warn_str = self.report.warn_count.to_string();
+            let fail_str = self.report.fail_count.to_string();
+            ui.label(x56_core::t!("doc-summary", "ok" => &ok_str, "warn" => &warn_str, "fail" => &fail_str));
         });
 
         ui.add_space(10.0);
@@ -69,15 +67,16 @@ impl DoctorTab {
                         let (badge_col, tag) = match check.status {
                             CheckStatus::Ok => (
                                 Color32::from_rgb(80, 220, 80),
-                                format!("{} OK", icons::CHECK),
+                                format!("{} {}", icons::CHECK, x56_core::t!("doc-pass")),
                             ),
                             CheckStatus::Warn => (
                                 Color32::from_rgb(255, 200, 50),
-                                format!("{} WARN", icons::ALERT_TRIANGLE),
+                                format!("{} {}", icons::ALERT_TRIANGLE, x56_core::t!("doc-warn")),
                             ),
-                            CheckStatus::Fail => {
-                                (Color32::from_rgb(255, 70, 70), format!("{} FAIL", icons::X))
-                            }
+                            CheckStatus::Fail => (
+                                Color32::from_rgb(255, 70, 70),
+                                format!("{} {}", icons::X, x56_core::t!("doc-fail")),
+                            ),
                         };
 
                         ui.colored_label(badge_col, tag);

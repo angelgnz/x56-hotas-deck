@@ -34,14 +34,14 @@ pub enum FilterCategory {
 }
 
 impl FilterCategory {
-    pub fn label(&self) -> &'static str {
+    pub fn label(&self) -> String {
         match self {
-            Self::Todos => "TODOS",
-            Self::Gatillos => "GATILLOS",
-            Self::Setas => "SETAS POV & ANALÓGICAS",
-            Self::BotonesFrontales => "BOTONES FRONTALES",
-            Self::Macros => "MACROS Y SECUENCIAS",
-            Self::Shift => "MODIFICADOR SHIFT",
+            Self::Todos => x56_core::t!("prog-filter-all"),
+            Self::Gatillos => x56_core::t!("prog-filter-triggers"),
+            Self::Setas => x56_core::t!("prog-filter-hats"),
+            Self::BotonesFrontales => x56_core::t!("prog-filter-face"),
+            Self::Macros => x56_core::t!("prog-filter-macros"),
+            Self::Shift => x56_core::t!("prog-filter-shift"),
         }
     }
 
@@ -566,7 +566,8 @@ impl ProgrammingTab {
             ui.horizontal_wrapped(|ui| {
                 // Switcher de Dispositivo
                 let is_stick = self.selected_device == DeviceKind::Stick;
-                let stick_label = format!("{} X-56 RHINO STICK (JOYSTICK)", icons::JOYSTICK);
+                let stick_label =
+                    format!("{} {}", icons::JOYSTICK, x56_core::t!("prog-device-stick"));
                 if tactical_button(ui, &stick_label, is_stick, false).clicked()
                     && !is_stick
                 {
@@ -576,7 +577,8 @@ impl ProgrammingTab {
                 }
 
                 let is_throttle = self.selected_device == DeviceKind::Throttle;
-                let thr_label = format!("{} X-56 DUAL THROTTLE", icons::SLIDERS);
+                let thr_label =
+                    format!("{} {}", icons::SLIDERS, x56_core::t!("prog-device-throttle"));
                 if tactical_button(ui, &thr_label, is_throttle, false).clicked()
                     && !is_throttle
                 {
@@ -604,7 +606,7 @@ impl ProgrammingTab {
 
                 // Selector de Modo Físico
                 ui.label(
-                    RichText::new("MODO FÍSICO:")
+                    RichText::new(x56_core::t!("prog-hw-mode"))
                         .color(COLOR_OUTLINE)
                         .size(10.0)
                         .monospace()
@@ -612,9 +614,21 @@ impl ProgrammingTab {
                 );
 
                 let modes = [
-                    (ModeSlot::M1, "DOGFIGHT / COMBATE", COLOR_PRIMARY_CONTAINER),
-                    (ModeSlot::M2, "QUANTUM NAV", COLOR_WARNING_AMBER),
-                    (ModeSlot::S1, "LANDING / MINING", COLOR_SECONDARY),
+                    (
+                        ModeSlot::M1,
+                        x56_core::t!("prog-mode-m1-desc"),
+                        COLOR_PRIMARY_CONTAINER,
+                    ),
+                    (
+                        ModeSlot::M2,
+                        x56_core::t!("prog-mode-m2-desc"),
+                        COLOR_WARNING_AMBER,
+                    ),
+                    (
+                        ModeSlot::S1,
+                        x56_core::t!("prog-mode-s1-desc"),
+                        COLOR_SECONDARY,
+                    ),
                 ];
 
                 for (slot, default_label, active_tint) in modes {
@@ -656,11 +670,15 @@ impl ProgrammingTab {
                 }
 
                 // Checkbox Sincronización HW
-                let hw_sync_label = if self.follow_hardware_mode {
-                    format!("{} SYNC HW: ON", icons::ROTATE_CW)
-                } else {
-                    format!("{} SYNC HW: OFF", icons::ROTATE_CW)
-                };
+                let hw_sync_label = format!(
+                    "{} {}",
+                    icons::ROTATE_CW,
+                    if self.follow_hardware_mode {
+                        x56_core::t!("prog-sync-hw-on")
+                    } else {
+                        x56_core::t!("prog-sync-hw-off")
+                    }
+                );
                 let hw_sync_col = if self.follow_hardware_mode {
                     COLOR_TERTIARY_CONTAINER
                 } else {
@@ -675,7 +693,7 @@ impl ProgrammingTab {
                             .monospace()
                             .strong(),
                     )
-                    .on_hover_text("Sincroniza automáticamente la capa visible con el selector físico del Throttle")
+                    .on_hover_text(x56_core::t!("prog-sync-hw-tooltip"))
                     .clicked()
                 {
                     self.follow_hardware_mode = !self.follow_hardware_mode;
@@ -688,17 +706,20 @@ impl ProgrammingTab {
 
                 // Estado del Router uinput
                 let uinput_ready = monitor.uinput_available();
-                let (dot_col, router_text) = if uinput_ready {
-                    (
-                        COLOR_TERTIARY_CONTAINER,
-                        "UINPUT ROUTER: ONLINE (4ms)",
-                    )
+                let dot_col = if uinput_ready {
+                    COLOR_TERTIARY_CONTAINER
                 } else {
-                    (
-                        COLOR_ERROR,
-                        "UINPUT: SOLO LECTURA",
-                    )
+                    COLOR_ERROR
                 };
+                let router_text = format!(
+                    "{}: {}",
+                    x56_core::t!("prog-router-uinput"),
+                    if uinput_ready {
+                        x56_core::t!("prog-router-online")
+                    } else {
+                        x56_core::t!("prog-router-offline")
+                    }
+                );
 
                 theme::sunken_frame().inner_margin(egui::Margin::symmetric(8, 3)).show(ui, |ui| {
                     ui.horizontal(|ui| {
@@ -713,7 +734,7 @@ impl ProgrammingTab {
                 });
 
                 // Botón TEST EVDEV LOOP
-                let test_loop_lbl = format!("{} TEST LOOP", icons::ZAP);
+                let test_loop_lbl = format!("{} {}", icons::ZAP, x56_core::t!("prog-test-loop"));
                 if tactical_button(ui, &test_loop_lbl, false, true).clicked() {
                     self.show_test_window = true;
                 }
@@ -731,8 +752,9 @@ impl ProgrammingTab {
             ui.horizontal_wrapped(|ui| {
                 ui.label(
                     RichText::new(format!(
-                        "{} MONITOR DE DETECCIÓN EN VIVO (EVDEV HOOK)",
-                        icons::RADIO
+                        "{} {}",
+                        icons::RADIO,
+                        x56_core::t!("prog-monitor-title")
                     ))
                     .color(COLOR_PRIMARY)
                     .size(11.0)
@@ -2868,10 +2890,12 @@ impl ProgrammingTab {
                         ui.label(RichText::new(icons::SEARCH).size(12.0));
                         let search_w = (ui.available_width() - 40.0).clamp(140.0, 240.0);
                         let edit = egui::TextEdit::singleline(&mut self.search_query)
-                            .hint_text("Buscar botón, código evdev...")
+                            .hint_text(x56_core::t!("prog-search-placeholder"))
                             .desired_width(search_w);
                         ui.add(edit);
-                        if !self.search_query.is_empty() && ui.small_button(icons::X).clicked() {
+                        if !self.search_query.is_empty()
+                            && ui.small_button(x56_core::t!("prog-clear")).clicked()
+                        {
                             self.search_query.clear();
                         }
                     });
@@ -4654,5 +4678,15 @@ mod tests {
         let sw1 = nodes.iter().find(|n| n.id == "thr_sw_1").unwrap();
         assert_eq!(sw1.short_label, "1");
         assert!((sw1.norm_y - 0.8142).abs() < 1e-3);
+    }
+
+    #[test]
+    fn test_filter_category_localized_labels() {
+        assert!(!FilterCategory::Todos.label().is_empty());
+        assert!(!FilterCategory::Gatillos.label().is_empty());
+        assert!(!FilterCategory::Setas.label().is_empty());
+        assert!(!FilterCategory::BotonesFrontales.label().is_empty());
+        assert!(!FilterCategory::Macros.label().is_empty());
+        assert!(!FilterCategory::Shift.label().is_empty());
     }
 }

@@ -5,7 +5,7 @@ use eframe::egui::{
     self, Color32, CornerRadius, FontId, Frame, Margin, Pos2, Rect, RichText, Sense, Stroke,
     StrokeKind, Ui, Vec2,
 };
-use x56_core::{axis_name, AxisConfig, DeviceKind, X56Device, X56Manager};
+use x56_core::{AxisConfig, DeviceKind, X56Device, X56Manager};
 
 use crate::curve_math::{CurveParameters, CurveType, LiveAxesState, LiveInputPoller};
 use crate::icons;
@@ -61,10 +61,7 @@ impl CurvesTab {
                 ))
         {
             self.eeprom_synced = true;
-            self.status_message = Some((
-                "Mini-Gimbal analógico sincronizado con pipeline uinput.".into(),
-                false,
-            ));
+            self.status_message = Some((x56_core::t!("curves-status-gimbal-sync"), false));
             return;
         }
 
@@ -80,18 +77,13 @@ impl CurvesTab {
             self.params.sync_curve_type_from_hardware();
             self.hall_zero = cfg.hall_zero;
             self.eeprom_synced = true;
-            self.status_message = Some((
-                "EEPROM SYNCED // Configuración leída del hardware.".into(),
-                false,
-            ));
+            self.status_message = Some((x56_core::t!("curves-status-eeprom-synced"), false));
         } else {
             // Mantener valores tácticos predeterminados cuando se ejecuta sin hardware conectado
             self.eeprom_synced = true;
+            let dev_str = format!("{:?}", self.selected_device);
             self.status_message = Some((
-                format!(
-                    "Modo simulación activo ({:?} no detectado en /dev/hidraw*).",
-                    self.selected_device
-                ),
+                x56_core::t!("curves-status-sim-mode", "device" => &dev_str),
                 false,
             ));
         }
@@ -101,10 +93,7 @@ impl CurvesTab {
     pub fn reset_current_axis(&mut self) {
         self.params = CurveParameters::default();
         self.eeprom_synced = false;
-        self.status_message = Some((
-            "Parámetros de curva revertidos a valores nominales.".into(),
-            false,
-        ));
+        self.status_message = Some((x56_core::t!("curves-status-reset"), false));
     }
 
     /// Escribe los parámetros de la curva actual en el hardware físico.
@@ -142,14 +131,7 @@ impl CurvesTab {
             match dev.set_axis_config(&cfg) {
                 Ok(_) => {
                     self.eeprom_synced = true;
-                    self.status_message = Some((
-                        format!(
-                            "EEPROM SYNCED // Curva escrita en {} ({:?}).",
-                            axis_name(self.selected_axis_id, self.selected_device),
-                            self.selected_device
-                        ),
-                        false,
-                    ));
+                    self.status_message = Some((x56_core::t!("curves-applied-success"), false));
                 }
                 Err(err) => {
                     self.status_message =
@@ -339,11 +321,20 @@ impl CurvesTab {
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing = Vec2::new(8.0, 6.0);
 
+                    ui.label(
+                        RichText::new(x56_core::t!("curves-active-device"))
+                            .color(COLOR_OUTLINE)
+                            .size(11.0)
+                            .strong()
+                            .monospace(),
+                    );
+
                     let is_stick = self.selected_device == DeviceKind::Stick;
+                    let stick_name = x56_core::t!("curves-stick-rhino");
                     let stick_lbl = if inner_w >= 920.0 {
-                        format!("{} STICK // RHINO [VID:0738 PID:2215]", icons::JOYSTICK)
+                        format!("{} {} [VID:0738 PID:2215]", icons::JOYSTICK, stick_name)
                     } else if inner_w >= 580.0 {
-                        format!("{} STICK // RHINO", icons::JOYSTICK)
+                        format!("{} {}", icons::JOYSTICK, stick_name)
                     } else {
                         format!("{} STICK", icons::JOYSTICK)
                     };
@@ -356,10 +347,11 @@ impl CurvesTab {
                     }
 
                     let is_throttle = self.selected_device == DeviceKind::Throttle;
+                    let thr_name = x56_core::t!("curves-throttle-rhino");
                     let thr_lbl = if inner_w >= 920.0 {
-                        format!("{} DUAL THROTTLE [VID:0738 PID:2216]", icons::SLIDERS)
+                        format!("{} {} [VID:0738 PID:2216]", icons::SLIDERS, thr_name)
                     } else if inner_w >= 580.0 {
-                        format!("{} DUAL THROTTLE", icons::SLIDERS)
+                        format!("{} {}", icons::SLIDERS, thr_name)
                     } else {
                         format!("{} THROTTLE", icons::SLIDERS)
                     };
@@ -505,13 +497,12 @@ impl CurvesTab {
             // Encabezado del bloque HUD
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing = Vec2::new(8.0, 4.0);
-                let title = if inner_w >= 520.0 {
+                let title = if inner_w >= 340.0 {
                     format!(
-                        "{} RESPUESTA DE TRANSFERENCIA (TRANSFER CURVE)",
-                        icons::ACTIVITY
+                        "{} {}",
+                        icons::ACTIVITY,
+                        x56_core::t!("curves-transfer-title")
                     )
-                } else if inner_w >= 340.0 {
-                    format!("{} CURVA DE TRANSFERENCIA", icons::ACTIVITY)
                 } else {
                     format!("{} CURVA", icons::ACTIVITY)
                 };
@@ -1853,12 +1844,12 @@ impl CurvesTab {
                 ui.set_max_width(inner_w);
                 ui.set_width(inner_w);
                 let inv_lbl = if compact {
-                    "Invertir Eje"
+                    "Invertir Eje".to_string()
                 } else {
-                    "Invertir Dirección de Eje"
+                    x56_core::t!("curves-invert")
                 };
                 ui.label(
-                    RichText::new(inv_lbl)
+                    RichText::new(&inv_lbl)
                         .color(COLOR_ON_SURFACE)
                         .size(11.0)
                         .strong(),
@@ -1874,6 +1865,31 @@ impl CurvesTab {
                         self.eeprom_synced = false;
                     }
                 });
+            });
+
+            ui.add_space(8.0);
+            ui.separator();
+            ui.add_space(6.0);
+
+            // Botones de acción táctica: Aplicar a hardware, Restablecer y Leer
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = Vec2::new(6.0, 6.0);
+
+                let apply_lbl = format!("{} {}", icons::SAVE, x56_core::t!("curves-apply"));
+                if theme::tactical_button(ui, &apply_lbl, false, true).clicked() {
+                    self.apply_to_hardware();
+                }
+
+                let reset_lbl =
+                    format!("{} {}", icons::ROTATE_CCW, x56_core::t!("curves-reset-btn"));
+                if theme::tactical_button(ui, &reset_lbl, false, false).clicked() {
+                    self.reset_current_axis();
+                }
+
+                let read_lbl = format!("{} {}", icons::REFRESH_CW, x56_core::t!("curves-read-btn"));
+                if theme::tactical_button(ui, &read_lbl, false, false).clicked() {
+                    self.read_from_hardware();
+                }
             });
         });
     }

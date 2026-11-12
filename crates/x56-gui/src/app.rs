@@ -7,6 +7,8 @@
 use std::path::{Path, PathBuf};
 
 use eframe::egui::{self, CornerRadius, Frame, Margin, RichText, Sense, Stroke, Ui, Vec2};
+use x56_core::i18n::{self, Language};
+use x56_core::t;
 use x56_core::{
     ButtonMonitor, DeviceProfile, FullProfile, ModeSlot, ProfileManager, TargetDevice, X56Device,
 };
@@ -348,9 +350,11 @@ impl X56App {
         self.file_dialog_rx = Some(rx);
 
         std::thread::spawn(move || {
+            let filter_toml = t!("filter-toml");
+            let filter_all = t!("filter-all");
             let mut dialog = rfd::FileDialog::new()
-                .add_filter("Perfiles TOML (*.toml)", &["toml"])
-                .add_filter("Todos los archivos (*.*)", &["*"]);
+                .add_filter(&filter_toml, &["toml"])
+                .add_filter(&filter_all, &["*"]);
 
             if let Some(dir) = start_dir {
                 dialog = dialog.set_directory(dir);
@@ -358,12 +362,12 @@ impl X56App {
 
             let result = match mode {
                 ProfileDialogMode::Load => {
-                    dialog = dialog.set_title("Seleccionar Perfil TOML de X56");
+                    dialog = dialog.set_title(t!("dialog-load-title"));
                     dialog.pick_file()
                 }
                 ProfileDialogMode::Save => {
                     dialog = dialog
-                        .set_title("Guardar Perfil TOML de X56")
+                        .set_title(t!("dialog-save-title"))
                         .set_file_name(&default_name);
                     dialog.save_file()
                 }
@@ -515,12 +519,10 @@ impl X56App {
                 let save_lbl = if screen_w < 780.0 {
                     icons::SAVE.to_string()
                 } else {
-                    format!("{} GUARDAR", icons::SAVE)
+                    format!("{} {}", icons::SAVE, t!("header-save-profile"))
                 };
                 if theme::tactical_button(ui, &save_lbl, false, false)
-                    .on_hover_text(
-                        "Guardar perfil actual en archivo TOML mediante el explorador nativo",
-                    )
+                    .on_hover_text(t!("header-save-profile-tooltip"))
                     .clicked()
                 {
                     self.spawn_file_dialog(ProfileDialogMode::Save);
@@ -532,10 +534,10 @@ impl X56App {
                 let load_lbl = if screen_w < 780.0 {
                     icons::FOLDER_OPEN.to_string()
                 } else {
-                    format!("{} CARGAR", icons::FOLDER_OPEN)
+                    format!("{} {}", icons::FOLDER_OPEN, t!("header-load-profile"))
                 };
                 if theme::tactical_button(ui, &load_lbl, false, false)
-                    .on_hover_text("Abrir explorador de archivos para cargar un perfil TOML")
+                    .on_hover_text(t!("header-load-profile-tooltip"))
                     .clicked()
                 {
                     self.spawn_file_dialog(ProfileDialogMode::Load);
@@ -543,11 +545,11 @@ impl X56App {
 
                 ui.add_space(6.0);
 
-                // Badge "ACTIVE PROFILE: SPACE_SIM_STARCITIZEN"
+                // Badge ACTIVE PROFILE
                 let prof_badge_text = if screen_w < 900.0 {
                     format!("P: {}", self.active_profile_name)
                 } else {
-                    format!("ACTIVE PROFILE: {}", self.active_profile_name)
+                    format!("{}: {}", t!("header-profile"), self.active_profile_name)
                 };
                 let prof_btn = egui::Button::new(
                     RichText::new(prof_badge_text)
@@ -689,22 +691,22 @@ impl X56App {
             let nav_items = [
                 (
                     ActiveSubsystem::Curves,
-                    format!("{}  Ejes y Curvas", icons::SLIDERS_HORIZONTAL),
+                    format!("{}  {}", icons::SLIDERS_HORIZONTAL, t!("nav-curves")),
                     "HALL 16-BIT & TRANSFER CURVES",
                 ),
                 (
                     ActiveSubsystem::Mapping,
-                    format!("{}  Botones y Mapeo", icons::GAMEPAD),
+                    format!("{}  {}", icons::GAMEPAD, t!("nav-programming")),
                     "UINPUT MATRIX // M1-M2-S1",
                 ),
                 (
                     ActiveSubsystem::RgbCalibrate,
-                    format!("{}  Iluminación RGB & Calibración", icons::LIGHTBULB),
+                    format!("{}  {}", icons::LIGHTBULB, t!("nav-rgb")),
                     "LED PWM & HALL CENTER ZERO",
                 ),
                 (
                     ActiveSubsystem::Profiles,
-                    format!("{}  Perfiles & Exportación", icons::BOXES),
+                    format!("{}  {}", icons::BOXES, t!("nav-doctor")),
                     "TOML PROFILES & SYSTEM DOCTOR",
                 ),
             ];
@@ -876,7 +878,7 @@ impl X56App {
                             // Opción de quedar corriendo en segundo plano al cerrar
                             ui.horizontal(|ui| {
                                 ui.checkbox(&mut self.minimize_to_tray_on_close, "");
-                                let lbl = RichText::new("SEGUNDO PLANO AL CERRAR")
+                                let lbl = RichText::new(t!("sidebar-run-in-background"))
                                     .color(if self.minimize_to_tray_on_close {
                                         COLOR_PRIMARY_CONTAINER
                                     } else {
@@ -885,12 +887,66 @@ impl X56App {
                                     .size(9.0)
                                     .strong()
                                     .monospace();
-                                if ui.add(egui::Label::new(lbl).sense(Sense::click())).clicked() {
-                                    self.minimize_to_tray_on_close = !self.minimize_to_tray_on_close;
+                                if ui
+                                    .add(egui::Label::new(lbl).sense(Sense::click()))
+                                    .clicked()
+                                {
+                                    self.minimize_to_tray_on_close =
+                                        !self.minimize_to_tray_on_close;
                                 }
                             })
                             .response
-                            .on_hover_text("Si está activado, cerrar la ventana mantendrá la aplicación y el mapeo uinput activos en la bandeja del sistema (tray).");
+                            .on_hover_text(t!("sidebar-run-in-background-desc"));
+
+                            ui.add_space(8.0);
+                            ui.separator();
+                            ui.add_space(6.0);
+
+                            // Selector de Idioma (Project Fluent)
+                            ui.horizontal(|ui| {
+                                ui.label(
+                                    RichText::new(format!("{}:", t!("sidebar-language")))
+                                        .color(COLOR_OUTLINE)
+                                        .size(9.5)
+                                        .strong()
+                                        .monospace(),
+                                );
+
+                                let cur_lang = i18n::current_language();
+                                for (lang, label) in
+                                    [(Language::EnUs, "EN"), (Language::EsEs, "ES")]
+                                {
+                                    let is_active = cur_lang == lang;
+                                    let (pill_bg, pill_fg, pill_border) = if is_active {
+                                        (
+                                            COLOR_PRIMARY_CONTAINER,
+                                            COLOR_ON_PRIMARY_CONTAINER,
+                                            COLOR_PRIMARY,
+                                        )
+                                    } else {
+                                        (
+                                            COLOR_SURFACE_CONTAINER,
+                                            COLOR_ON_SURFACE_VARIANT,
+                                            COLOR_OUTLINE_VARIANT,
+                                        )
+                                    };
+
+                                    let btn = egui::Button::new(
+                                        RichText::new(label)
+                                            .color(pill_fg)
+                                            .size(10.0)
+                                            .strong()
+                                            .monospace(),
+                                    )
+                                    .fill(pill_bg)
+                                    .stroke(Stroke::new(1.0, pill_border))
+                                    .corner_radius(CornerRadius::same(4));
+
+                                    if ui.add(btn).clicked() {
+                                        i18n::set_language(lang);
+                                    }
+                                }
+                            });
                         });
                     });
             });

@@ -45,12 +45,12 @@ impl RgbModeScope {
         }
     }
 
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> String {
         match self {
-            Self::M1 => "MODO M1 (VUELO / NAV)",
-            Self::M2 => "MODO M2 (COMBATE)",
-            Self::S1 => "MODO S1 (OPERACIONES)",
-            Self::AllModes => "TODOS LOS MODOS (GLOBAL)",
+            Self::M1 => x56_core::t!("rgb-mode-m1"),
+            Self::M2 => x56_core::t!("rgb-mode-m2"),
+            Self::S1 => x56_core::t!("rgb-mode-s1"),
+            Self::AllModes => x56_core::t!("rgb-mode-global"),
         }
     }
 
@@ -297,6 +297,7 @@ impl RgbTab {
         let color = self.current_rgb_color();
         let target = self.target;
         let hex = self.current_hex();
+        let hex = hex.as_str();
         let mode_lbl = self.selected_mode.short_label();
         let target_desc = match target {
             TargetDevice::All => "Ambos",
@@ -306,17 +307,29 @@ impl RgbTab {
 
         match X56Manager::set_rgb(target, color) {
             Ok(count) => {
+                let count = count.to_string();
+                let count = count.as_str();
                 self.status_message = Some((
-                    format!(
-                        "Color RGB {hex} asignado a [{mode_lbl} // {target_desc}] y aplicado en {count} dispositivo(s)."
+                    x56_core::t!(
+                        "rgb-status-applied",
+                        "hex" => hex,
+                        "mode" => mode_lbl,
+                        "target" => target_desc,
+                        "count" => count
                     ),
                     false,
                 ));
             }
             Err(err) => {
+                let err_str = err.to_string();
+                let err_str = err_str.as_str();
                 self.status_message = Some((
-                    format!(
-                        "Color {hex} guardado en [{mode_lbl} // {target_desc}] (Aviso USB: {err})"
+                    x56_core::t!(
+                        "rgb-status-saved",
+                        "hex" => hex,
+                        "mode" => mode_lbl,
+                        "target" => target_desc,
+                        "err" => err_str
                     ),
                     true,
                 ));
@@ -402,21 +415,18 @@ impl RgbTab {
         // Cabecera principal Avionics Vector
         ui.horizontal_wrapped(|ui| {
             ui.label(
-                RichText::new(format!(
-                    "{} CONTROL DE ILUMINACIÓN LED RGB POR MODO",
-                    icons::PALETTE
-                ))
-                .color(COLOR_PRIMARY)
-                .size(14.0)
-                .strong()
-                .monospace(),
+                RichText::new(format!("{} {}", icons::PALETTE, x56_core::t!("rgb-title")))
+                    .color(COLOR_PRIMARY)
+                    .size(14.0)
+                    .strong()
+                    .monospace(),
             );
 
             ui.separator();
 
             theme::telemetry_badge(
                 ui,
-                "MODO FÍSICO ACTIVO:",
+                &x56_core::t!("rgb-active-hw-mode"),
                 snap.active_mode.as_str(),
                 COLOR_PRIMARY_CONTAINER,
             );
@@ -424,13 +434,11 @@ impl RgbTab {
             if ui
                 .checkbox(
                     &mut self.follow_hardware_mode,
-                    RichText::new("Seguir selector físico")
+                    RichText::new(x56_core::t!("rgb-follow-hw"))
                         .color(COLOR_ON_SURFACE_VARIANT)
                         .size(11.0),
                 )
-                .on_hover_text(
-                    "Cambia automáticamente el modo seleccionado en esta vista al girar la perilla M1/M2/S1 del Throttle",
-                )
+                .on_hover_text(x56_core::t!("rgb-follow-hw-tooltip"))
                 .changed()
                 && self.follow_hardware_mode
             {
@@ -440,11 +448,9 @@ impl RgbTab {
         });
 
         ui.label(
-            RichText::new(
-                "Selecciona un modo (M1, M2, S1) para asignarle su propio color LED RGB. Al girar el selector físico del X56, la iluminación cambiará automáticamente al color guardado de ese modo.",
-            )
-            .color(COLOR_ON_SURFACE_VARIANT)
-            .size(11.5),
+            RichText::new(x56_core::t!("rgb-desc"))
+                .color(COLOR_ON_SURFACE_VARIANT)
+                .size(11.5),
         );
 
         ui.add_space(10.0);
@@ -458,7 +464,7 @@ impl RgbTab {
         theme::sunken_frame().show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.label(
-                    RichText::new("DISPOSITIVO DESTINO:")
+                    RichText::new(x56_core::t!("rgb-target-device"))
                         .color(COLOR_OUTLINE)
                         .size(11.0)
                         .strong()
@@ -466,12 +472,12 @@ impl RgbTab {
                 );
 
                 for (dev, lbl) in [
-                    (TargetDevice::All, "AMBOS (STICK + THROTTLE)"),
-                    (TargetDevice::Stick, "SOLO STICK"),
-                    (TargetDevice::Throttle, "SOLO THROTTLE"),
+                    (TargetDevice::All, x56_core::t!("rgb-target-both")),
+                    (TargetDevice::Stick, x56_core::t!("rgb-target-stick")),
+                    (TargetDevice::Throttle, x56_core::t!("rgb-target-throttle")),
                 ] {
                     let active = self.target == dev;
-                    if theme::tactical_button(ui, lbl, active, false).clicked() {
+                    if theme::tactical_button(ui, &lbl, active, false).clicked() {
                         self.target = dev;
                         self.load_picker_from_selection(profile);
                     }
@@ -623,14 +629,9 @@ impl RgbTab {
 
             // Botón para editar todos los modos a la vez
             let all_selected = self.selected_mode == RgbModeScope::AllModes;
-            if theme::tactical_button(
-                ui,
-                "TODOS LOS MODOS\n(GLOBAL M1+M2+S1)",
-                all_selected,
-                false,
-            )
-            .on_hover_text("Aplicar el mismo color a los tres modos (M1, M2 y S1) simultáneamente")
-            .clicked()
+            if theme::tactical_button(ui, &x56_core::t!("rgb-all-modes-btn"), all_selected, false)
+                .on_hover_text(x56_core::t!("rgb-all-modes-tooltip"))
+                .clicked()
             {
                 self.selected_mode = RgbModeScope::AllModes;
                 self.follow_hardware_mode = false;
@@ -647,10 +648,11 @@ impl RgbTab {
     ) -> bool {
         let mut save_requested = false;
 
+        let mode_label = self.selected_mode.label();
         ui.label(
-            RichText::new(format!(
-                "SELECTOR DE COLOR // {}",
-                self.selected_mode.label()
+            RichText::new(x56_core::t!(
+                "rgb-color-picker-heading",
+                "mode" => &mode_label
             ))
             .color(COLOR_PRIMARY)
             .size(12.5)
@@ -689,26 +691,35 @@ impl RgbTab {
         let rgb = self.current_rgb_color();
 
         ui.label(
-            RichText::new(format!("Rojo  (R): {:3}", rgb.r))
-                .color(COLOR_ON_SURFACE_VARIANT)
-                .size(11.0)
-                .monospace(),
+            RichText::new(x56_core::t!(
+                "rgb-red",
+                "val" => &format!("{:3}", rgb.r)
+            ))
+            .color(COLOR_ON_SURFACE_VARIANT)
+            .size(11.0)
+            .monospace(),
         );
         let r_resp = ui.add(egui::Slider::new(&mut self.color_rgba[0], 0.0..=1.0).text("R"));
 
         ui.label(
-            RichText::new(format!("Verde (G): {:3}", rgb.g))
-                .color(COLOR_ON_SURFACE_VARIANT)
-                .size(11.0)
-                .monospace(),
+            RichText::new(x56_core::t!(
+                "rgb-green",
+                "val" => &format!("{:3}", rgb.g)
+            ))
+            .color(COLOR_ON_SURFACE_VARIANT)
+            .size(11.0)
+            .monospace(),
         );
         let g_resp = ui.add(egui::Slider::new(&mut self.color_rgba[1], 0.0..=1.0).text("G"));
 
         ui.label(
-            RichText::new(format!("Azul  (B): {:3}", rgb.b))
-                .color(COLOR_ON_SURFACE_VARIANT)
-                .size(11.0)
-                .monospace(),
+            RichText::new(x56_core::t!(
+                "rgb-blue",
+                "val" => &format!("{:3}", rgb.b)
+            ))
+            .color(COLOR_ON_SURFACE_VARIANT)
+            .size(11.0)
+            .monospace(),
         );
         let b_resp = ui.add(egui::Slider::new(&mut self.color_rgba[2], 0.0..=1.0).text("B"));
 
@@ -722,24 +733,20 @@ impl RgbTab {
         ui.add_space(10.0);
         ui.horizontal_wrapped(|ui| {
             let apply_lbl = format!(
-                "{} APLICAR A {}",
+                "{} {}",
                 icons::PALETTE,
-                self.selected_mode.short_label()
+                x56_core::t!("rgb-apply-to", "mode" => self.selected_mode.short_label())
             );
             if theme::tactical_button(ui, &apply_lbl, false, true)
-                .on_hover_text(
-                    "Asignar este color al modo seleccionado y enviarlo inmediatamente al hardware USB",
-                )
+                .on_hover_text(x56_core::t!("rgb-apply-tooltip"))
                 .clicked()
             {
                 self.apply_color(profile, monitor);
             }
 
-            let save_lbl = format!("{} GUARDAR EN PERFIL TOML", icons::SAVE);
+            let save_lbl = format!("{} {}", icons::SAVE, x56_core::t!("rgb-save-to-toml"));
             if theme::tactical_button(ui, &save_lbl, false, false)
-                .on_hover_text(
-                    "Guardar los colores de todos los modos (M1, M2, S1) en el archivo de perfil TOML activo",
-                )
+                .on_hover_text(x56_core::t!("rgb-save-tooltip"))
                 .clicked()
             {
                 self.apply_color(profile, monitor);
@@ -757,9 +764,9 @@ impl RgbTab {
         monitor: &ButtonMonitor,
     ) {
         ui.label(
-            RichText::new(format!(
-                "PREAJUSTES TÁCTICOS // {}",
-                self.selected_mode.short_label()
+            RichText::new(x56_core::t!(
+                "rgb-presets-heading",
+                "mode" => self.selected_mode.short_label()
             ))
             .color(COLOR_PRIMARY)
             .size(12.5)
@@ -767,7 +774,7 @@ impl RgbTab {
             .monospace(),
         );
         ui.label(
-            RichText::new("Haz clic en un color para asignarlo al modo seleccionado:")
+            RichText::new(x56_core::t!("rgb-presets-desc"))
                 .color(COLOR_ON_SURFACE_VARIANT)
                 .size(11.0),
         );
@@ -776,56 +783,56 @@ impl RgbTab {
 
         let presets = [
             (
-                "Cyan Rhino (Fábrica)",
+                x56_core::t!("rgb-preset-cyan-rhino"),
                 0x00,
                 0xff,
                 0xff,
                 Color32::from_rgb(0, 255, 255),
             ),
             (
-                "Ámbar Táctico / Naranja",
+                x56_core::t!("rgb-preset-tactical-amber"),
                 0xff,
                 0x66,
                 0x00,
                 Color32::from_rgb(255, 102, 0),
             ),
             (
-                "Rojo Combate Nocturno",
+                x56_core::t!("rgb-preset-night-combat"),
                 0xff,
                 0x11,
                 0x00,
                 Color32::from_rgb(255, 17, 0),
             ),
             (
-                "Púrpura Supercrucero",
+                x56_core::t!("rgb-preset-supercruise"),
                 0x9d,
                 0x4e,
                 0xdd,
                 Color32::from_rgb(157, 78, 221),
             ),
             (
-                "Verde Esmeralda",
+                x56_core::t!("rgb-preset-hud-green"),
                 0x00,
                 0xff,
                 0x44,
                 Color32::from_rgb(0, 255, 68),
             ),
             (
-                "Azul Operaciones / S1",
+                x56_core::t!("rgb-preset-ops-blue"),
                 0x00,
                 0x88,
                 0xff,
                 Color32::from_rgb(0, 136, 255),
             ),
             (
-                "Blanco Puro",
+                x56_core::t!("rgb-preset-pure-white"),
                 0xff,
                 0xff,
                 0xff,
                 Color32::from_rgb(255, 255, 255),
             ),
             (
-                "Apagar Iluminación (Off)",
+                x56_core::t!("rgb-preset-off"),
                 0x00,
                 0x00,
                 0x00,
@@ -838,7 +845,7 @@ impl RgbTab {
                 let (rect, _response) =
                     ui.allocate_exact_size(egui::vec2(20.0, 20.0), egui::Sense::hover());
                 ui.painter().rect_filled(rect, 4.0, preview_col);
-                if theme::tactical_button(ui, name, false, false).clicked() {
+                if theme::tactical_button(ui, &name, false, false).clicked() {
                     self.set_preset(r, g, b, profile, monitor);
                 }
             });
@@ -850,7 +857,7 @@ impl RgbTab {
         ui.add_space(4.0);
 
         ui.label(
-            RichText::new("ESQUEMAS MULTIMODO RÁPIDOS (M1 + M2 + S1):")
+            RichText::new(x56_core::t!("rgb-quick-schemes"))
                 .color(COLOR_OUTLINE)
                 .size(10.5)
                 .strong()
@@ -860,7 +867,7 @@ impl RgbTab {
 
         if theme::tactical_button(
             ui,
-            "Esquema Táctico: M1 Púrpura | M2 Rojo | S1 Azul",
+            &x56_core::t!("rgb-scheme-tactical"),
             false,
             false,
         )
@@ -874,16 +881,11 @@ impl RgbTab {
 
         ui.add_space(3.0);
 
-        if theme::tactical_button(
-            ui,
-            "Esquema Cabina: M1 Verde | M2 Ámbar | S1 Cyan",
-            false,
-            false,
-        )
-        .on_hover_text(
-            "Configura M1=#00ff44 (Crucero), M2=#ff6600 (Alerta) y S1=#00ffff (Aterrizaje)",
-        )
-        .clicked()
+        if theme::tactical_button(ui, &x56_core::t!("rgb-scheme-cockpit"), false, false)
+            .on_hover_text(
+                "Configura M1=#00ff44 (Crucero), M2=#ff6600 (Alerta) y S1=#00ffff (Aterrizaje)",
+            )
+            .clicked()
         {
             self.apply_tactical_tricolor_scheme("#00ff44", "#ff6600", "#00ffff", profile, monitor);
         }
@@ -947,5 +949,13 @@ mod tests {
         tab.target = TargetDevice::All;
         tab.load_picker_from_selection(&profile);
         assert_eq!(tab.current_hex(), "#ff1100");
+    }
+
+    #[test]
+    fn test_rgb_mode_scope_localized_labels() {
+        assert!(!RgbModeScope::M1.label().is_empty());
+        assert!(!RgbModeScope::M2.label().is_empty());
+        assert!(!RgbModeScope::S1.label().is_empty());
+        assert!(!RgbModeScope::AllModes.label().is_empty());
     }
 }

@@ -83,20 +83,20 @@ impl Tray for X56Tray {
             .map(|p| p.clone())
             .unwrap_or_else(|_| "Default".into());
         let uinput_str = if self.uinput_online.lock().map(|g| *g).unwrap_or(true) {
-            "✓ Uinput Daemon: Online"
+            x56_core::t!("tray-uinput-online")
         } else {
-            "✗ Uinput Daemon: Offline"
+            x56_core::t!("tray-uinput-offline")
         };
         let is_vis = self.window_visible.load(Ordering::Relaxed);
         let toggle_label = if is_vis {
-            "Ocultar ventana"
+            x56_core::t!("tray-hide")
         } else {
-            "Mostrar ventana"
+            x56_core::t!("tray-show")
         };
 
         vec![
             StandardItem {
-                label: toggle_label.into(),
+                label: toggle_label,
                 icon_name: "input-gaming".into(),
                 activate: Box::new(|this: &mut Self| {
                     let _ = this.tx.send(TrayCommand::ToggleWindow);
@@ -107,20 +107,20 @@ impl Tray for X56Tray {
             .into(),
             MenuItem::Separator,
             StandardItem {
-                label: format!("Perfil activo: {prof}"),
+                label: x56_core::t!("tray-profile", "name" => &prof),
                 enabled: false,
                 ..Default::default()
             }
             .into(),
             StandardItem {
-                label: uinput_str.into(),
+                label: uinput_str,
                 enabled: false,
                 ..Default::default()
             }
             .into(),
             MenuItem::Separator,
             StandardItem {
-                label: "Cerrar por completo".into(),
+                label: x56_core::t!("tray-quit"),
                 icon_name: "application-exit".into(),
                 activate: Box::new(|this: &mut Self| {
                     let _ = this.tx.send(TrayCommand::Quit);
@@ -335,11 +335,25 @@ fn spawn_x11_xembed_tray(tx: Sender<TrayCommand>, egui_ctx: egui::Context) -> Op
                 Some(out)
             };
 
-            let menu_n_data = png_to_bgra(include_bytes!("../assets/menu_normal.png"));
-            let menu_h0_data = png_to_bgra(include_bytes!("../assets/menu_hover_0.png"));
-            let menu_h1_data = png_to_bgra(include_bytes!("../assets/menu_hover_1.png"));
+            let menu_en_n_data = png_to_bgra(include_bytes!("../assets/menu_en_normal.png"));
+            let menu_en_h0_data = png_to_bgra(include_bytes!("../assets/menu_en_hover_0.png"));
+            let menu_en_h1_data = png_to_bgra(include_bytes!("../assets/menu_en_hover_1.png"));
+
+            let menu_es_n_data = png_to_bgra(include_bytes!("../assets/menu_es_normal.png"));
+            let menu_es_h0_data = png_to_bgra(include_bytes!("../assets/menu_es_hover_0.png"));
+            let menu_es_h1_data = png_to_bgra(include_bytes!("../assets/menu_es_hover_1.png"));
 
             let show_context_menu = |root_x: i16, root_y: i16| {
+                let (menu_n_data, menu_h0_data, menu_h1_data) =
+                    match x56_core::i18n::current_language() {
+                        x56_core::Language::EsEs => {
+                            (&menu_es_n_data, &menu_es_h0_data, &menu_es_h1_data)
+                        }
+                        x56_core::Language::EnUs => {
+                            (&menu_en_n_data, &menu_en_h0_data, &menu_en_h1_data)
+                        }
+                    };
+
                 let (menu_w, menu_h, bgra_n) = match menu_n_data {
                     Some(ref d) => (d.0, d.1, &d.2),
                     None => return,

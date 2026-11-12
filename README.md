@@ -5,137 +5,138 @@
 [![Platform: Linux](https://img.shields.io/badge/platform-Linux-green.svg)]()
 [![Tests: 45 passing](https://img.shields.io/badge/tests-45%20passed-brightgreen.svg)]()
 
-Herramienta moderna, segura y de alto rendimiento en **Rust** para la configuración de iluminación LED RGB, curvas de respuesta de ejes, zonas muertas y calibración de hardware en el sistema HOTAS **Saitek / Mad Catz Pro Flight X-56 Rhino** y **Logitech G X56**.
+A modern, safe, and high-performance **Rust** tool for configuring RGB LED lighting, axis response curves, deadbands, and hardware calibration on the **Saitek / Mad Catz Pro Flight X-56 Rhino** and **Logitech G X56** HOTAS systems.
 
-Diseñada específicamente para operar en Linux **sin privilegios de root (`sudo`)** y **sin desconectar el driver del joystick del kernel (`usbhid`/`joydev`/`evdev`)**, garantizando que simuladores de vuelo y espaciales (*DCS World, X-Plane, Microsoft Flight Simulator, Star Citizen, Elite Dangerous, FlightGear*) sigan recibiendo entradas de ejes y botones ininterrumpidamente mientras se ajusta la configuración en vivo.
-
----
-
-## Índice
-
-- [Características Principales](#características-principales)
-- [Dispositivos Soportados](#dispositivos-soportados)
-- [Mapeo Canónico de Ejes y Rangos](#mapeo-canónico-de-ejes-y-rangos)
-- [Instalación y Paquetes](#instalación-y-paquetes)
-- [Especificación del Formato de Perfiles TOML](#especificación-del-formato-de-perfiles-toml)
-- [Guía de Uso del CLI](#guía-de-uso-del-cli)
-  - [Diagnóstico del Sistema (`x56 doctor`)](#1-diagnóstico-del-sistema-x56-doctor)
-  - [Detección de Dispositivos (`x56 list`)](#2-detección-de-dispositivos-x56-list)
-  - [Iluminación LED RGB (`x56 rgb`)](#3-iluminación-led-rgb-x56-rgb)
-  - [Curvas y Zonas Muertas (`x56 axis`)](#4-curvas-y-zonas-muertas-x56-axis)
-  - [Perfiles TOML (`x56 profile`)](#5-perfiles-toml-x56-profile)
-  - [Programación de Botones y Modos (`x56 buttons`)](#6-programación-de-botones-y-modos-x56-buttons)
-  - [Calibración de Sensores Hall (`x56 calibrate`)](#7-calibración-de-sensores-hall-x56-calibrate)
-  - [Restauración de Fábrica (`x56 reset-defaults`)](#8-restauración-de-fábrica-x56-reset-defaults)
-- [Centro de Control Gráfico (`x56-gui`)](#centro-de-control-gráfico-x56-gui)
-  - [Arquitectura Avionics Vector](#arquitectura-avionics-vector)
-  - [Editor de Curvas con Muestreo en Vivo](#1-editor-de-curvas-con-muestreo-en-vivo)
-  - [Gestor de Iluminación RGB](#2-gestor-de-iluminación-rgb)
-  - [Asistente de Calibración Hall](#3-asistente-de-calibración-hall)
-  - [Diagnóstico del Sistema Integrado](#4-diagnóstico-del-sistema-integrado)
-  - [Programación de Botones y Modos (Sección 8 del Manual)](#5-programación-de-botones-y-modos-sección-8-del-manual)
-  - [Gestión de Perfiles TOML](#6-gestión-de-perfiles-toml)
-- [Especificación del Protocolo Binario HID](#especificación-del-protocolo-binario-hid)
-- [Arquitectura del Workspace](#arquitectura-del-workspace)
-- [Estado del Roadmap](#estado-del-roadmap)
-- [Licencia](#licencia)
+Specifically engineered to operate on Linux **without root privileges (`sudo`)** and **without detaching the kernel joystick driver (`usbhid`/`joydev`/`evdev`)**, ensuring that flight and space simulators (*DCS World, X-Plane, Microsoft Flight Simulator, Star Citizen, Elite Dangerous, FlightGear*) continue receiving uninterrupted axis and button inputs while adjusting configuration live.
 
 ---
 
-## Características Principales
+## Table of Contents
 
-- **Acceso seguro sin root**: Gestionado automáticamente por `logind` y `uaccess` al iniciar sesión.
-- **Control de Iluminación RGB**: Soporte para colores hexadecimales (`#00ffff`), shorthand (`#0ff`) o nombres comunes (`cyan`, `orange`, `red`, `off`, etc.) para Stick, Throttle o ambos periféricos simultáneamente.
-- **Curvas de respuesta de alta resolución**: Rango matemático `0..=1000` (500 = lineal) para saturación X/Y, curvatura y deadband con curvas simétricas (tipo **S**) o progresivas (tipo **J**).
-- **Programación de Botones y Modos (M1/M2/S1 + SLD)**: Asignación de macros y atajos de teclado por modo con seguimiento físico del selector rotativo y emisión en vivo mediante el subsistema Linux `/dev/uinput`.
-- **Gestión de Perfiles en TOML**: Exportación e importación de perfiles completos de configuración (ejes, RGB y programación de botones) en formato legible y versionado.
-- **Calibración Hall no invasiva**: Muestreo pasivo de la posición física central en la Interfaz 0 (`/dev/hidraw*`), cálculo de desviaciones (delta) y modo `--dry-run` seguro sin riesgo de descalibración accidental.
-- **Motor de Diagnóstico (`x56 doctor`)**: Comprobación integral de 6 capas (udev, permisos, hardware USB, hidraw, kernel joydev y handshake de firmware).
-- **Salida dual humana / JSON**: Todas las operaciones admiten `--json` para scripts de automatización, integración continua o interfaces gráficas.
+- [Key Features](#key-features)
+- [Supported Devices](#supported-devices)
+- [Canonical Axis Mapping and Ranges](#canonical-axis-mapping-and-ranges)
+- [Installation and Packaging](#installation-and-packaging)
+- [TOML Profile Format Specification](#toml-profile-format-specification)
+- [CLI User Guide](#cli-user-guide)
+  - [System Diagnostics (`x56 doctor`)](#1-system-diagnostics-x56-doctor)
+  - [Device Detection (`x56 list`)](#2-device-detection-x56-list)
+  - [RGB LED Lighting (`x56 rgb`)](#3-rgb-led-lighting-x56-rgb)
+  - [Curves and Deadbands (`x56 axis`)](#4-curves-and-deadbands-x56-axis)
+  - [TOML Profiles (`x56 profile`)](#5-toml-profiles-x56-profile)
+  - [Button and Mode Programming (`x56 buttons`)](#6-button-and-mode-programming-x56-buttons)
+  - [Hall Sensor Calibration (`x56 calibrate`)](#7-hall-sensor-calibration-x56-calibrate)
+  - [Factory Reset (`x56 reset-defaults`)](#8-factory-reset-x56-reset-defaults)
+- [Graphical Control Center (`x56-gui`)](#graphical-control-center-x56-gui)
+  - [Avionics Vector Architecture](#avionics-vector-architecture)
+  - [Curve Editor with Live Sampling](#1-curve-editor-with-live-sampling)
+  - [RGB Lighting Manager](#2-rgb-lighting-manager)
+  - [Hall Calibration Wizard](#3-hall-calibration-wizard)
+  - [Integrated System Diagnostics](#4-integrated-system-diagnostics)
+  - [Button and Mode Programming (Manual Section 8)](#5-button-and-mode-programming-manual-section-8)
+  - [TOML Profile Management](#6-toml-profile-management)
+- [HID Binary Protocol Specification](#hid-binary-protocol-specification)
+- [Workspace Architecture](#workspace-architecture)
+- [Roadmap Status](#roadmap-status)
+- [License](#license)
 
 ---
 
-## Dispositivos Soportados
+## Key Features
 
-| Fabricante | Periférico | USB VID:PID | Rol / Ejes Principales |
+- **Secure Rootless Operation**: Managed automatically by `logind` and `uaccess` upon user login.
+- **RGB Lighting Control**: Full support for hexadecimal colors (`#00ffff`), shorthand (`#0ff`), or common color names (`cyan`, `orange`, `red`, `off`, etc.) for Stick, Throttle, or both peripherals simultaneously.
+- **High-Resolution Response Curves**: Mathematical range `0..=1000` (500 = linear) for X/Y saturation, curvature, and deadband with symmetric (**S-curve**) or progressive (**J-curve**) profiles.
+- **Button and Mode Programming (M1/M2/S1 + SLD)**: Per-mode macro and keybinding mapping with physical rotary switch tracking and live event emission via the Linux `/dev/uinput` subsystem.
+- **TOML Profile Management**: Export and import complete configuration profiles (axes, RGB, and button programming) in a human-readable, versioned format.
+- **Non-Invasive Hall Calibration**: Passive sampling of physical center position on Interface 0 (`/dev/hidraw*`), offset (delta) calculation, and a safe `--dry-run` mode to prevent accidental miscalibration.
+- **Diagnostic Engine (`x56 doctor`)**: Comprehensive 6-layer system check (udev, permissions, USB hardware, hidraw, kernel joydev, and firmware handshake).
+- **Multilingual Localization (Project Fluent)**: Native English (`en-US`) as the primary locale and Spanish (`es-ES`) with instant live runtime switching across the entire Graphical Control Center and System Tray.
+- **Dual Human / JSON Output**: All operations support `--json` for automation scripts, continuous integration, or graphical frontends.
+
+---
+
+## Supported Devices
+
+| Manufacturer | Peripheral | USB VID:PID | Role / Primary Axes |
 |---|---|---|---|
-| **Saitek / Mad Catz** | Pro Flight X-56 Rhino Stick | `0738:2221` | Palanca principal (Roll, Pitch, Twist/Yaw) |
-| **Saitek / Mad Catz** | Pro Flight X-56 Rhino Throttle | `0738:a221` | Gases duales independientes y 4 rotatorios |
-| **Logitech G** | X56 HOTAS Stick | `046d:c22b` | Palanca principal (versión negra/gris) |
-| **Logitech G** | X56 HOTAS Throttle | `046d:c22a` | Gases duales y rotatorios |
+| **Saitek / Mad Catz** | Pro Flight X-56 Rhino Stick | `0738:2221` | Main stick (Roll, Pitch, Twist/Yaw) |
+| **Saitek / Mad Catz** | Pro Flight X-56 Rhino Throttle | `0738:a221` | Dual independent throttles and 4 rotaries |
+| **Logitech G** | X56 HOTAS Stick | `046d:c22b` | Main stick (black/grey version) |
+| **Logitech G** | X56 HOTAS Throttle | `046d:c22a` | Dual throttles and rotaries |
 
 ---
 
-## Mapeo Canónico de Ejes y Rangos
+## Canonical Axis Mapping and Ranges
 
-El protocolo utiliza los códigos de uso USB HID Generic Desktop (en formato hexadecimal):
+The protocol uses USB HID Generic Desktop usage codes (in hexadecimal format):
 
-### Palanca (Stick)
-| Eje | Nombres aceptados en CLI | ID Hex | ID Dec | Perfil Predeterminado | Deadband de Fábrica |
+### Stick
+| Axis | CLI Accepted Names | Hex ID | Dec ID | Default Profile | Factory Deadband |
 |---|---|---|---|---|---|
-| **X (Roll / Alabeo)** | `x`, `roll` | `0x30` | `48` | `S` (Simétrico) | 60 / 1000 |
-| **Y (Pitch / Cabeceo)** | `y`, `pitch` | `0x31` | `49` | `S` (Simétrico) | 50 / 1000 |
-| **Z (Twist / Guiñada)** | `z`, `yaw`, `twist`, `rudder` | `0x35` | `53` | `S` (Simétrico) | 0 / 1000 |
+| **X (Roll)** | `x`, `roll` | `0x30` | `48` | `S` (Symmetric) | 60 / 1000 |
+| **Y (Pitch)** | `y`, `pitch` | `0x31` | `49` | `S` (Symmetric) | 50 / 1000 |
+| **Z (Twist / Yaw)** | `z`, `yaw`, `twist`, `rudder` | `0x35` | `53` | `S` (Symmetric) | 0 / 1000 |
 
-### Cuadrante de Gases (Throttle)
-| Eje | Nombres aceptados en CLI | ID Hex | ID Dec | Perfil Predeterminado | Deadband de Fábrica |
+### Throttle
+| Axis | CLI Accepted Names | Hex ID | Dec ID | Default Profile | Factory Deadband |
 |---|---|---|---|---|---|
-| **Throttle Left** | `left`, `throttle_left`, `tl`, `t1` | `0x30` | `48` | `J` (Asimétrico/Progresivo) | 0 / 1000 |
-| **Throttle Right** | `right`, `throttle_right`, `tr`, `t2`| `0x31` | `49` | `J` (Asimétrico/Progresivo) | 0 / 1000 |
-| **Rotary 1** | `rotary1`, `r1` | `0x32` | `50` | `S` (Simétrico) | 0 / 1000 |
-| **Rotary 2** | `rotary2`, `r2` | `0x35` | `53` | `S` (Simétrico) | 0 / 1000 |
-| **Rotary 4** | `rotary4`, `r4` | `0x36` | `54` | `S` (Simétrico) | 0 / 1000 |
-| **Rotary 3** | `rotary3`, `r3` | `0x37` | `55` | `S` (Simétrico) | 0 / 1000 |
+| **Throttle Left** | `left`, `throttle_left`, `tl`, `t1` | `0x30` | `48` | `J` (Asymmetric/Progressive) | 0 / 1000 |
+| **Throttle Right** | `right`, `throttle_right`, `tr`, `t2`| `0x31` | `49` | `J` (Asymmetric/Progressive) | 0 / 1000 |
+| **Rotary 1** | `rotary1`, `r1` | `0x32` | `50` | `S` (Symmetric) | 0 / 1000 |
+| **Rotary 2** | `rotary2`, `r2` | `0x35` | `53` | `S` (Symmetric) | 0 / 1000 |
+| **Rotary 4** | `rotary4`, `r4` | `0x36` | `54` | `S` (Symmetric) | 0 / 1000 |
+| **Rotary 3** | `rotary3`, `r3` | `0x37` | `55` | `S` (Symmetric) | 0 / 1000 |
 
-> **Escala de parámetros**: Todos los parámetros de configuración (`xsat`, `ysat`, `deadband`, `curvature`) operan en el rango `0..=1000`. Un valor de `curvature = 500` representa una respuesta lineal 1:1.
+> **Parameter Scaling**: All configuration parameters (`xsat`, `ysat`, `deadband`, `curvature`) operate within the `0..=1000` range. A value of `curvature = 500` represents a 1:1 linear response.
 
 ---
 
-## Instalación y Paquetes
+## Installation and Packaging
 
-### 1. Paquetes Oficiales Precompilados (Releases)
+### 1. Official Precompiled Packages (Releases)
 
-En cada versión publicada en [GitHub Releases](https://github.com/angelgnz/x56linux/releases) se distribuyen binarios y paquetes listos para las principales distribuciones:
+Each release published on [GitHub Releases](https://github.com/angelgnz/x56linux/releases) includes ready-to-use binaries and packages for major Linux distributions:
 
 #### Arch Linux / CachyOS / Manjaro
-Disponible mediante el archivo [`PKGBUILD`](packaging/PKGBUILD) o paquete binario `.pkg.tar.zst`:
+Available via the [`PKGBUILD`](packaging/PKGBUILD) file or prebuilt `.pkg.tar.zst` package:
 ```bash
-# Vía AUR (x56linux-git)
+# Via AUR (x56linux-git)
 paru -S x56linux-git
-# o con yay:
+# or with yay:
 yay -S x56linux-git
 
-# O instalación directa del paquete precompilado:
+# Or direct installation of the precompiled package:
 sudo pacman -U x56linux-*.pkg.tar.zst
 ```
 
 #### Debian / Ubuntu / Linux Mint / Pop!_OS
 ```bash
 sudo dpkg -i x56linux_*_amd64.deb
-sudo apt-get install -f  # Resuelve dependencias si fuera necesario
+sudo apt-get install -f  # Resolves dependencies if needed
 ```
 
 #### Fedora / RHEL / openSUSE
 ```bash
 sudo dnf install ./x56linux-*.x86_64.rpm
-# o en openSUSE:
+# or on openSUSE:
 sudo zypper install ./x56linux-*.x86_64.rpm
 ```
 
-#### Instalador Universal Autónomo (Cualquier Distribución Linux)
-Descarga y descomprime el archivo `x56linux-v*-x86_64.tar.gz`:
+#### Universal Standalone Installer (Any Linux Distribution)
+Download and extract the `x56linux-v*-x86_64.tar.gz` archive:
 ```bash
 tar -xzf x56linux-v*-x86_64.tar.gz
 cd x56linux-v*-x86_64
 sudo ./install.sh
 ```
-*(Para desinstalar en cualquier momento: `sudo ./uninstall.sh`)*.
+*(To uninstall at any time: `sudo ./uninstall.sh`)*.
 
 ---
 
-### 2. Compilación Manual desde Código Fuente
+### 2. Manual Compilation from Source
 
-Requiere el toolchain de Rust estable (Rust 1.75+):
+Requires a stable Rust toolchain (Rust 1.75+):
 
 ```bash
 git clone https://github.com/angelgnz/x56linux.git
@@ -143,15 +144,15 @@ cd x56linux
 cargo build --release
 ```
 
-Los binarios optimizados se generan en `target/release/`:
-- `x56`: Herramienta CLI para scripting, diagnóstico y servicios.
-- `x56-gui`: Centro de control gráfico táctico Avionics Vector.
+Optimized binaries are generated in `target/release/`:
+- `x56`: CLI tool for scripting, diagnostics, and services.
+- `x56-gui`: Avionics Vector tactical graphical control center.
 
 ---
 
-### 3. Regla udev (Acceso sin root)
+### 3. udev Rule (Rootless Access)
 
-Si compilas manualmente (los paquetes `.deb`, `.rpm` y Arch ya lo gestionan automáticamente), instala la regla y recarga udev:
+If compiling manually (the `.deb`, `.rpm`, and Arch packages handle this automatically), install the udev rule and reload udev:
 
 ```bash
 sudo cp packaging/70-x56.rules /etc/udev/rules.d/
@@ -161,37 +162,37 @@ sudo udevadm trigger --subsystem-match=hidraw
 
 ---
 
-## Especificación del Formato de Perfiles TOML
+## TOML Profile Format Specification
 
-Los perfiles de `x56linux` utilizan el formato estándar **TOML (v1)** para serializar la configuración completa del HOTAS en un único archivo legible, versionable y transportable entre simuladores y sistemas.
+`x56linux` profiles use the standard **TOML (v1)** format to serialize the complete HOTAS configuration into a single human-readable, versionable file that is easily transferable between flight simulators and systems.
 
-### Estructura General del Esquema
+### General Schema Structure
 
 ```toml
 version = 1
-name = "Nombre del Perfil"
-description = "Descripción del rol táctico o nave espacial"
+name = "Profile Name"
+description = "Description of tactical role or spacecraft"
 
 [stick]
-rgb = "#ff7700"          # Color hexadecimal (#RRGGBB o #RGB)
-spring = "green"         # Muelle físico ("red", "green", "yellow", "blue")
+rgb = "#ff7700"          # Hexadecimal color (#RRGGBB or #RGB)
+spring = "green"         # Physical spring ("red", "green", "yellow", "blue")
 
 [[stick.axes]]
 name = "X (Roll)"
-axis_id = 48             # ID HID del eje (48 = X, 49 = Y, 53 = Z/Twist)
-xsat = 1000              # Saturación de entrada física (0..=1000)
-ysat = 1000              # Saturación de salida procesada (0..=1000)
-deadband = 30            # Zona muerta central (0..=1000)
-curvature = 620          # Sensibilidad/Curvatura (0..=1000, 500 = lineal 1:1)
-profile = "s"            # "s" (Simétrica / S-Curve) o "j" (Asimétrica progresiva)
-hall_zero = 32768        # Ajuste de punto cero Hall (opcional)
+axis_id = 48             # HID axis ID (48 = X, 49 = Y, 53 = Z/Twist)
+xsat = 1000              # Physical input saturation (0..=1000)
+ysat = 1000              # Processed output saturation (0..=1000)
+deadband = 30            # Center deadband (0..=1000)
+curvature = 620          # Sensitivity/Curvature (0..=1000, 500 = linear 1:1)
+profile = "s"            # "s" (Symmetric / S-Curve) or "j" (Progressive asymmetric)
+hall_zero = 32768        # Hall zero-point offset adjustment (optional)
 
 [throttle]
 rgb = "#ff7700"
 
 [[throttle.axes]]
 name = "Throttle Left"
-axis_id = 48             # 48 = Gas Izq, 49 = Gas Der, 50 = R1, 53 = R2, 54 = R4, 55 = R3
+axis_id = 48             # 48 = Left Throttle, 49 = Right Throttle, 50 = R1, 53 = R2, 54 = R4, 55 = R3
 xsat = 1000
 ysat = 1000
 deadband = 0
@@ -199,282 +200,282 @@ curvature = 500
 profile = "j"
 
 [programming.m1]
-name = "Vuelo y Supercrucero"
-rgb = "#9d4edd"          # Color dinámico LED para este modo (morado cósmico)
+name = "Flight and Supercruise"
+rgb = "#9d4edd"          # Dynamic LED color for this mode (cosmic purple)
 
 [programming.m1.cells.stick_trigger]
 button_id = "stick_trigger"
-name = "Fuego Primario"
+name = "Primary Fire"
 keys = ["Space"]
 
 [programming.m2]
-name = "Combate y Ataque"
-rgb = "#ff1100"          # Rojo alerta de combate
-# stick_rgb = "#ff0000"  # Opcional: anulación específica para el Stick
-# throttle_rgb = "#ff1100" # Opcional: anulación específica para el Throttle
+name = "Combat and Attack"
+rgb = "#ff1100"          # Combat alert red
+# stick_rgb = "#ff0000"  # Optional: specific override for Stick
+# throttle_rgb = "#ff1100" # Optional: specific override for Throttle
 
 [programming.m2.cells.stick_trigger]
 button_id = "stick_trigger"
-name = "Armas de Energía // Modo Combate"
+name = "Energy Weapons // Combat Mode"
 keys = ["Ctrl", "Space"]
 
 [programming.s1]
-name = "Minería y Operaciones"
-rgb = "#0088ff"          # Azul escaneo y minería
+name = "Mining and Operations"
+rgb = "#0088ff"          # Scanning & mining blue
 ```
 
-### Detalle de Campos y Parámetros
+### Field and Parameter Details
 
-| Campo | Tipo | Obligatorio | Descripción |
+| Field | Type | Required | Description |
 |---|---|---|---|
-| `version` | Entero | Sí | Versión del esquema del archivo (actual: `1`). |
-| `name` | String | Sí | Nombre identificador desplegado en la GUI y CLI. |
-| `description` | String | No | Notas o detalles del rol (ej. nave, caza, simulador). |
-| `[stick].rgb` | String | No | Color LED hex por defecto del Stick (ej. `"#ff7700"`, `"#00f0ff"`). |
-| `[stick].spring` | String | No | Muelle físico instalado: `"red"` (52mm), `"green"` (47mm), `"yellow"` (42mm) o `"blue"` (36mm). |
-| `[throttle].rgb` | String | No | Color LED hex por defecto del cuadrante de gases. |
-| `*.axes[].axis_id` | Entero | Sí | Código de uso HID canónico (48=X, 49=Y, 50=R1, 53=Z/R2, 54=R4, 55=R3). |
-| `*.axes[].deadband`| Entero | Sí | Zona muerta central en rango permille `0..=1000`. |
-| `*.axes[].curvature`| Entero | Sí | Curvatura en rango `0..=1000` (`500` = lineal 1:1, `>500` = curva S/exponencial agresiva). |
-| `*.axes[].profile` | String | Sí | Perfil matemático: `"s"` (simétrico / centro cero) o `"j"` (unipolar progresivo para gases). |
-| `programming.<m>` | Tabla | No | Configuración del modo `m1`, `m2` o `s1`. |
-| `programming.<m>.name` | String | No | Nombre descriptivo del modo visible en CLI y GUI (ej. `"Vuelo y Supercrucero"`). |
-| `programming.<m>.rgb` | String | No | Color LED hex dinámico al activar este modo (`"#9d4edd"`, `"#ff1100"`, etc.). Se aplica en automático al girar el selector o al conectar el hardware. |
-| `programming.<m>.stick_rgb` | String | No | Anulación de color LED específica para el Stick en este modo. |
-| `programming.<m>.throttle_rgb` | String | No | Anulación de color LED específica para el Throttle en este modo. |
-| `cells.<id>.keys` | Array | Sí | Secuencia de nombres de teclas para `/dev/uinput` (ej. `["Space"]`, `["Ctrl", "Alt", "Delete"]`). |
+| `version` | Integer | Yes | File schema version (current: `1`). |
+| `name` | String | Yes | Identifying name displayed in the GUI and CLI. |
+| `description` | String | No | Notes or role details (e.g., spacecraft, fighter, simulator). |
+| `[stick].rgb` | String | No | Default stick hex LED color (e.g., `"#ff7700"`, `"#00f0ff"`). |
+| `[stick].spring` | String | No | Installed physical spring: `"red"` (52mm), `"green"` (47mm), `"yellow"` (42mm), or `"blue"` (36mm). |
+| `[throttle].rgb` | String | No | Default throttle quadrant hex LED color. |
+| `*.axes[].axis_id` | Integer | Yes | Canonical HID usage code (48=X, 49=Y, 50=R1, 53=Z/R2, 54=R4, 55=R3). |
+| `*.axes[].deadband`| Integer | Yes | Center deadband in permille range `0..=1000`. |
+| `*.axes[].curvature`| Integer | Yes | Curvature in range `0..=1000` (`500` = linear 1:1, `>500` = aggressive S-curve/exponential). |
+| `*.axes[].profile` | String | Yes | Mathematical profile: `"s"` (symmetric / center-zero) or `"j"` (unipolar progressive for throttles). |
+| `programming.<m>` | Table | No | Configuration for mode `m1`, `m2`, or `s1`. |
+| `programming.<m>.name` | String | No | Descriptive mode name visible in CLI and GUI (e.g., `"Flight and Supercruise"`). |
+| `programming.<m>.rgb` | String | No | Dynamic hex LED color applied when activating this mode (`"#9d4edd"`, `"#ff1100"`, etc.). Applied automatically when switching the physical rotary or connecting hardware. |
+| `programming.<m>.stick_rgb` | String | No | Specific LED color override for Stick in this mode. |
+| `programming.<m>.throttle_rgb` | String | No | Specific LED color override for Throttle in this mode. |
+| `cells.<id>.keys` | Array | Yes | Key name sequence for `/dev/uinput` (e.g., `["Space"]`, `["Ctrl", "Alt", "Delete"]`). |
 
-### Perfiles Oficiales Incluidos en [`examples/`](examples/)
+### Official Profiles Included in [`examples/`](examples/)
 
-- [`default_profile.toml`](examples/default_profile.toml): Perfil lineal 1:1 con valores y zonas muertas estándar de fábrica.
-- [`combat_profile.toml`](examples/combat_profile.toml): Curvas agresivas S-Curve, zonas muertas ajustadas para combate aéreo y espacial (*Star Citizen*, *DCS World*), muelle verde e iluminación táctica naranja.
-- [`elite_dangerous_profile.toml`](examples/elite_dangerous_profile.toml): Perfil completo oficial para **Elite Dangerous**, con muelle verde de 47mm y **colores dinámicos automáticos por modo**:
-  - **Modo M1 — Vuelo Normal / Supercrucero (Morado `#9d4edd`)**: Fuego primario/secundario, boost de motores (`Tab`), FA Off/On (`Z`), distribuidor de energía de 4 vías (`Up`/`Left`/`Right`/`Down`), paneles de cabina 1-4, salto hiperespacial FSD (`J`), supercrucero (`K`), tren de aterrizaje (`L`), colector de carga (`Home`), luces (`Insert`), visión nocturna (`Delete`) y anclajes en `thr_sld` (`U`).
-  - **Modo M2 — Combate Táctico / Ataque (Rojo `#ff1100`)**: Contramedidas activas (Chaff, Heat Sink, Shield Cell Bank, ECM, Silent Running), selección de subsistemas y mayor amenaza.
-  - **Modo S1 — Operaciones de Superficie / Minería / SRV (Azul `#0088ff`)**: Despliegue de bahía de carga, láseres mineros, freno de mano SRV, torreta, escáner de composición y conducción planetaria.
+- [`default_profile.toml`](examples/default_profile.toml): Linear 1:1 profile with factory-standard values and deadbands.
+- [`combat_profile.toml`](examples/combat_profile.toml): Aggressive S-curves, tight deadbands for atmospheric and space combat (*Star Citizen*, *DCS World*), green spring, and tactical orange illumination.
+- [`elite_dangerous_profile.toml`](examples/elite_dangerous_profile.toml): Complete official profile for **Elite Dangerous**, featuring a 47mm green spring and **automatic dynamic colors per mode**:
+  - **Mode M1 — Normal Flight / Supercruise (Purple `#9d4edd`)**: Primary/secondary fire, engine boost (`Tab`), FA Off/On (`Z`), 4-way power distributor (`Up`/`Left`/`Right`/`Down`), cockpit UI panels 1-4, FSD hyperspace jump (`J`), supercruise (`K`), landing gear (`L`), cargo scoop (`Home`), ship lights (`Insert`), night vision (`Delete`), and hardpoints on `thr_sld` (`U`).
+  - **Mode M2 — Tactical Combat / Attack (Red `#ff1100`)**: Active countermeasures (Chaff, Heat Sink, Shield Cell Bank, ECM, Silent Running), subsystem targeting, and highest-threat lock.
+  - **Mode S1 — Surface Operations / Mining / SRV (Blue `#0088ff`)**: Cargo scoop deployment, mining lasers, SRV handbrake, turret mode, composition scanner, and planetary driving.
 
 ---
 
-## Guía de Uso del CLI
+## CLI User Guide
 
-### 1. Diagnóstico del Sistema (`x56 doctor`)
+### 1. System Diagnostics (`x56 doctor`)
 
-Verifica en un solo paso que tu sistema cumpla todos los requisitos:
+Verify in a single step that your system meets all requirements:
 
 ```bash
 x56 doctor
 ```
 
-Salida típica:
+Typical output:
 ```text
-Diagnóstico del Sistema Saitek / Logitech X56 (x56 doctor)
-==========================================================
-✓ [OK]   Regla udev para acceso sin root: Regla activa y completa en /etc/udev/rules.d/70-x56.rules
-✓ [OK]   Grupo 'input': El usuario actual pertenece al grupo 'input' (acceso headless garantizado)
-✓ [OK]   Periféricos HOTAS detectados: Detectados: Stick: CONECTADO, Throttle: CONECTADO
-✓ [OK]   Permisos de lectura y escritura: Acceso concedido sin root en todos los nodos hidraw (4 nodos verificados)
-✓ [OK]   Driver de joystick del kernel (Interfaz 0): Nodos /dev/input/js* presentes; simuladores de vuelo recibirán ejes continuamente
-✓ [OK]   Handshake con firmware X56 (Interfaz 2): Comunicación bidireccional confirmada en 2 dispositivo(s)
-----------------------------------------------------------
-Resumen: 6 OK, 0 advertencias, 0 fallos.
-Estado del sistema: 100% OPERATIVO.
+Saitek / Logitech X56 System Diagnostics (x56 doctor)
+======================================================
+✓ [OK]   udev rule for rootless access: Active and complete rule in /etc/udev/rules.d/70-x56.rules
+✓ [OK]   'input' group: Current user belongs to 'input' group (headless access guaranteed)
+✓ [OK]   HOTAS peripherals detected: Detected: Stick: CONNECTED, Throttle: CONNECTED
+✓ [OK]   Read and write permissions: Rootless access granted across all hidraw nodes (4 nodes verified)
+✓ [OK]   Kernel joystick driver (Interface 0): /dev/input/js* nodes present; flight simulators will receive axes continuously
+✓ [OK]   X56 firmware handshake (Interface 2): Bidirectional communication confirmed on 2 device(s)
+------------------------------------------------------
+Summary: 6 OK, 0 warnings, 0 failures.
+System status: 100% OPERATIONAL.
 ```
 
-### 2. Detección de Dispositivos (`x56 list`)
+### 2. Device Detection (`x56 list`)
 
-Lista los dispositivos X56 detectados exclusivamente sobre la Interfaz 2:
+Lists detected X56 devices exclusively on Interface 2:
 
 ```bash
 x56 list
 x56 list --json
 ```
 
-### 3. Iluminación LED RGB (`x56 rgb`)
+### 3. RGB LED Lighting (`x56 rgb`)
 
-Control de iluminación LED en Stick, Throttle o ambos:
+Control LED lighting on Stick, Throttle, or both:
 
 ```bash
-# Color cian de fábrica en ambos dispositivos
+# Factory default cyan color on both devices
 x56 rgb cyan
 
-# Ajustar Stick en cian y Throttle en naranja mediante código hexadecimal
+# Set Stick to cyan and Throttle to orange using hex codes
 x56 rgb --device stick '#00ffff'
 x56 rgb --device throttle '#ff5500'
 
-# Apagar iluminación por completo
+# Turn off lighting completely
 x56 rgb off
 ```
 
-### 4. Curvas y Zonas Muertas (`x56 axis`)
+### 4. Curves and Deadbands (`x56 axis`)
 
-#### Consultar la configuración actual de un eje:
+#### Query the current axis configuration:
 ```bash
-# Ejes de la palanca
+# Stick axes
 x56 axis get --device stick --axis x
 x56 axis get --device stick --axis y
 x56 axis get --device stick --axis z --json
 
-# Ejes de los gases
+# Throttle axes
 x56 axis get --device throttle --axis left
 x56 axis get --device throttle --axis r1
 ```
 
-#### Modificar parámetros de un eje:
+#### Modify axis parameters:
 ```bash
-# Ajustar zona muerta a 65 y curvatura a 520 en el eje X del Stick
+# Set deadband to 65 and curvature to 520 on Stick X axis
 x56 axis set --device stick --axis x --deadband 65 --curvature 520
 
-# Cambiar curva del acelerador izquierdo a progresiva (J)
+# Change left throttle curve to progressive (J)
 x56 axis set --device throttle --axis left --curvature 480 --profile j
 ```
 
-### 5. Perfiles TOML (`x56 profile`)
+### 5. TOML Profiles (`x56 profile`)
 
-#### Exportar configuración actual del hardware:
+#### Export current hardware configuration:
 ```bash
-x56 profile save mi_perfil.toml --name "DCS Hornet" --stick-rgb '#00ffff' --throttle-rgb '#ff5500'
+x56 profile save my_profile.toml --name "DCS Hornet" --stick-rgb '#00ffff' --throttle-rgb '#ff5500'
 ```
 
-#### Cargar y aplicar un perfil:
+#### Load and apply a profile:
 ```bash
-x56 profile load mi_perfil.toml
-x56 profile load mi_perfil.toml --json
+x56 profile load my_profile.toml
+x56 profile load my_profile.toml --json
 ```
 
-En la carpeta [`examples/`](examples/) se incluyen perfiles de muestra listos para usar:
-- [`default_profile.toml`](examples/default_profile.toml): Curvas lineales y zonas muertas de fábrica.
-- [`combat_profile.toml`](examples/combat_profile.toml): Zonas muertas reducidas, curvas agresivas para combate y LEDs naranja táctico.
-- [`elite_dangerous_profile.toml`](examples/elite_dangerous_profile.toml): Perfil completo oficial para Elite Dangerous (3 modos de vuelo e iluminación ámbar HUD `#ff7700`).
+Ready-to-use sample profiles are included in the [`examples/`](examples/) directory:
+- [`default_profile.toml`](examples/default_profile.toml): Factory linear curves and standard deadbands.
+- [`combat_profile.toml`](examples/combat_profile.toml): Tight deadbands, aggressive curves for combat, and tactical orange LEDs.
+- [`elite_dangerous_profile.toml`](examples/elite_dangerous_profile.toml): Full official profile for Elite Dangerous (3 flight modes and HUD amber lighting `#ff7700`).
 
-#### Estructura de la tabla `[programming]` en los perfiles:
-Los perfiles TOML pueden incluir la sección `[programming]` para configurar asignaciones de teclas y macros en los tres modos del selector rotativo (`m1`, `m2`, `s1`):
+#### Structure of the `[programming]` table in profiles:
+TOML profiles can include the `[programming]` section to configure key assignments and macros across the three rotary switch modes (`m1`, `m2`, `s1`):
 
 ```toml
 [programming.m1.cells.stick_trigger]
 button_id = "stick_trigger"
-name = "Fuego Primario"
+name = "Primary Fire"
 keys = ["Space"]
 
 [programming.m2.cells.stick_trigger]
 button_id = "stick_trigger"
-name = "Misil Aire-Aire"
+name = "Air-to-Air Missile"
 keys = ["Ctrl", "Space"]
 
 [programming.s1.cells.thr_sw_1]
 button_id = "thr_sw_1"
-name = "Tren de Aterrizaje"
+name = "Landing Gear"
 keys = ["G"]
 
 [programming.s1.cells.thr_sld]
 button_id = "thr_sld"
-name = "Aerofrenos"
+name = "Speedbrakes"
 keys = ["B"]
 ```
 
-### 6. Programación de Botones y Modos (`x56 buttons`)
+### 6. Button and Mode Programming (`x56 buttons`)
 
-Permite inspeccionar el catálogo de botones físicos, consultar el estado en vivo del hardware, asociar combinaciones de teclas en perfiles TOML y ejecutar el monitor en segundo plano para emitir pulsaciones mediante `/dev/uinput`.
+Allows inspecting the physical button catalog, checking live hardware status, binding key combinations in TOML profiles, and running the background monitor to emit keystrokes via `/dev/uinput`.
 
-#### Listar catálogo de botones (`x56 buttons list`):
-Muestra el catálogo completo de controles asignables con su ID estable, código de sección del manual, código Linux evdev y grupo funcional:
+#### List button catalog (`x56 buttons list`):
+Displays the full catalog of assignable controls with their stable ID, manual section code, Linux evdev code, and functional group:
 ```bash
-# Listar todos los botones (Stick y Throttle)
+# List all buttons (Stick and Throttle)
 x56 buttons list
 
-# Filtrar únicamente los botones de la palanca o del acelerador
+# Filter stick or throttle buttons only
 x56 buttons list --device stick
 x56 buttons list --device throttle
 
-# Exportar catálogo en formato JSON
+# Export catalog in JSON format
 x56 buttons list --json
 ```
 
-#### Consultar estado en vivo del hardware (`x56 buttons status`):
-Lee pasivamente vía evdev la posición física actual del selector rotativo de modo F (`M1`, `M2`, `S1`), el estado del deslizador `SLD` y los botones actualmente pulsados:
+#### Check live hardware status (`x56 buttons status`):
+Passively reads the current physical position of mode switch F (`M1`, `M2`, `S1`), `SLD` slider state, and currently pressed buttons via evdev:
 ```bash
 x56 buttons status
 x56 buttons status --json
 ```
 
-Salida típica:
+Typical output:
 ```text
-Estado del Hardware X56
-========================
-Dispositivos conectados: Stick [SÍ], Throttle [SÍ]
-Modo físico activo     : M1 (Modo 1: Navegación / Estándar)
-Control deslizante SLD : INACTIVO (OFF)
-Botones pulsados       : ninguno
+X56 Hardware Status
+===================
+Connected devices      : Stick [YES], Throttle [YES]
+Active physical mode   : M1 (Mode 1: Navigation / Standard)
+SLD slider switch      : INACTIVE (OFF)
+Pressed buttons        : none
 ```
 
-#### Asignar teclas a un botón en un modo (`x56 buttons bind`):
-Asocia atajos de teclado o comandos a un botón específico en cualquiera de los tres modos (`m1`, `m2`, `s1`) y comete los cambios en el archivo TOML indicado:
+#### Bind keys to a button in a mode (`x56 buttons bind`):
+Binds key shortcuts or commands to a specific button in any of the three modes (`m1`, `m2`, `s1`) and commits the changes to the specified TOML file:
 ```bash
-# Asignar la barra espaciadora al gatillo en Modo 1 (M1)
-x56 buttons bind --file mi_perfil.toml --mode m1 --button stick_trigger --keys "Space" --name "Fuego Primario"
+# Bind Spacebar to trigger in Mode 1 (M1)
+x56 buttons bind --file my_profile.toml --mode m1 --button stick_trigger --keys "Space" --name "Primary Fire"
 
-# Asignar combinación de modificadores en Modo 2 (M2)
-x56 buttons bind --file mi_perfil.toml --mode m2 --button stick_btn_a --keys "Ctrl+Shift+F" --name "Contramedidas"
+# Bind modifier combination in Mode 2 (M2)
+x56 buttons bind --file my_profile.toml --mode m2 --button stick_btn_a --keys "Ctrl+Shift+F" --name "Countermeasures"
 
-# Asignar tecla G al conmutador TGL 1 en Modo Especial (S1)
-x56 buttons bind --file mi_perfil.toml --mode s1 --button thr_sw_1 --keys "G" --name "Tren de Aterrizaje"
+# Bind G key to TGL 1 switch in Special Mode (S1)
+x56 buttons bind --file my_profile.toml --mode s1 --button thr_sw_1 --keys "G" --name "Landing Gear"
 
-# Asignar aerofrenos al deslizador de 2 posiciones SLD
-x56 buttons bind --file mi_perfil.toml --mode s1 --button thr_sld --keys "B" --name "Aerofrenos"
+# Bind speedbrakes to the 2-position SLD slider
+x56 buttons bind --file my_profile.toml --mode s1 --button thr_sld --keys "B" --name "Speedbrakes"
 ```
 
-> **Sintaxis de teclas**: Se admiten combinaciones separadas por `+` o `,` (p. ej. `Ctrl+Alt+Delete`, `Shift+F2`, `Space`, `Enter`, `Escape`, `Up`, `Down`, `A..Z`, `0..9`).
+> **Key Syntax**: Combinations separated by `+` or `,` are supported (e.g., `Ctrl+Alt+Delete`, `Shift+F2`, `Space`, `Enter`, `Escape`, `Up`, `Down`, `A..Z`, `0..9`).
 
-#### Ejecutar monitor de emisión en vivo (`x56 buttons run`):
-Carga un perfil TOML, crea un teclado virtual Linux mediante `/dev/uinput` y monitoriza el hardware a 50 Hz. Al presionar los botones físicos, emite instantáneamente las pulsaciones configuradas según la posición física real del selector rotativo de modo (`M1`, `M2`, `S1`):
+#### Run live emission monitor (`x56 buttons run`):
+Loads a TOML profile, creates a virtual Linux keyboard via `/dev/uinput`, and monitors hardware at 50 Hz. When physical buttons are pressed, it instantly emits the configured keystrokes according to the actual physical position of the mode selector (`M1`, `M2`, `S1`):
 ```bash
-x56 buttons run mi_perfil.toml
+x56 buttons run my_profile.toml
 ```
 
-Salida en ejecución:
+Runtime output:
 ```text
-Perfil 'DCS Hornet' activo: 8 asignación(es). Ctrl+C para salir.
-Modo actual: M1 - Modo 1 (Navegación / Estándar)
-[M1] stick_trigger (Gatillo) -> Space
+Profile 'DCS Hornet' active: 8 binding(s). Press Ctrl+C to exit.
+Current mode: M1 - Mode 1 (Navigation / Standard)
+[M1] stick_trigger (Trigger) -> Space
 [M1] thr_sld (SLD) -> B
-Modo -> M2 - Modo 2 (Combate / Ataque)
-[M2] stick_trigger (Gatillo) -> Ctrl + Space
+Mode -> M2 - Mode 2 (Combat / Attack)
+[M2] stick_trigger (Trigger) -> Ctrl + Space
 ```
 
-### 7. Calibración de Sensores Hall (`x56 calibrate`)
+### 7. Hall Sensor Calibration (`x56 calibrate`)
 
-Muestrea pasivamente la posición central del joystick a través de la Interfaz 0 (sin alterar el driver) y calcula el ajuste exacto del punto cero del sensor Hall:
+Passively samples the joystick center position via Interface 0 (without modifying the kernel driver) and calculates the exact zero-point adjustment for the Hall effect sensor:
 
 ```bash
-# Modo simulación (Dry-Run): Muestra los valores calculados sin escribir en la EEPROM
+# Simulation mode (Dry-Run): Displays calculated values without writing to EEPROM
 x56 calibrate stick --dry-run
 
-# Aplicar calibración física real promediando 100 muestras
+# Apply real physical calibration averaging 100 samples
 x56 calibrate stick --samples 100
 ```
 
-Salida de ejemplo:
+Example output:
 ```text
-Calibración de Sensores de Efecto Hall (Stick X e Y)
-====================================================
-MODO ACTIVO: Puntos cero aplicados y guardados en el hardware.
-Muestras analizadas: 100 paquetes desde la Interfaz 0 (solo lectura)
+Hall Effect Sensor Calibration (Stick X and Y)
+==============================================
+ACTIVE MODE: Zero points applied and stored in hardware.
+Samples analyzed: 100 packets from Interface 0 (read-only)
 
 • X (Roll)
-  Punto cero anterior  : 0x8859 (34905)
-  Punto cero muestreado: 0x7f40 (32576)
-  Ajuste (Delta)       : -2329
-  Estado               : APLICADO
+  Previous zero point : 0x8859 (34905)
+  Sampled zero point  : 0x7f40 (32576)
+  Adjustment (Delta)  : -2329
+  Status              : APPLIED
 
 • Y (Pitch)
-  Punto cero anterior  : 0x83f7 (33783)
-  Punto cero muestreado: 0x8737 (34615)
-  Ajuste (Delta)       : +832
-  Estado               : APLICADO
+  Previous zero point : 0x83f7 (33783)
+  Sampled zero point  : 0x8737 (34615)
+  Adjustment (Delta)  : +832
+  Status              : APPLIED
 ```
 
-### 8. Restauración de Fábrica (`x56 reset-defaults`)
+### 8. Factory Reset (`x56 reset-defaults`)
 
-Restaura los valores de curva y deadband predeterminados por el fabricante:
+Restores manufacturer default curve and deadband values:
 
 ```bash
 x56 reset-defaults --device all
@@ -482,112 +483,112 @@ x56 reset-defaults --device all
 
 ---
 
-## Centro de Control Gráfico (`x56-gui`)
+## Graphical Control Center (`x56-gui`)
 
-`x56-gui` es una interfaz gráfica moderna, nativa y de modo inmediato construida con **egui / eframe** y **egui_plot**. Se ejecuta a 30+ FPS en X11 o Wayland con renderizado OpenGL acelerado.
+`x56-gui` is a modern, native immediate-mode graphical interface built with **egui / eframe** and **egui_plot**. It runs at 30+ FPS on X11 or Wayland with hardware-accelerated OpenGL rendering.
 
 ```bash
-# Lanzar la aplicación gráfica
+# Launch the graphical application
 x56-gui
 
-# O compilar y ejecutar directamente con Cargo
+# Or build and run directly with Cargo
 cargo run -p x56-gui --release
 ```
 
-### Arquitectura Avionics Vector
-La interfaz incorpora una estética táctica de cabina militar inspirada en sistemas HUD e instrumentos de vuelo:
-- **HeaderBar Táctico (48 px)**: Franja superior limpia y minimalista sin decoraciones de ventana redundantes (los controles de cerrar, minimizar y maximizar son delegados limpiamente al gestor de ventanas del sistema operativo y entornos de mosaico/tiling), integrando el selector de perfiles TOML, indicadores rápidos de conexión y el conmutador de inyección `/dev/uinput` (*Diana Azul*).
-- **Sidebar de Navegación Lateral (256 px)**: Acceso directo con iconos tácticos a todas las herramientas: Curvas de Ejes, Iluminación RGB, Calibración Hall, Programación de Botones y Diagnóstico Doctor.
-- **Dock Inferior de Hardware**: Barra de telemetría que expone en tiempo real los nodos `/dev/hidraw*` activos, estado del bus USB y el **Selector de Muelle Físico** (`PhysicalSpring`):
-  - 🔴 **Rojo (52 mm)**: Extra Fuerte / Máxima Resistencia.
-  - 🟢 **Verde (47 mm)**: Fuerte / Resistencia Estándar (Recomendado).
-  - 🟡 **Amarillo (42 mm)**: Medio / Resistencia Moderada.
-  - 🔵 **Azul (36 mm)**: Suave / Resistencia Ligera.
+### Avionics Vector Architecture
+The interface features a military cockpit tactical aesthetic inspired by HUD systems and flight instruments:
+- **Tactical HeaderBar (48 px)**: Clean, minimalist top bar without redundant window decorations (close, minimize, and maximize controls are cleanly delegated to the OS window manager and tiling environments), integrating the TOML profile selector, rapid connection indicators, and the `/dev/uinput` injection toggle (*Blue Target*).
+- **Navigation Sidebar (256 px)**: Quick access with tactical icons to all tools: Axis Curves, RGB Lighting, Hall Calibration, Button Programming, and Doctor Diagnostics.
+- **Hardware Bottom Dock**: Real-time telemetry bar displaying active `/dev/hidraw*` nodes, USB bus state, and the **Physical Spring Selector** (`PhysicalSpring`):
+  - 🔴 **Red (52 mm)**: Extra Strong / Maximum Resistance.
+  - 🟢 **Green (47 mm)**: Strong / Standard Resistance (Recommended).
+  - 🟡 **Yellow (42 mm)**: Medium / Moderate Resistance.
+  - 🔵 **Blue (36 mm)**: Soft / Light Resistance.
 
-El muelle seleccionado se almacena y serializa automáticamente dentro del perfil TOML activo (`spring = "green"`).
+The selected spring is automatically stored and serialized within the active TOML profile (`spring = "green"`).
 
-### 1. Editor de Curvas con Muestreo en Vivo
-- **Visualización 2D reactiva**: Dibuja la función de transferencia matemática real calculando en tiempo real las transformaciones de curvatura (S/J), saturación X/Y y zona muerta (deadband).
-- **Entrada física en vivo**: Un hilo poller en segundo plano lee pasivamente los reportes HID de la **Interfaz 0** (`/dev/hidraw*`) sin detach del driver del kernel, graficando un punto rojo animado en la posición exacta del joystick.
-- **Controles interactivos**: Sliders para curvatura (`0..1000`), deadband (`0..1000`), saturación X/Y (`0..1000`) y selector de perfil (Simétrico S vs Progresivo J).
-- **Botones de acción inmediata**:
-  - `Aplicar al Hardware`: Escribe y comete la configuración en la EEPROM del periférico.
-  - `Leer del Hardware`: Refresca los controles leyendo la configuración actual del firmware.
-  - `Valores Lineales (1:1)`: Restablece rápidamente la curva a respuesta pura sin zona muerta.
+### 1. Curve Editor with Live Sampling
+- **Reactive 2D Visualization**: Plots the mathematical transfer function in real time, calculating curvature transformations (S/J), X/Y saturation, and deadband.
+- **Live Physical Input**: A background poller thread passively reads HID reports from **Interface 0** (`/dev/hidraw*`) without detaching the kernel driver, displaying an animated red dot at the exact physical stick position.
+- **Interactive Controls**: Sliders for curvature (`0..1000`), deadband (`0..1000`), X/Y saturation (`0..1000`), and profile selector (Symmetric S vs Progressive J).
+- **Immediate Action Buttons**:
+  - `Apply to Hardware`: Writes and commits configuration to peripheral EEPROM.
+  - `Read from Hardware`: Refreshes controls by reading current firmware settings.
+  - `Linear (1:1) Values`: Quickly resets curve to 1:1 response with zero deadband.
 
-### 2. Gestor de Iluminación RGB
-- Selector de color visual integrado (Color Picker RGB).
-- Previsualización en tiempo real y aplicación instantánea en hardware.
-- Sincronización automática opcional entre Stick y Throttle con un solo clic.
-- Paleta de presets rápidos: *Rhino Cyan, Neon Green, Solar Orange, Deep Red, Pure White, Royal Purple, Stealth (Off)*.
+### 2. RGB Lighting Manager
+- Integrated visual color picker (RGB Color Picker).
+- Real-time preview and instant hardware application.
+- Optional single-click synchronization between Stick and Throttle.
+- Quick preset palette: *Rhino Cyan, Neon Green, Solar Orange, Deep Red, Pure White, Royal Purple, Stealth (Off)*.
 
-### 3. Asistente de Calibración Hall
-- Wizard guiado paso a paso para eliminar el centrado imperfecto y la deriva física en los sensores de Efecto Hall (ejes X e Y del Stick).
-- Muestreo pasivo de 50 paquetes del centro físico sin interferir con simuladores activos.
-- Cálculo de desviación (Delta) y evaluación de umbral de deriva (< 1000 = Excelente, 1000..3000 = Aceptable, > 3000 = Desviación Alta).
-- Modo seguro `--dry-run` para previsualizar antes de cometer en la EEPROM.
+### 3. Hall Calibration Wizard
+- Step-by-step guided wizard to eliminate off-center bias and physical drift on Hall Effect sensors (Stick X and Y axes).
+- Passive 50-packet center sampling without interfering with active simulators.
+- Deviation (Delta) calculation and drift threshold evaluation (< 1000 = Excellent, 1000..3000 = Acceptable, > 3000 = High Deviation).
+- Safe `--dry-run` mode to preview values before committing to EEPROM.
 
-### 4. Diagnóstico del Sistema Integrado
-- Panel visual de comprobación del estado del sistema en tiempo real.
-- Inspección de 6 capas: permisos udev, nodos `/dev/hidraw*`, detección de periféricos USB, soporte de simulador (`/dev/input/js*`) y handshake bidireccional con el firmware.
+### 4. Integrated System Diagnostics
+- Visual dashboard for real-time system health checks.
+- 6-layer inspection: udev permissions, `/dev/hidraw*` nodes, USB device detection, simulator support (`/dev/input/js*`), and bidirectional firmware handshake.
 
-### 5. Programación de Botones y Modos (Sección 8 del Manual)
-Inspirada directamente en la **Sección 8 del Manual de Usuario Oficial Logitech G X56 HOTAS**, esta pestaña proporciona un entorno profesional para la creación de perfiles de asignación de comandos, macros y combinaciones de teclas con soporte completo para los tres modos del selector rotativo (`M1`, `M2`, `S1`) y el control deslizante `SLD`.
+### 5. Button and Mode Programming (Manual Section 8)
+Directly inspired by **Section 8 of the Official Logitech G X56 HOTAS User Manual**, this tab provides a professional environment for creating command mappings, macros, and keybindings with full support for the three rotary mode positions (`M1`, `M2`, `S1`) and the `SLD` slider switch.
 
-- **Esquema Técnico Interactivo 2D con `egui::Painter`**:
-  - Dibuja diagramas esquemáticos vectoriales de alta legibilidad técnica para el Stick y el Throttle organizados por las secciones del manual del fabricante:
-    - **Stick**: Sección A (*POV 8-Way*), Sección B (*Minipalanca analógica Push C*), Sección C (*Selectores Thumb HAT H1 Witches y H2 Castle*), Sección D (*Gatillo principal y Botones A, B, D*), Sección F (*Palanca Meñique Pinkie*).
-    - **Throttle**: Sección A (*Giratorios F/G Push y Rueda Scroll*), Sección B (*Control deslizante de 2 posiciones SLD*), Sección C (*Botones E, H, I, Minipalanca Push y HATs H3 y H4*), Sección D (*Empuñaduras dobles gemelas*), Sección F (*Selector rotativo de modo M1/M2/S1*), Sección G (*Conmutadores de base TGL 1 a 7 con SW 1 a 14*).
-  - **Retroalimentación luminosa en vivo**:
-    - **Verde Neón**: Se ilumina instantáneamente al pulsar físicamente el botón en el hardware.
-    - **Cian Brillante**: Se resalta cuando el ratón pasa por encima de la celda de comando o del nodo correspondiente.
-    - **Ámbar**: Indica que el botón ya cuenta con una tecla o comando asignado en el modo actualmente visible.
-  - **Interacción directa**: Al hacer clic sobre cualquier nodo del esquema se abre inmediatamente la celda correspondiente para su edición.
-- **Celdas de Comandos (Command Cells) por Modo (`M1`, `M2`, `S1`)**:
-  - Organizadas por grupos funcionales con filtro desplegable y contador de asignaciones.
-  - Visualización mediante **mosaicos (tiles blancos de alto contraste)** para cada tecla asignada (p. ej. `[LShift] + [F2]`).
-  - **Modo edición interactivo**: Al hacer clic en una celda, muestra un cursor parpadeante (`▌ Esperando pulsación de teclado...`), captura en tiempo real cualquier tecla presionada en el teclado (incluyendo modificadores `Ctrl`, `Shift`, `Alt`, teclas de función `F1..F12`, `Space`, `Enter`, `Tab`, `Escape`, flechas de dirección y teclas alfanuméricas), permite bautizar el comando (ej. *"Tren de aterrizaje"*) y confirmar con la marca de verificación verde (`✔`) o descartar con la cruz roja (`✖`).
-- **Seguimiento Automático del Selector Rotativo F y Deslizante SLD**:
-  - Muestreo en tiempo real a 50 Hz mediante evdev.
-  - **Sincronización física**: Al activar la opción *"🔄 Seguir selector físico M1/M2/S1"*, el editor cambia automáticamente entre los modos `M1`, `M2` y `S1` cuando el piloto gira físicamente el conmutador rotativo del cuadrante de gases.
-  - Badges luminosos en la barra superior indicando el modo físico activo y el estado del control deslizante `SLD` (`ACTIVO (ON)` / `INACTIVO (OFF)`).
-- **Activación de Emisión "Diana Azul" vía `/dev/uinput`**:
-  - Botón prominente en la barra de herramientas que activa o pausa la inyección real de teclas al sistema operativo.
-  - Cuando está activa la "Diana Azul", cualquier pulsación en los botones del X56 dispara instantáneamente los atajos de teclado asociados a través del controlador virtual `/dev/uinput`.
-  - Muestra avisos visuales claros sobre la disponibilidad y permisos del módulo `uinput`.
-- **Ventana Modal de Prueba ("Probar Perfil")**:
-  - Accesible desde el icono de engranaje `⚙️ Probar Perfil`.
-  - Monitoriza en vivo todos los comandos disparados con registro de hora local (`HH:MM:SS`), modo activo, botón físico presionado, nombre del comando, mosaico de teclas emitidas y verificación de estado `uinput`.
-  - Incluye un campo de texto interactivo para comprobar de inmediato que las teclas se escriben y emiten correctamente en el sistema sin necesidad de abrir una aplicación externa.
+- **Interactive 2D Technical Schematic with `egui::Painter`**:
+  - Renders highly legible technical vector schematics for Stick and Throttle structured by manufacturer manual sections:
+    - **Stick**: Section A (*8-Way POV*), Section B (*Push C Analog Mini-Stick*), Section C (*H1 Witches and H2 Castle Thumb HATs*), Section D (*Primary Trigger and A, B, D Buttons*), Section F (*Pinkie Switch*).
+    - **Throttle**: Section A (*Push Rotary F/G and Scroll Wheel*), Section B (*2-Position SLD Slider Switch*), Section C (*E, H, I Buttons, Push Mini-Stick, and H3/H4 HATs*), Section D (*Twin Dual Throttles*), Section F (*Rotary Mode Switch M1/M2/S1*), Section G (*Base TGL 1 to 7 with SW 1 to 14*).
+  - **Live Visual Feedback**:
+    - **Neon Green**: Illuminates instantly when a button is physically pressed on the hardware.
+    - **Bright Cyan**: Highlights when hovering over the corresponding command cell or node.
+    - **Amber**: Indicates that the button already has a key or command bound in the currently visible mode.
+  - **Direct Interaction**: Clicking any schematic node immediately opens the corresponding cell for editing.
+- **Command Cells per Mode (`M1`, `M2`, `S1`)**:
+  - Organized by functional groups with a dropdown filter and binding counters.
+  - Displayed via **high-contrast white tiles** for each bound key (e.g., `[LShift] + [F2]`).
+  - **Interactive Editing Mode**: Clicking a cell displays a blinking cursor (`▌ Waiting for keystroke...`), captures any pressed key combination in real time (including `Ctrl`, `Shift`, `Alt` modifiers, `F1..F12` function keys, `Space`, `Enter`, `Tab`, `Escape`, directional arrows, and alphanumeric keys), allows naming the command (e.g., *"Landing Gear"*), and confirming with green checkmark (`✔`) or cancelling with red cross (`✖`).
+- **Automatic Tracking of Mode Selector F and SLD Slider**:
+  - 50 Hz real-time evdev polling.
+  - **Physical Synchronization**: Enabling *"🔄 Follow physical M1/M2/S1 selector"* automatically switches the editor view between `M1`, `M2`, and `S1` as the pilot physically turns the rotary switch on the throttle base.
+  - Status badges in the top bar indicating active physical mode and `SLD` slider state (`ACTIVE (ON)` / `INACTIVE (OFF)`).
+- **"Blue Target" Emission Activation via `/dev/uinput`**:
+  - Prominent toolbar button to activate or pause live OS keystroke injection.
+  - When the "Blue Target" is active, pressing buttons on the X56 instantly triggers bound key combinations via the `/dev/uinput` virtual keyboard.
+  - Provides clear visual indicators regarding `uinput` kernel module availability and access permissions.
+- **Modal Test Window ("Test Profile")**:
+  - Accessible via the `⚙️ Test Profile` gear icon.
+  - Live monitors all triggered commands with local timestamp (`HH:MM:SS`), active mode, pressed physical button, command name, emitted key tiles, and `uinput` verification status.
+  - Includes an interactive test input field to immediately verify that keystrokes are properly typed and dispatched without needing an external application.
 
-### 6. Gestión de Perfiles TOML
-- Acceso directo en la barra superior para `Guardar Perfil TOML` o `Cargar Perfil TOML`.
-- Permite respaldar perfiles completos (ejes, curvas, iluminación RGB y asignaciones completas de botones en los 3 modos) y compartirlos entre diferentes simuladores de vuelo (*DCS*, *MSFS*, *X-Plane*, *Star Citizen*).
+### 6. TOML Profile Management
+- Direct top-bar access to `Save TOML Profile` or `Load TOML Profile`.
+- Allows backing up complete profiles (axes, curves, RGB lighting, and full 3-mode button bindings) and sharing them across different flight simulators (*DCS*, *MSFS*, *X-Plane*, *Star Citizen*).
 
 ---
 
-## Especificación del Protocolo Binario HID
+## HID Binary Protocol Specification
 
-El periférico Saitek/Logitech X56 expone dos interfaces USB principales:
-- **Interfaz 0 (HID Class 3, SubClass 0)**: Canal de entrada de juego (`/dev/input/js*`). Endpoint 1 Interrupt IN (reportes de 11 bytes con la posición de los ejes y botones en Little-Endian).
-- **Interfaz 2 (Vendor Specific 0xFF00)**: Canal de configuración bidireccional. Endpoint 0 (Control) y Endpoint 2 Interrupt IN.
+The Saitek/Logitech X56 peripheral exposes two primary USB interfaces:
+- **Interface 0 (HID Class 3, SubClass 0)**: Game input channel (`/dev/input/js*`). Endpoint 1 Interrupt IN (11-byte reports with axis positions and button states in Little-Endian).
+- **Interface 2 (Vendor Specific 0xFF00)**: Bidirectional configuration channel. Endpoint 0 (Control) and Endpoint 2 Interrupt IN.
 
-### Report IDs en Interfaz 2
-| Report ID | Tipo | Longitud | Propósito |
+### Report IDs on Interface 2
+| Report ID | Type | Length | Purpose |
 |---|---|---|---|
-| `0x01` | Feature Set | 64 bytes | Packet 4: Commit / Fin de bloque de configuración |
-| `0x08` | Feature Get | 64 bytes | Packet 6: Consulta de hardware (primer eje hardcodeado) |
-| `0x09` | Feature Set | 64 bytes | Packet 5: Configuración de color RGB LED |
-| `0x0B` | Feature Set | 64 bytes | Configuración y consulta de ejes (subcomandos 0x01, 0x02, 0x03, 0x04) |
-| `0xFF` | Interrupt IN | 64 bytes | Packet 8: Respuesta asíncrona de consulta de eje |
+| `0x01` | Feature Set | 64 bytes | Packet 4: Commit / End of configuration block |
+| `0x08` | Feature Get | 64 bytes | Packet 6: Hardware query (hardcoded first axis) |
+| `0x09` | Feature Set | 64 bytes | Packet 5: RGB LED color configuration |
+| `0x0B` | Feature Set | 64 bytes | Axis configuration and query (subcommands 0x01, 0x02, 0x03, 0x04) |
+| `0xFF` | Interrupt IN | 64 bytes | Packet 8: Asynchronous axis query response |
 
-### Secuencia de Escritura de Ejes (Reverse-Engineered)
-Para aplicar de forma persistente la configuración de un eje:
-1. **Packet 1 (Select Stage 1)**: Feature Report `0x0B`, subcomando `0x03` (`[0x0b, 0x03, 0x00, axis_id, ...]`).
-2. **Pausa de cadencia**: `20 ms` de retardo.
-3. **Packet 2 (Select Stage 2)**: Feature Report `0x0B`, subcomando `0x04` (`[0x0b, 0x04, 0x00, axis_id, ...]`).
-4. **Pausa de cadencia**: `20 ms` de retardo. Drenaje no bloqueante del acknowledge en Interrupt IN.
-5. **Packet 3 (Configuración)**: Feature Report `0x0B`, subcomando `0x01` con la carga útil completa en Big-Endian:
+### Axis Write Sequence (Reverse-Engineered)
+To persistently apply an axis configuration:
+1. **Packet 1 (Select Stage 1)**: Feature Report `0x0B`, subcommand `0x03` (`[0x0b, 0x03, 0x00, axis_id, ...]`).
+2. **Cadence pause**: `20 ms` delay.
+3. **Packet 2 (Select Stage 2)**: Feature Report `0x0B`, subcommand `0x04` (`[0x0b, 0x04, 0x00, axis_id, ...]`).
+4. **Cadence pause**: `20 ms` delay. Non-blocking drain of Interrupt IN acknowledgment.
+5. **Packet 3 (Configuration)**: Feature Report `0x0B`, subcommand `0x01` with full Big-Endian payload:
    - Bytes 8-9: `xsat`
    - Bytes 10-11: `ysat`
    - Bytes 12-13: `deadband`
@@ -598,71 +599,71 @@ Para aplicar de forma persistente la configuración de un eje:
 
 ---
 
-## Arquitectura del Workspace
+## Workspace Architecture
 
-El proyecto está organizado en un workspace modular de Rust:
+The project is structured as a modular Rust workspace:
 
 ```text
 x56linux/
 ├── .github/workflows/
-│   └── release.yml              # CI/CD multi-distro (deb, rpm, arch, tarball)
+│   └── release.yml              # Multi-distro CI/CD (deb, rpm, arch, tarball)
 ├── Cargo.toml
 ├── packaging/
-│   ├── 70-x56.rules             # Regla udev uaccess moderna
-│   ├── com.saitek.x56.desktop   # Lanzador de escritorio Linux
-│   ├── x56linux.svg             # Icono vectorial oficial de aplicación
-│   ├── PKGBUILD                 # Definición de paquete Arch Linux / AUR
-│   ├── install.sh               # Script de instalación universal
-│   └── uninstall.sh             # Script de desinstalación limpia
+│   ├── 70-x56.rules             # Modern uaccess udev rule
+│   ├── com.saitek.x56.desktop   # Linux desktop entry
+│   ├── x56linux.svg             # Official application vector icon
+│   ├── PKGBUILD                 # Arch Linux / AUR package definition
+│   ├── install.sh               # Universal installation script
+│   └── uninstall.sh             # Clean uninstallation script
 ├── examples/
-│   ├── default_profile.toml     # Perfil lineal de fábrica
-│   ├── combat_profile.toml      # Perfil de combate para simuladores
-│   └── elite_dangerous_profile.toml # Perfil oficial completo para Elite Dangerous
+│   ├── default_profile.toml     # Factory linear profile
+│   ├── combat_profile.toml      # Combat profile for flight simulators
+│   └── elite_dangerous_profile.toml # Full official profile for Elite Dangerous
 └── crates/
-    ├── x56-proto/               # Decodificador/codificador binario puro (no_std friendly)
-    ├── x56-hid/                 # Transporte HID hidraw (aislamiento de interfaz 2)
-    ├── x56-core/                # Dominio, perfiles TOML, calibrador Hall y doctor
-    ├── x56-cli/                 # CLI basado en clap con salidas formateadas y --json
-    └── x56-gui/                 # Centro de control gráfico nativo (egui / egui_plot)
+    ├── x56-proto/               # Pure binary decoder/encoder (no_std friendly)
+    ├── x56-hid/                 # hidraw HID transport (Interface 2 isolation)
+    ├── x56-core/                # Domain logic, TOML profiles, Hall calibrator, and doctor
+    ├── x56-cli/                 # clap-based CLI with formatted and --json outputs
+    └── x56-gui/                 # Native graphical control center (egui / egui_plot)
 ```
 
 ---
 
-## Estado del Roadmap
+## Roadmap Status
 
-- [x] **Fase 0 — Base y Verificación**
-  - [x] Workspace Cargo estructurado y rama `legacy/cpp` preservada.
-  - [x] Laboratorio de captura e inspección hidraw en hardware real.
-  - [x] Regla udev moderna `70-x56.rules` validada.
-- [x] **Fase 1 — CLI Funcional y Protocolo Completo**
-  - [x] `x56 list`: Detección en Interfaz 2 sin detach de joystick.
-  - [x] `x56 rgb`: Control de luces LED por nombre y código hex.
-  - [x] `x56 axis get`: Lectura de todos los ejes vía Interrupt Report 0xFF.
-  - [x] `x56 axis set`: Modificación y round-trip persistente de curvas.
-  - [x] `x56 profile save/load`: Perfiles TOML exportables y aplicables.
-  - [x] `x56 buttons`: Catálogo de botones, estado en vivo, bind y monitor en segundo plano (`run`).
-  - [x] `x56 calibrate`: Muestreo pasivo y calibración del sensor Hall.
-  - [x] `x56 doctor`: Diagnóstico integral del sistema.
-  - [x] `x56 reset-defaults`: Restauración de fábrica.
-- [x] **Fase 2 — Empaquetado y Distribución**
-  - [x] Generación de paquetes `.deb` (`cargo-deb`), `.rpm` (`cargo-generate-rpm`) y Arch Linux (`PKGBUILD` / AUR).
-  - [x] Instalador y desinstalador autónomo (`install.sh` / `uninstall.sh`).
-  - [x] Pipeline de CI/CD automatizado en GitHub Actions para Releases con artefactos compilados.
-  - [ ] Servicio `systemd --user` para reaplicación automática de perfiles al reconectar.
-- [x] **Fase 3 — Interfaz Gráfica (GUI)**
-  - [x] Centro de control nativo en egui (`x56-gui`) a 30+ FPS con estética Avionics Vector.
-  - [x] HeaderBar táctico sin decoraciones redundantes de ventana, integrado con el gestor de ventanas del SO.
-  - [x] Selector y persistencia del muelle físico instalado (`PhysicalSpring`).
-  - [x] Editor visual interactivo de curvas 2D con `egui_plot`.
-  - [x] Graficado en tiempo real del punto físico de entrada (muestreo pasivo en Interfaz 0).
-  - [x] Gestor de color RGB con selector interactivo y sincronización Stick + Throttle.
-  - [x] Asistente paso a paso de calibración de sensores Hall con umbrales de deriva.
-  - [x] Pestaña de diagnóstico del sistema (`DoctorTab`) integrada.
-  - [x] Pestaña de Programación de Botones y Modos (Sección 8) con esquema 2D interactivo, inyección uinput y ventana modal de prueba.
-  - [x] Modal de exportación / importación de perfiles TOML (ejes, RGB, muelles y botones).
+- [x] **Phase 0 — Foundation and Verification**
+  - [x] Structured Cargo workspace and preserved `legacy/cpp` branch.
+  - [x] hidraw capture and inspection lab on real hardware.
+  - [x] Validated modern `70-x56.rules` udev rule.
+- [x] **Phase 1 — Functional CLI and Complete Protocol**
+  - [x] `x56 list`: Interface 2 detection without joystick driver detach.
+  - [x] `x56 rgb`: LED light control by name and hex code.
+  - [x] `x56 axis get`: Read all axes via Interrupt Report 0xFF.
+  - [x] `x56 axis set`: Persistent curve modification and round-trip.
+  - [x] `x56 profile save/load`: Exportable and applicable TOML profiles.
+  - [x] `x56 buttons`: Button catalog, live hardware status, bind, and background monitor (`run`).
+  - [x] `x56 calibrate`: Passive sampling and Hall sensor calibration.
+  - [x] `x56 doctor`: Comprehensive system diagnostics.
+  - [x] `x56 reset-defaults`: Factory restore.
+- [x] **Phase 2 — Packaging and Distribution**
+  - [x] Package generation for `.deb` (`cargo-deb`), `.rpm` (`cargo-generate-rpm`), and Arch Linux (`PKGBUILD` / AUR).
+  - [x] Standalone installer and uninstaller (`install.sh` / `uninstall.sh`).
+  - [x] Automated CI/CD pipeline on GitHub Actions for Releases with prebuilt artifacts.
+  - [ ] `systemd --user` service for automatic profile reapplication upon reconnect.
+- [x] **Phase 3 — Graphical User Interface (GUI)**
+  - [x] Native egui control center (`x56-gui`) at 30+ FPS with Avionics Vector styling.
+  - [x] Tactical HeaderBar without redundant window decorations, integrated with OS window manager.
+  - [x] Physical spring selector and persistence (`PhysicalSpring`).
+  - [x] Interactive 2D visual curve editor with `egui_plot`.
+  - [x] Real-time plotting of physical input point (passive sampling on Interface 0).
+  - [x] RGB color manager with interactive picker and Stick + Throttle synchronization.
+  - [x] Step-by-step Hall sensor calibration wizard with drift thresholds.
+  - [x] Integrated system diagnostics tab (`DoctorTab`).
+  - [x] Button and Mode Programming tab (Section 8) with interactive 2D schematic, uinput injection, and modal test window.
+  - [x] TOML profile export / import modal (axes, RGB, springs, and buttons).
 
 ---
 
-## Licencia
+## License
 
-Este proyecto está bajo la Licencia Pública General de GNU v3.0 (GPLv3). Consulta el archivo [`LICENSE`](LICENSE) para los términos completos.
+This project is licensed under the GNU General Public License v3.0 (GPLv3). See the [`LICENSE`](LICENSE) file for full details.

@@ -31,32 +31,31 @@ impl CalibrateTab {
         match Calibrator::calibrate_stick(self.samples, dry_run) {
             Ok(res) => {
                 let msg = if dry_run {
-                    "Muestreo completado en modo simulación (ningún dato escrito en EEPROM).".into()
+                    x56_core::t!("cal-sim-complete")
                 } else {
-                    "¡Calibración física guardada exitosamente en la EEPROM del Stick!".into()
+                    x56_core::t!("cal-success-eeprom")
                 };
                 self.status_message = Some((msg, false));
                 self.results = Some(res);
             }
             Err(err) => {
-                self.status_message = Some((format!("Error durante la calibración: {err}"), true));
+                self.status_message = Some((format!("Error: {err}"), true));
             }
         }
         self.is_sampling = false;
     }
 
     pub fn ui(&mut self, ui: &mut Ui) {
-        ui.heading("Asistente de Calibración de Sensores de Efecto Hall");
-        ui.label(
-            "Recalibra el punto cero magnético de los ejes X (Roll) e Y (Pitch) de la palanca.",
-        );
+        ui.heading(x56_core::t!("cal-title"));
+        ui.label(x56_core::t!("cal-subtitle"));
 
         ui.add_space(8.0);
 
         ui.group(|ui| {
             ui.label(format!(
-                "{} Instrucciones de Seguridad:",
-                icons::ALERT_TRIANGLE
+                "{} {}",
+                icons::ALERT_TRIANGLE,
+                x56_core::t!("cal-instructions")
             ));
             ui.label(
                 "1. Suelta la palanca por completo y permite que el resorte la centre libremente.",

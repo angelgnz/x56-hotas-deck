@@ -1,0 +1,210 @@
+# Project Fluent - English (en-US) localization for x56linux
+# Primary default locale
+
+app-title = X-56 RHINO // RUST-EVDEV Control Center
+
+# Navigation Subsystems
+nav-curves = Response Curves
+nav-programming = Buttons & Mapping
+nav-rgb = RGB Lighting
+nav-calibrate = Hall Calibration
+nav-doctor = Diagnostics
+
+# Header Bar Actions & Badges
+header-profile = PROFILE
+header-save-profile = SAVE
+header-save-profile-tooltip = Save active profile to disk
+header-load-profile = LOAD
+header-load-profile-tooltip = Open TOML profile from disk
+header-test-panel = LIVE TEST
+header-test-panel-tooltip = Open live telemetry and button mapping inspection panel
+header-stick = STICK
+header-throttle = THROTTLE
+header-online = ONLINE
+header-offline = OFFLINE
+header-uinput = UINPUT DAEMON
+
+# Tactical Sidebar
+sidebar-heading-devices = HARDWARE STATUS
+sidebar-stick-title = Flight Stick
+sidebar-throttle-title = Throttle Quadrant
+sidebar-spring-heading = SPRING TENSION
+sidebar-spring-none = None (Free Gimbal)
+sidebar-spring-blue = Blue (Low / 1.5 kg)
+sidebar-spring-yellow = Yellow (Medium / 2.2 kg)
+sidebar-spring-red = Red (High / 3.0 kg)
+sidebar-system-heading = SYSTEM BEHAVIOR
+sidebar-run-in-background = RUN IN BACKGROUND ON CLOSE
+sidebar-run-in-background-desc = If enabled, closing the window keeps the application and uinput mapping active in the system tray.
+sidebar-language = LANGUAGE
+sidebar-lang-en = English (EN)
+sidebar-lang-es = Español (ES)
+
+# System Tray & Context Menu
+tray-toggle = Show / Hide
+tray-show = Show Window
+tray-hide = Hide Window
+tray-quit = Quit x56linux
+tray-profile = Active profile: { $name }
+tray-uinput-online = ✓ Uinput Daemon: Online
+tray-uinput-offline = ✗ Uinput Daemon: Offline
+
+# Response Curves Tab
+curves-title = Axis Curve Response & Deadband Tuning
+curves-transfer-title = TRANSFER RESPONSE CURVE
+curves-active-device = ACTIVE DEVICE:
+curves-stick-rhino = FLIGHT STICK
+curves-throttle-rhino = THROTTLE QUADRANT
+curves-select-axis = Select Axis
+curves-axis-x = Roll (X Axis)
+curves-axis-y = Pitch (Y Axis)
+curves-axis-z = Yaw (Rudder / Twist)
+curves-axis-tl = Left Throttle
+curves-axis-tr = Right Throttle
+curves-axis-r1 = Rotary 1
+curves-axis-r2 = Rotary 2
+curves-axis-r3 = Rotary 3
+curves-axis-r4 = Rotary 4
+curves-curvature = Curvature (Response Profile)
+curves-deadband = Deadband (Center / Throttle)
+curves-saturation-x = X Saturation
+curves-saturation-y = Y Saturation
+curves-invert = Invert Direction
+curves-live-telemetry = Live Axis Telemetry
+curves-preset-linear = Linear (1:1)
+curves-preset-smooth = Smooth S-Curve
+curves-preset-aggressive = Combat Aggressive
+curves-preset-precision = Fine Precision
+curves-apply = Apply Curve to Hardware
+curves-reset-btn = RESET (1:1 LINEAR)
+curves-read-btn = READ FROM HARDWARE
+curves-applied-success = Curve configuration written to hardware successfully!
+curves-status-gimbal-sync = Analog mini-gimbal synced with uinput pipeline.
+curves-status-eeprom-synced = EEPROM SYNCED // Configuration read from hardware.
+curves-status-sim-mode = Simulation mode active ({ $device } not detected in /dev/hidraw*).
+curves-status-reset = Curve parameters reverted to default linear values.
+
+# RGB Lighting Tab
+rgb-title = LED RGB Lighting System
+rgb-active-hw-mode = ACTIVE HARDWARE MODE:
+rgb-follow-hw = Track physical mode switch
+rgb-follow-hw-tooltip = Automatically switches selected mode when rotating M1/M2/S1 dial on throttle
+rgb-desc = Select a mode (M1, M2, S1) to assign its own RGB LED color. Rotating the physical dial automatically updates lighting.
+rgb-target-device = TARGET DEVICE:
+rgb-target-both = BOTH (STICK + THROTTLE)
+rgb-target-stick = STICK ONLY
+rgb-target-throttle = THROTTLE ONLY
+rgb-all-modes-btn = ALL MODES (GLOBAL M1+M2+S1)
+rgb-all-modes-tooltip = Apply the same color to all three modes (M1, M2, and S1) simultaneously
+rgb-color-picker-heading = COLOR PICKER // { $mode }
+rgb-red = Red   (R): { $val }
+rgb-green = Green (G): { $val }
+rgb-blue = Blue  (B): { $val }
+rgb-apply-to = APPLY TO { $mode }
+rgb-apply-tooltip = Assign this color to selected mode and send immediately to USB hardware
+rgb-save-to-toml = SAVE TO TOML PROFILE
+rgb-save-tooltip = Save mode colors (M1, M2, S1) to active TOML profile file
+rgb-presets-heading = TACTICAL PRESETS // { $mode }
+rgb-presets-desc = Click a color to assign it to the selected mode:
+rgb-preset-cyan-rhino = Rhino Cyan (Factory)
+rgb-preset-tactical-amber = Tactical Amber / Orange
+rgb-preset-night-combat = Night Combat Red
+rgb-preset-supercruise = Supercruise Purple
+rgb-preset-hud-green = Emerald Green
+rgb-preset-ops-blue = Operations Blue / S1
+rgb-preset-pure-white = Pure White
+rgb-preset-off = Turn LEDs Off
+rgb-quick-schemes = QUICK MULTI-MODE SCHEMES (M1 + M2 + S1):
+rgb-scheme-tactical = Tactical Scheme: M1 Purple | M2 Red | S1 Blue
+rgb-scheme-cockpit = Cockpit Scheme: M1 Green | M2 Amber | S1 Cyan
+rgb-select-device = Target Device
+rgb-both = Both Devices (Stick & Throttle)
+rgb-mode-m1 = Mode 1 (M1 - Nav/Cruising)
+rgb-mode-m2 = Mode 2 (M2 - Combat/Engage)
+rgb-mode-s1 = Mode 3 (S1 - Landing/Docking)
+rgb-mode-global = All Modes (Global)
+rgb-color-preview = Color Preview
+rgb-preset-cyan = Avionics Cyan
+rgb-preset-emerald = HUD Green
+rgb-preset-amber = Warning Amber
+rgb-preset-red = Alert Red
+rgb-preset-white = Ghost White
+rgb-apply = Apply RGB to Hardware
+rgb-applied-success = RGB configuration written to Interface 2!
+rgb-status-applied = RGB color { $hex } assigned to [{ $mode } // { $target }] and applied to { $count } device(s).
+rgb-status-saved = Color { $hex } saved to [{ $mode } // { $target }] (USB Notice: { $err })
+
+# Button Programming & Mapping Tab
+prog-title = Button Mapping & Mode Programming
+prog-hw-mode = PHYSICAL MODE:
+prog-router-uinput = UINPUT ROUTER:
+prog-router-online = ONLINE (1000 HZ)
+prog-router-offline = NO /DEV/UINPUT ACCESS
+prog-device = DEVICE:
+prog-device-stick = FLIGHT STICK
+prog-device-throttle = THROTTLE QUADRANT
+prog-search-placeholder = Search action / button...
+prog-virtual-layers = VIRTUAL LAYERS
+prog-modes-shift = 3 MODES + SHIFT
+prog-clear = CLEAR
+prog-mode-selector = Physical Mode Dial
+prog-submode-sld = SLD (Speed Brake / Slider)
+prog-bind-key = Bind Key / Macro
+prog-clear-bind = Clear Assignment
+prog-click-node = Click a button or hat on the schematic to inspect or configure mapping.
+prog-assigned-keys = Assigned Keys
+prog-uinput-status = Virtual uinput Device: Active (1000Hz polling)
+prog-filter-all = ALL
+prog-filter-triggers = TRIGGERS
+prog-filter-hats = POV & ANALOG HATS
+prog-filter-face = FACE BUTTONS
+prog-filter-macros = MACROS & SEQUENCES
+prog-filter-shift = SHIFT MODIFIER
+prog-mode-m1-desc = DOGFIGHT / COMBAT
+prog-mode-m2-desc = QUANTUM NAV
+prog-mode-s1-desc = LANDING / MINING
+prog-monitor-title = LIVE DETECTION MONITOR (EVDEV HOOK)
+prog-test-loop = TEST LOOP
+prog-sync-hw-on = SYNC HW: ON
+prog-sync-hw-off = SYNC HW: OFF
+prog-sync-hw-tooltip = Automatically synchronize visible layer with physical throttle mode dial
+
+# Hall Calibration Tab
+cal-title = Hall-Effect Sensor Neutral Calibration
+cal-subtitle = Recalibrates the magnetic center zero-point for Stick X (Roll) and Y (Pitch) axes.
+cal-instructions = Safety Instructions:
+cal-step1 = Step 1: Center Stick & Zero Throttles
+cal-step2 = Step 2: Sample Raw Center Offset
+cal-step3 = Step 3: Write Neutral Calibration to Vendor EEPROM
+cal-dry-run = Safe Dry-Run (Preview Offsets)
+cal-start = Start Calibration Sequence
+cal-success = Hall calibration committed safely!
+cal-sim-complete = Sampling completed in simulation mode (no EEPROM write).
+cal-success-eeprom = Physical calibration written successfully to Stick EEPROM!
+
+# System Diagnostics (Doctor) Tab
+doc-title = System Diagnostics & Hardware Verification
+doc-subtitle = Verifies udev rules, rootless permissions, and kernel drivers are operational.
+doc-run-checks = Run Full Diagnostics
+doc-refresh = Re-scan System
+doc-status-ok = SYSTEM 100% OPERATIONAL
+doc-status-fail = CORRECTIVE ACTION REQUIRED
+doc-status-warn = WARNINGS DETECTED
+doc-summary = ({ $ok } OK, { $warn } warnings, { $fail } failures)
+doc-check-udev = udev Rules & uaccess Permissions
+doc-check-hidraw = Vendor Interface 2 Access
+doc-check-joydev = Kernel Joystick Driver (/dev/input/js*)
+doc-check-evdev = evdev Interface 0 Isolation
+doc-check-uinput = Linux uinput Virtual Keyboard Daemon
+doc-check-firmware = Saitek/Logitech Controller Handshake
+doc-pass = PASS
+doc-fail = FAIL
+doc-warn = WARNING
+
+# File Dialogs & Notifications
+dialog-load-title = Select X56 TOML Profile
+dialog-save-title = Save X56 TOML Profile
+profile-saved = Profile saved to disk successfully!
+profile-loaded = Profile loaded successfully!
+filter-toml = TOML Profiles (*.toml)
+filter-all = All Files (*.*)
