@@ -1173,12 +1173,12 @@ impl ProgrammingTab {
         };
 
         // 1. Cabezal superior del Stick (enmarca POV, A, H1, B, H2)
-        let head_rect = egui::Rect::from_min_max(p(0.16, 0.04), p(0.86, 0.36));
+        let head_rect = egui::Rect::from_min_max(p(0.26, 0.04), p(0.74, 0.36));
         painter.rect_filled(head_rect, 18.0 * s, Color32::from_rgb(14, 19, 30));
         painter.rect_stroke(head_rect, 18.0 * s, outline, egui::StrokeKind::Inside);
 
         // Bisel interior decorativo del cabezal
-        let inner_head = egui::Rect::from_min_max(p(0.18, 0.06), p(0.84, 0.34));
+        let inner_head = egui::Rect::from_min_max(p(0.28, 0.06), p(0.72, 0.34));
         painter.rect_stroke(
             inner_head,
             12.0 * s,
@@ -1187,22 +1187,22 @@ impl ProgrammingTab {
         );
 
         // 2. Mástil y empuñadura ergonómica centrada
-        let shaft_rect = egui::Rect::from_min_max(p(0.35, 0.34), p(0.65, 0.78));
+        let shaft_rect = egui::Rect::from_min_max(p(0.38, 0.34), p(0.62, 0.78));
         painter.rect_filled(shaft_rect, 14.0 * s, Color32::from_rgb(10, 14, 23));
         painter.rect_stroke(shaft_rect, 14.0 * s, outline, egui::StrokeKind::Inside);
 
         // Paneles laterales del mástil
         painter.line_segment(
-            [p(0.38, 0.38), p(0.38, 0.74)],
+            [p(0.40, 0.38), p(0.40, 0.74)],
             Stroke::new(1.5 * s, Color32::from_rgb(26, 35, 50)),
         );
         painter.line_segment(
-            [p(0.62, 0.38), p(0.62, 0.74)],
+            [p(0.60, 0.38), p(0.60, 0.74)],
             Stroke::new(1.5 * s, Color32::from_rgb(26, 35, 50)),
         );
 
         // 3. Base del Stick / Reposamanos ergonómico
-        let base_rect = egui::Rect::from_min_max(p(0.26, 0.77), p(0.74, 0.93));
+        let base_rect = egui::Rect::from_min_max(p(0.32, 0.77), p(0.68, 0.93));
         painter.rect_filled(base_rect, 16.0 * s, Color32::from_rgb(15, 20, 31));
         painter.rect_stroke(base_rect, 16.0 * s, accent, egui::StrokeKind::Inside);
 
@@ -1216,10 +1216,10 @@ impl ProgrammingTab {
 
         // ==================== COMPONENTES TÁCTILES DEL STICK ====================
 
-        // 4. POV 1: Selector de Vista 8-Way (cx: 0.246, cy: 0.242, scale: 0.30)
+        // 4. POV 1: Selector de Vista 8-Way (cx: 0.330, cy: 0.242, scale: 0.30)
         Self::draw_dpad(
             painter,
-            p(0.246, 0.242),
+            p(0.330, 0.242),
             0.30 * s,
             im.dir4(
                 "stick_pov_up",
@@ -1230,20 +1230,20 @@ impl ProgrammingTab {
             "POV",
         );
 
-        // 5. Botón A: Cabezal Superior (cx: 0.351, cy: 0.138, scale: 0.32)
+        // 5. Botón A: Cabezal Superior (cx: 0.415, cy: 0.138, scale: 0.32)
         Self::draw_circular_button(
             painter,
-            p(0.351, 0.138),
+            p(0.415, 0.138),
             0.32 * s,
             im.get("stick_btn_a"),
             "A",
             true,
         );
 
-        // 6. HAT 1: Witches Hat (cx: 0.587, cy: 0.121, scale: 0.30)
+        // 6. HAT 1: Witches Hat (cx: 0.525, cy: 0.121, scale: 0.30)
         Self::draw_dpad(
             painter,
-            p(0.587, 0.121),
+            p(0.525, 0.121),
             0.30 * s,
             im.dir4(
                 "stick_h1_up",
@@ -1254,20 +1254,20 @@ impl ProgrammingTab {
             "H1",
         );
 
-        // 7. Botón B: Lateral Pulgar (cx: 0.781, cy: 0.072, scale: 0.30)
+        // 7. Botón B: Lateral Pulgar (cx: 0.670, cy: 0.072, scale: 0.30)
         Self::draw_circular_button(
             painter,
-            p(0.781, 0.072),
+            p(0.670, 0.072),
             0.30 * s,
             im.get("stick_btn_b"),
             "B",
             false,
         );
 
-        // 8. HAT 2: Castle Hat (cx: 0.690, cy: 0.285, scale: 0.30)
+        // 8. HAT 2: Castle Hat (cx: 0.630, cy: 0.285, scale: 0.30)
         Self::draw_dpad(
             painter,
-            p(0.690, 0.285),
+            p(0.630, 0.285),
             0.30 * s,
             im.dir4(
                 "stick_h2_up",
@@ -1281,10 +1281,10 @@ impl ProgrammingTab {
         // 9. Gatillo Principal (TRG: cx: 0.500, cy: 0.420)
         Self::draw_stick_trigger(painter, p(0.500, 0.420), s, im.get("stick_trigger"));
 
-        // 10. Botón C: Minipalanca Analógica / C-Stick Push (cx: 0.400, cy: 0.560, scale: 0.28)
+        // 10. Botón C: Minipalanca Analógica / C-Stick Push (cx: 0.440, cy: 0.560, scale: 0.28)
         Self::draw_circular_button(
             painter,
-            p(0.400, 0.560),
+            p(0.440, 0.560),
             0.28 * s,
             im.get("stick_btn_c"),
             "C",
@@ -1294,10 +1294,10 @@ impl ProgrammingTab {
         // 11. Palanca Meñique (PNK: cx: 0.500, cy: 0.700)
         Self::draw_stick_pinkie_lever(painter, p(0.500, 0.700), s, im.get("stick_pinkie"));
 
-        // 12. Botón D: Meñique / Base Rest (cx: 0.600, cy: 0.840, scale: 0.28)
+        // 12. Botón D: Meñique / Base Rest (cx: 0.570, cy: 0.840, scale: 0.28)
         Self::draw_circular_button(
             painter,
-            p(0.600, 0.840),
+            p(0.570, 0.840),
             0.28 * s,
             im.get("stick_btn_d"),
             "D",
@@ -4087,12 +4087,12 @@ struct SchematicNode {
 fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
     match kind {
         DeviceKind::Stick => vec![
-            // 1. Sección A: Selector de Vista POV 8-Way (cx = 0.246, cy = 0.242)
+            // 1. Sección A: Selector de Vista POV 8-Way (cx = 0.330, cy = 0.242)
             SchematicNode {
                 id: "stick_pov_up",
                 short_label: "▲",
                 full_name: "POV Vista Arriba",
-                norm_x: 0.246,
+                norm_x: 0.330,
                 norm_y: 0.198,
                 radius: 12.0,
                 is_rect: false,
@@ -4102,7 +4102,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "stick_pov_right",
                 short_label: "▶",
                 full_name: "POV Vista Derecha",
-                norm_x: 0.292,
+                norm_x: 0.362,
                 norm_y: 0.242,
                 radius: 12.0,
                 is_rect: false,
@@ -4112,7 +4112,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "stick_pov_down",
                 short_label: "▼",
                 full_name: "POV Vista Abajo",
-                norm_x: 0.246,
+                norm_x: 0.330,
                 norm_y: 0.286,
                 radius: 12.0,
                 is_rect: false,
@@ -4122,29 +4122,29 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "stick_pov_left",
                 short_label: "◀",
                 full_name: "POV Vista Izquierda",
-                norm_x: 0.200,
+                norm_x: 0.298,
                 norm_y: 0.242,
                 radius: 12.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
-            // 2. Sección D: Botón A (Cabezal Superior) (cx = 0.351, cy = 0.138)
+            // 2. Sección D: Botón A (Cabezal Superior) (cx = 0.415, cy = 0.138)
             SchematicNode {
                 id: "stick_btn_a",
                 short_label: "A",
                 full_name: "Botón A (Cabezal Superior)",
-                norm_x: 0.351,
+                norm_x: 0.415,
                 norm_y: 0.138,
                 radius: 24.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
-            // 3. Sección C: HAT 1 (Witches) (Cluster Witch-Hat: cx = 0.587, cy = 0.121)
+            // 3. Sección C: HAT 1 (Witches) (Cluster Witch-Hat: cx = 0.525, cy = 0.121)
             SchematicNode {
                 id: "stick_h1_up",
                 short_label: "▲",
                 full_name: "HAT 1 (Witches) Arriba",
-                norm_x: 0.587,
+                norm_x: 0.525,
                 norm_y: 0.077,
                 radius: 12.0,
                 is_rect: false,
@@ -4154,7 +4154,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "stick_h1_right",
                 short_label: "▶",
                 full_name: "HAT 1 (Witches) Derecha",
-                norm_x: 0.633,
+                norm_x: 0.557,
                 norm_y: 0.121,
                 radius: 12.0,
                 is_rect: false,
@@ -4164,7 +4164,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "stick_h1_down",
                 short_label: "▼",
                 full_name: "HAT 1 (Witches) Abajo",
-                norm_x: 0.587,
+                norm_x: 0.525,
                 norm_y: 0.165,
                 radius: 12.0,
                 is_rect: false,
@@ -4174,29 +4174,29 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "stick_h1_left",
                 short_label: "◀",
                 full_name: "HAT 1 (Witches) Izquierda",
-                norm_x: 0.541,
+                norm_x: 0.493,
                 norm_y: 0.121,
                 radius: 12.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
-            // 4. Sección D: Botón B (Lateral Pulgar) (cx = 0.781, cy = 0.072)
+            // 4. Sección D: Botón B (Lateral Pulgar) (cx = 0.670, cy = 0.072)
             SchematicNode {
                 id: "stick_btn_b",
                 short_label: "B",
                 full_name: "Botón B (Lateral Pulgar)",
-                norm_x: 0.781,
+                norm_x: 0.670,
                 norm_y: 0.072,
                 radius: 22.0,
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
-            // 5. Sección C: HAT 2 (Castle) (Cluster Castle-Hat: cx = 0.690, cy = 0.285)
+            // 5. Sección C: HAT 2 (Castle) (Cluster Castle-Hat: cx = 0.630, cy = 0.285)
             SchematicNode {
                 id: "stick_h2_up",
                 short_label: "▲",
                 full_name: "HAT 2 (Castle) Arriba",
-                norm_x: 0.690,
+                norm_x: 0.630,
                 norm_y: 0.241,
                 radius: 12.0,
                 is_rect: false,
@@ -4206,7 +4206,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "stick_h2_right",
                 short_label: "▶",
                 full_name: "HAT 2 (Castle) Derecha",
-                norm_x: 0.736,
+                norm_x: 0.662,
                 norm_y: 0.285,
                 radius: 12.0,
                 is_rect: false,
@@ -4216,7 +4216,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "stick_h2_down",
                 short_label: "▼",
                 full_name: "HAT 2 (Castle) Abajo",
-                norm_x: 0.690,
+                norm_x: 0.630,
                 norm_y: 0.329,
                 radius: 12.0,
                 is_rect: false,
@@ -4226,7 +4226,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 id: "stick_h2_left",
                 short_label: "◀",
                 full_name: "HAT 2 (Castle) Izquierda",
-                norm_x: 0.644,
+                norm_x: 0.598,
                 norm_y: 0.285,
                 radius: 12.0,
                 is_rect: false,
@@ -4243,12 +4243,12 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 is_rect: true,
                 rect_size: Vec2::new(54.0, 26.0),
             },
-            // 7. Sección B: Botón C (Minipalanca Push: cx = 0.400, cy = 0.560)
+            // 7. Sección B: Botón C (Minipalanca Push: cx = 0.440, cy = 0.560)
             SchematicNode {
                 id: "stick_btn_c",
                 short_label: "C",
                 full_name: "Botón C (Minipalanca Push)",
-                norm_x: 0.400,
+                norm_x: 0.440,
                 norm_y: 0.560,
                 radius: 20.0,
                 is_rect: false,
@@ -4265,12 +4265,12 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 is_rect: true,
                 rect_size: Vec2::new(64.0, 26.0),
             },
-            // 9. Sección D: Botón D (Meñique: cx = 0.600, cy = 0.840)
+            // 9. Sección D: Botón D (Meñique: cx = 0.570, cy = 0.840)
             SchematicNode {
                 id: "stick_btn_d",
                 short_label: "D",
                 full_name: "Botón D (Meñique)",
-                norm_x: 0.600,
+                norm_x: 0.570,
                 norm_y: 0.840,
                 radius: 22.0,
                 is_rect: false,
