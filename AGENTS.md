@@ -6,28 +6,39 @@
 - **Delegation Threshold:**
   - **Direct Execution:** Atomic tasks affecting 1 to 2 files, quick status inspections, or trivial localized edits.
   - **Mandatory Delegation (Herdr / Subagents):** Tasks involving 3 or more files, full test suite executions, code scaffolding generation, deep bug diagnostics, or independent parallel workflows.
-- You have access to the **Herdr Skill** (`herdr` CLI, `hc`, `herdr-app`) and subagent tools to manage panes, tabs, and dispatch workers while configuring the **AGY** model and reasoning effort level (`low`, `medium`, `high`).
+- You have access to the **Herdr Skill** (`herdr` CLI, `hc`, `herdr-app`) and subagent tools to manage panes, tabs, and dispatch workers while configuring the **AGY** model and reasoning effort level (`low`, `medium`, `high`, `xhigh`).
 
 ---
 
 ## 2. Model Specialization Matrix (AGY Ecosystem)
 Delegate each subtask selecting the model and reasoning effort strictly based on the nature of the workload:
 
-### A. AGY - Claude (`medium` / `high`)
+### A. AGY - Hydrogen (`low` / `medium` / `high` / `xhigh`)
+- **CLI Models:** `gemini-4-hydrogen-low`, `gemini-4-hydrogen-medium`, `gemini-4-hydrogen-high`, `gemini-4-hydrogen-xhigh`
+- **Role:** Primary adaptive engineering model spanning fast execution through maximum-depth reasoning (`xhigh`).
+- **Use Cases:** End-to-end feature implementation, cross-crate coordination (`x56-proto` ↔ `x56-hid` ↔ `x56-core` ↔ `x56-cli`/`x56-gui`), complex state/threading fixes, and high-assurance hardware protocol work.
+- **Effort Allocation:**
+  - `low`: Quick inspections, localized edits, boilerplate/scaffolding, formatting/Clippy cleanup, and straightforward single-file tasks.
+  - `medium`: Standard feature development, Fluent localization wiring, unit/integration test authoring, and routine bug fixes across 2–3 files.
+  - `high`: Multi-crate refactoring, `egui` rendering/channel synchronization, TOML schema updates, and thorough PR/invariant reviews.
+  - `xhigh`: Maximum-depth reasoning for critical or ambiguous problems — USB HID packet reverse-engineering (`0x0B`/`0xFF`), subtle race conditions, Hall-effect calibration math, curve interpolation invariants, and pre-release safety audits.
+
+### B. AGY - Claude (`medium` / `high`)
 - **Role:** Architecture, system design, and code structuring.
 - **Use Cases:** System architecture, complex UI/UX layouts, large-scale structural refactoring, design decisions, and technical specifications.
 - **Effort Allocation:**
   - `high`: Architecture design from scratch, critical system definitions, multi-module coordination.
   - `medium`: Standard components, tab views, controllers, and technical documentation.
 
-### B. AGY - Argon (`medium` / `high`)
+### C. AGY - Argon (`low` / `medium` / `high`)
 - **Role:** Deep logical reasoning, auditing, and root-cause diagnostics.
 - **Use Cases:** Complex debugging, race conditions, performance bottlenecks, critical algorithms, safety audits, and cross-code reviews.
 - **Effort Allocation:**
   - `high`: Root Cause Analysis (RCA), security/permission boundary verification, mathematical curve validation, complex algorithmic bugs.
   - `medium`: PR reviews, business logic validation, protocol data contracts verification.
+  - `low`: Lightweight sanity checks and targeted invariant verification.
 
-### C. AGY - Flash (`low` / `medium` / `high`)
+### D. AGY - Flash (`low` / `medium` / `high`)
 - **Role:** High-volume operational execution, speed, and large-context synthesis.
 - **Use Cases:** Repetitive tasks, large-window reading/synthesis, test suite generation, mechanical migrations, string extraction, and rapid API integrations.
 - **Effort Allocation:**
@@ -59,7 +70,7 @@ Follow this sequential lifecycle for all delegated tasks:
 
 ### Step 4: Monitoring, Verification, and Teardown
 - Inspect the output of the worker pane before marking the subtask complete.
-- If a critical task was executed by `Claude` or `Flash`, consider a quick validation pass with `Argon (medium)` when sensitive protocol or hardware logic is affected.
+- If a critical task was executed by `Claude`, `Flash`, or `Hydrogen (low/medium)`, consider a validation pass with `Hydrogen (high/xhigh)` or `Argon (medium/high)` when sensitive protocol or hardware logic is affected.
 - **Teardown & Cleanup:** Once results are verified and integrated, close temporary working panes (`herdr pane close <id>`) to keep the workspace uncluttered.
 
 ---

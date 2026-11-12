@@ -13,9 +13,10 @@ Directrices para coordinar tareas concurrentes, subagentes especializados y coma
 
 | Perfil de Tarea | Tipo de Modelo Recomendado | Ejemplos de Modelos / Herramientas | Casos de Uso en x56linux |
 |---|---|---|---|
-| **Razonamiento Profundo y Arquitectura** | Modelos Frontier / High-Reasoning | Claude 3.7/3.5 Sonnet, GPT-4o / o1 / o3-mini, Gemini Pro | Ingeniería inversa de paquetes HID (Reportes 0x0B/0xFF), sincronización multihilo en `egui`, algoritmos de curvas matemáticas complejas. |
-| **Ejecución Rápida y Mecánica** | Modelos Ligeros y Rápidos | Gemini Flash / Flash Lite, GPT-4o-mini, Claude Haiku | Pruebas unitarias repetitivas, corrección de advertencias de Clippy, actualización de docstrings, refactorizaciones sintácticas directas. |
-| **Revisión de Código y Auditoría de Invariantes** | Agentes en Modo Read-Only / Auditor | Claude Sonnet / GPT-4o (con rol estricto de solo lectura) | Auditoría de aislamiento de Interfaz 0 (verificar que no se toque `/dev/input`), validación de `no_std` en `x56-proto`, revisión de `unwrap()` en rutas críticas. |
+| **Ingeniería Adaptativa y Multi-Crate** | AGY Hydrogen (`low` / `medium` / `high` / `xhigh`) | `gemini-4-hydrogen-low`, `gemini-4-hydrogen-medium`, `gemini-4-hydrogen-high`, `gemini-4-hydrogen-xhigh` | `low`: inspecciones rápidas y limpieza Clippy; `medium`: features estándar, tests y i18n Fluent; `high`: coordinación multi-crate y `egui`; `xhigh`: ingeniería inversa HID (`0x0B`/`0xFF`), concurrencia crítica y calibración Hall. |
+| **Razonamiento Profundo y Arquitectura** | Modelos Frontier / High-Reasoning | AGY Hydrogen (`high`/`xhigh`), AGY Argon (`high`), Claude Opus/Sonnet 5.5 (`high`) | Ingeniería inversa de paquetes HID (Reportes 0x0B/0xFF), sincronización multihilo en `egui`, algoritmos de curvas matemáticas complejas. |
+| **Ejecución Rápida y Mecánica** | Modelos Ligeros y Rápidos | AGY Hydrogen (`low`/`medium`), AGY Flash (`low`/`medium`) | Pruebas unitarias repetitivas, corrección de advertencias de Clippy, actualización de docstrings, refactorizaciones sintácticas directas. |
+| **Revisión de Código y Auditoría de Invariantes** | Agentes en Modo Read-Only / Auditor | AGY Hydrogen (`high`/`xhigh`), AGY Argon (`medium`/`high`), Claude Sonnet (`medium`) | Auditoría de aislamiento de Interfaz 0 (verificar que no se toque `/dev/input`), validación de `no_std` en `x56-proto`, revisión de `unwrap()` en rutas críticas. |
 | **Procesos Pesados de Sistema** | Comandos Nativos (Sin LLM) | `hc run` / `cargo` | Compilación release (`cargo build --release`), suite de tests completa (`cargo test --workspace`), empaquetado (.deb/.rpm). |
 
 ---
