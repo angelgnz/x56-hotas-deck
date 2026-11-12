@@ -1,5 +1,67 @@
+# =============================================================================
+# Rust & Cargo Build Artifacts
+# =============================================================================
 /target/
+**/*.rs.bk
+*.pdb
+
+# =============================================================================
+# Packaging & Distribution Artifacts (Local builds & CI outputs)
+# =============================================================================
+dist/
+dist-arch/
+release-assets/
+*.deb
+*.rpm
+*.pkg.tar.*
+packaging/src/
+packaging/pkg/
+packaging/*.pkg.tar.*
+packaging/x56linux/
+SHA256SUMS
+*.tar.gz
+*.tar.xz
+*.tar.zst
+
+# =============================================================================
+# Python & Scripts Artifacts (scripts/ folder)
+# =============================================================================
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.pytest_cache/
 
+# =============================================================================
+# IDE, Editor & OS Temporary Files
+# =============================================================================
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/extensions.json
+.idea/
+*.iml
+*.sublime-workspace
+*.sublime-project
+*.swp
+*.swo
+*~
+*.orig
+*.rej
+.DS_Store
+Thumbs.db
+ehthumbs.db
 
+# =============================================================================
+# Logs & Core Dumps
+# =============================================================================
+*.log
+core
+core.*
+
+# =============================================================================
+# Local / Private User Profiles
+# =============================================================================
+*.local.toml
