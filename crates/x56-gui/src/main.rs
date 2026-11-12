@@ -41,7 +41,7 @@ fn main() -> eframe::Result<()> {
     let mut viewport = egui::ViewportBuilder::default()
         .with_inner_size([1200.0, 800.0])
         .with_min_inner_size([720.0, 520.0])
-        .with_title("X-56 RHINO // RUST-EVDEV Control Center");
+        .with_title("X56 HOTAS Deck // Control Center");
 
     if let Some(icon) = tray::load_window_icon() {
         viewport = viewport.with_icon(icon);

@@ -1,11 +1,15 @@
-# x56linux
+# X56 HOTAS Deck
 
 [![Rust](https://img.shields.io/badge/language-Rust-orange.svg)](https://www.rust-lang.org/)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Platform: Linux](https://img.shields.io/badge/platform-Linux-green.svg)]()
 [![Tests: 45 passing](https://img.shields.io/badge/tests-45%20passed-brightgreen.svg)]()
 
-A modern, safe, and high-performance **Rust** tool for configuring RGB LED lighting, axis response curves, deadbands, and hardware calibration on the **Saitek / Mad Catz Pro Flight X-56 Rhino** and **Logitech G X56** HOTAS systems.
+A modern, safe, and high-performance **Rust** tool suite for configuring RGB LED lighting, axis response curves, deadbands, and hardware calibration on the **Saitek / Mad Catz Pro Flight X-56 Rhino** and **Logitech G X56** HOTAS systems.
+
+The suite provides dual interface binaries:
+- **CLI (`x56` or `x56-cli`)**: Terminal interface for scripting, headless environments, system diagnostics, and background daemons.
+- **Flight Deck GUI (`x56-deck` or `x56-gui`)**: Avionics Vector tactical graphical control center with live curve visualization, telemetry, and button mapping.
 
 Specifically engineered to operate on Linux **without root privileges (`sudo`)** and **without detaching the kernel joystick driver (`usbhid`/`joydev`/`evdev`)**, ensuring that flight and space simulators (*DCS World, X-Plane, Microsoft Flight Simulator, Star Citizen, Elite Dangerous, FlightGear*) continue receiving uninterrupted axis and button inputs while adjusting configuration live.
 
@@ -18,7 +22,7 @@ Specifically engineered to operate on Linux **without root privileges (`sudo`)**
 - [Canonical Axis Mapping and Ranges](#canonical-axis-mapping-and-ranges)
 - [Installation and Packaging](#installation-and-packaging)
 - [TOML Profile Format Specification](#toml-profile-format-specification)
-- [CLI User Guide](#cli-user-guide)
+- [CLI User Guide (`x56` / `x56-cli`)](#cli-user-guide-x56--x56-cli)
   - [System Diagnostics (`x56 doctor`)](#1-system-diagnostics-x56-doctor)
   - [Device Detection (`x56 list`)](#2-device-detection-x56-list)
   - [RGB LED Lighting (`x56 rgb`)](#3-rgb-led-lighting-x56-rgb)
@@ -27,7 +31,7 @@ Specifically engineered to operate on Linux **without root privileges (`sudo`)**
   - [Button and Mode Programming (`x56 buttons`)](#6-button-and-mode-programming-x56-buttons)
   - [Hall Sensor Calibration (`x56 calibrate`)](#7-hall-sensor-calibration-x56-calibrate)
   - [Factory Reset (`x56 reset-defaults`)](#8-factory-reset-x56-reset-defaults)
-- [Graphical Control Center (`x56-gui`)](#graphical-control-center-x56-gui)
+- [Graphical Control Center (`x56-deck` / `x56-gui`)](#graphical-control-center-x56-deck--x56-gui)
   - [Avionics Vector Architecture](#avionics-vector-architecture)
   - [Curve Editor with Live Sampling](#1-curve-editor-with-live-sampling)
   - [RGB Lighting Manager](#2-rgb-lighting-manager)
@@ -38,6 +42,7 @@ Specifically engineered to operate on Linux **without root privileges (`sudo`)**
 - [HID Binary Protocol Specification](#hid-binary-protocol-specification)
 - [Workspace Architecture](#workspace-architecture)
 - [Roadmap Status](#roadmap-status)
+- [Reconocimientos y Origen del Proyecto / Acknowledgments](#reconocimientos-y-origen-del-proyecto--acknowledgments)
 - [License](#license)
 
 ---
@@ -96,38 +101,38 @@ The protocol uses USB HID Generic Desktop usage codes (in hexadecimal format):
 
 ### 1. Official Precompiled Packages (Releases)
 
-Each release published on [GitHub Releases](https://github.com/angelgnz/x56linux/releases) includes ready-to-use binaries and packages for major Linux distributions:
+Each release published on [GitHub Releases](https://github.com/angelgnz/x56-hotas-deck/releases) includes ready-to-use binaries and packages for major Linux distributions:
 
 #### Arch Linux / CachyOS / Manjaro
 Available via the [`PKGBUILD`](packaging/PKGBUILD) file or prebuilt `.pkg.tar.zst` package:
 ```bash
-# Via AUR (x56linux-git)
-paru -S x56linux-git
+# Via AUR (x56-hotas-deck-git)
+paru -S x56-hotas-deck-git
 # or with yay:
-yay -S x56linux-git
+yay -S x56-hotas-deck-git
 
 # Or direct installation of the precompiled package:
-sudo pacman -U x56linux-*.pkg.tar.zst
+sudo pacman -U x56-hotas-deck-*.pkg.tar.zst
 ```
 
 #### Debian / Ubuntu / Linux Mint / Pop!_OS
 ```bash
-sudo dpkg -i x56linux_*_amd64.deb
+sudo dpkg -i x56-hotas-deck_*_amd64.deb
 sudo apt-get install -f  # Resolves dependencies if needed
 ```
 
 #### Fedora / RHEL / openSUSE
 ```bash
-sudo dnf install ./x56linux-*.x86_64.rpm
+sudo dnf install ./x56-hotas-deck-*.x86_64.rpm
 # or on openSUSE:
-sudo zypper install ./x56linux-*.x86_64.rpm
+sudo zypper install ./x56-hotas-deck-*.x86_64.rpm
 ```
 
 #### Universal Standalone Installer (Any Linux Distribution)
-Download and extract the `x56linux-v*-x86_64.tar.gz` archive:
+Download and extract the `x56-hotas-deck-v*-x86_64.tar.gz` archive:
 ```bash
-tar -xzf x56linux-v*-x86_64.tar.gz
-cd x56linux-v*-x86_64
+tar -xzf x56-hotas-deck-v*-x86_64.tar.gz
+cd x56-hotas-deck-v*-x86_64
 sudo ./install.sh
 ```
 *(To uninstall at any time: `sudo ./uninstall.sh`)*.
@@ -139,14 +144,14 @@ sudo ./install.sh
 Requires a stable Rust toolchain (Rust 1.75+):
 
 ```bash
-git clone https://github.com/angelgnz/x56linux.git
-cd x56linux
+git clone https://github.com/angelgnz/x56-hotas-deck.git
+cd x56-hotas-deck
 cargo build --release
 ```
 
 Optimized binaries are generated in `target/release/`:
-- `x56`: CLI tool for scripting, diagnostics, and services.
-- `x56-gui`: Avionics Vector tactical graphical control center.
+- **CLI**: `x56` (or `x56-cli`) — Command-line interface for scripting, diagnostics, button mapping, and daemons.
+- **Flight Deck GUI**: `x56-deck` (or `x56-gui`) — Avionics Vector tactical graphical control center.
 
 ---
 
@@ -256,7 +261,9 @@ rgb = "#0088ff"          # Scanning & mining blue
 
 ---
 
-## CLI User Guide
+## CLI User Guide (`x56` / `x56-cli`)
+
+The command-line suite can be invoked interchangeably using `x56` or `x56-cli`:
 
 ### 1. System Diagnostics (`x56 doctor`)
 
@@ -483,16 +490,16 @@ x56 reset-defaults --device all
 
 ---
 
-## Graphical Control Center (`x56-gui`)
+## Graphical Control Center (`x56-deck` / `x56-gui`)
 
-`x56-gui` is a modern, native immediate-mode graphical interface built with **egui / eframe** and **egui_plot**. It runs at 30+ FPS on X11 or Wayland with hardware-accelerated OpenGL rendering.
+`x56-deck` (also available as `x56-gui`) is a modern, native immediate-mode graphical interface built with **egui / eframe** and **egui_plot**. It runs at 30+ FPS on X11 or Wayland with hardware-accelerated OpenGL rendering.
 
 ```bash
 # Launch the graphical application
-x56-gui
+x56-deck   # or x56-gui
 
 # Or build and run directly with Cargo
-cargo run -p x56-gui --release
+cargo run -p x56-gui --bin x56-deck --release
 ```
 
 ### Avionics Vector Architecture
@@ -661,6 +668,16 @@ x56linux/
   - [x] Integrated system diagnostics tab (`DoctorTab`).
   - [x] Button and Mode Programming tab (Section 8) with interactive 2D schematic, uinput injection, and modal test window.
   - [x] TOML profile export / import modal (axes, RGB, springs, and buttons).
+
+---
+
+## Reconocimientos y Origen del Proyecto / Acknowledgments
+
+Este proyecto nació como un fork de investigación de [Chryseus/x56linux](https://github.com/Chryseus/x56linux) (2019–2020), creado originalmente por [@Chryseus](https://github.com/Chryseus).
+
+Aunque la base de código actual fue reescrita por completo desde cero en Rust (arquitectura modular, transporte hidraw rootless y entorno gráfico nativo Avionics Vector), el trabajo pionero de ingeniería inversa del protocolo USB y los reportes de la Interfaz 2 documentados por Chryseus fueron los cimientos indispensables que hicieron posible este software.
+
+Agradecemos profundamente su contribución y esfuerzo inicial para la comunidad de simuladores en Linux.
 
 ---
 

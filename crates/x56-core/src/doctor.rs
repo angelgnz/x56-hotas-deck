@@ -138,7 +138,7 @@ impl Doctor {
                 category: "permisos".into(),
                 title: "Ejecución como root".into(),
                 status: CheckStatus::Warn,
-                message: "Estás ejecutando como root. x56linux está diseñado para ejecutarse sin privilegios vía uaccess".into(),
+                message: "Estás ejecutando como root. X56 HOTAS Deck está diseñado para ejecutarse sin privilegios vía uaccess".into(),
                 remedy: Some("Ejecuta como usuario estándar para verificar la seguridad del sistema".into()),
             });
         }

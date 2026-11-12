@@ -1,18 +1,18 @@
 # Maintainer: Angel Gonzalez <https://github.com/angelgnz>
 # Contributor: Community
-pkgname=x56linux-git
+pkgname=x56-hotas-deck-git
 _pkgname=x56linux
 pkgver=0.1.0.r0.g894d1db
 pkgrel=1
-pkgdesc="Configurador y controlador en espacio de usuario para HOTAS Saitek / Logitech G X56 (CLI y GUI Avionics Vector)"
+pkgdesc="X56 HOTAS Deck - Configurador y controlador en espacio de usuario para HOTAS Saitek / Logitech G X56 (CLI y GUI Avionics Vector)"
 arch=('x86_64')
-url="https://github.com/angelgnz/x56linux"
+url="https://github.com/angelgnz/x56-hotas-deck"
 license=('GPL-3.0-or-later')
 depends=('systemd-libs' 'libxkbcommon' 'hicolor-icon-theme')
 makedepends=('cargo' 'pkgconf' 'git')
-provides=('x56linux')
-conflicts=('x56linux')
-source=("${_pkgname}::git+https://github.com/angelgnz/x56linux.git#branch=master")
+provides=('x56-hotas-deck' 'x56linux')
+conflicts=('x56-hotas-deck' 'x56linux')
+source=("${_pkgname}::git+https://github.com/angelgnz/x56-hotas-deck.git#branch=master")
 sha256sums=('SKIP')
 
 pkgver() {
@@ -47,6 +47,8 @@ package() {
   cd "$srcdir/$_pkgname"
   # Binarios
   install -Dm755 target/release/x56 "$pkgdir/usr/bin/x56"
+  install -Dm755 target/release/x56-cli "$pkgdir/usr/bin/x56-cli"
+  install -Dm755 target/release/x56-deck "$pkgdir/usr/bin/x56-deck"
   install -Dm755 target/release/x56-gui "$pkgdir/usr/bin/x56-gui"
 
   # Regla udev para acceso sin root (hidraw + uinput)

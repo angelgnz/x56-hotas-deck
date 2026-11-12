@@ -1,7 +1,7 @@
 [Desktop Entry]
-Name=X56 HOTAS Control Center
-Comment=Configurador nativo para Saitek / Logitech G X56 HOTAS (curvas, RGB, calibración Hall)
-Exec=x56-gui
+Name=X56 HOTAS Deck
+Comment=Configurador nativo y Flight Deck para Saitek / Logitech G X56 HOTAS (curvas, RGB, calibración Hall)
+Exec=x56-deck
 Icon=x56linux
 Terminal=false
 Type=Application

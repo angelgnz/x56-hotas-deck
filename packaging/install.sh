@@ -22,10 +22,34 @@ elif [[ -f "./target/release/x56" ]]; then
     install -m 755 "./target/release/x56" "${PREFIX}/bin/x56"
 fi
 
+if [[ -f "./x56-cli" ]]; then
+    install -m 755 "./x56-cli" "${PREFIX}/bin/x56-cli"
+elif [[ -f "./target/release/x56-cli" ]]; then
+    install -m 755 "./target/release/x56-cli" "${PREFIX}/bin/x56-cli"
+elif [[ -f "${PREFIX}/bin/x56" ]]; then
+    ln -sf "x56" "${PREFIX}/bin/x56-cli"
+fi
+
+if [[ ! -f "${PREFIX}/bin/x56" && -f "${PREFIX}/bin/x56-cli" ]]; then
+    ln -sf "x56-cli" "${PREFIX}/bin/x56"
+fi
+
+if [[ -f "./x56-deck" ]]; then
+    install -m 755 "./x56-deck" "${PREFIX}/bin/x56-deck"
+elif [[ -f "./target/release/x56-deck" ]]; then
+    install -m 755 "./target/release/x56-deck" "${PREFIX}/bin/x56-deck"
+fi
+
 if [[ -f "./x56-gui" ]]; then
     install -m 755 "./x56-gui" "${PREFIX}/bin/x56-gui"
 elif [[ -f "./target/release/x56-gui" ]]; then
     install -m 755 "./target/release/x56-gui" "${PREFIX}/bin/x56-gui"
+elif [[ -f "${PREFIX}/bin/x56-deck" ]]; then
+    ln -sf "x56-deck" "${PREFIX}/bin/x56-gui"
+fi
+
+if [[ ! -f "${PREFIX}/bin/x56-deck" && -f "${PREFIX}/bin/x56-gui" ]]; then
+    ln -sf "x56-gui" "${PREFIX}/bin/x56-deck"
 fi
 
 echo "==> Instalando reglas udev en ${UDEV_DIR}..."
@@ -78,7 +102,7 @@ done
 
 echo ""
 echo "✅ Instalación completada exitosamente."
-echo "   - CLI: ${PREFIX}/bin/x56"
-echo "   - GUI: ${PREFIX}/bin/x56-gui"
+echo "   - CLI: ${PREFIX}/bin/x56, ${PREFIX}/bin/x56-cli"
+echo "   - GUI: ${PREFIX}/bin/x56-deck, ${PREFIX}/bin/x56-gui"
 echo "   - Udev: ${UDEV_DIR}/70-x56.rules"
 echo "   (Si los dispositivos ya están conectados, reconéctalos o ejecuta: sudo udevadm trigger)"

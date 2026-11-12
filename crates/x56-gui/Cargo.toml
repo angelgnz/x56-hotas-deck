@@ -6,6 +6,10 @@ license.workspace = true
 repository.workspace = true
 
 [[bin]]
+name = "x56-deck"
+path = "src/main.rs"
+
+[[bin]]
 name = "x56-gui"
 path = "src/main.rs"
 

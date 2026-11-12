@@ -13,8 +13,10 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-echo "==> Desinstalando x56linux..."
+echo "==> Desinstalando X56 HOTAS Deck..."
 rm -f "${PREFIX}/bin/x56"
+rm -f "${PREFIX}/bin/x56-cli"
+rm -f "${PREFIX}/bin/x56-deck"
 rm -f "${PREFIX}/bin/x56-gui"
 rm -f "${UDEV_DIR}/70-x56.rules"
 rm -f "${DESKTOP_DIR}/com.saitek.x56.desktop"

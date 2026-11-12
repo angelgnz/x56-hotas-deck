@@ -9,6 +9,10 @@ repository.workspace = true
 name = "x56"
 path = "src/main.rs"
 
+[[bin]]
+name = "x56-cli"
+path = "src/main.rs"
+
 [dependencies]
 x56-core = { path = "../x56-core" }
 clap = { version = "4.5", features = ["derive", "cargo"] }
@@ -17,19 +21,21 @@ log = "0.4"
 env_logger = "0.11"
 
 [package.metadata.deb]
-name = "x56linux"
+name = "x56-hotas-deck"
 maintainer = "Angel Gonzalez <https://github.com/angelgnz>"
 copyright = "2026, Angel Gonzalez"
 license-file = ["../../LICENSE", "4"]
 extended-description = """\
-Configurador y controlador en espacio de usuario para Saitek / Logitech G X56 HOTAS.
-Incluye CLI (x56) y GUI táctica Avionics Vector (x56-gui), con soporte udev sin root,
+X56 HOTAS Deck - Configurador y controlador en espacio de usuario para Saitek / Logitech G X56 HOTAS.
+Incluye CLI (x56 / x56-cli) y GUI táctica Avionics Vector (x56-deck / x56-gui), con soporte udev sin root,
 inyección de pulsaciones evdev/uinput y curvas de ejes Hall 16-bit."""
 section = "utils"
 priority = "optional"
 depends = "$auto, libudev1, libxkbcommon0"
 assets = [
     ["../../target/release/x56", "usr/bin/x56", "755"],
+    ["../../target/release/x56-cli", "usr/bin/x56-cli", "755"],
+    ["../../target/release/x56-deck", "usr/bin/x56-deck", "755"],
     ["../../target/release/x56-gui", "usr/bin/x56-gui", "755"],
     ["../../packaging/70-x56.rules", "usr/lib/udev/rules.d/70-x56.rules", "644"],
     ["../../packaging/com.saitek.x56.desktop", "usr/share/applications/com.saitek.x56.desktop", "644"],
@@ -38,14 +44,16 @@ assets = [
 ]
 
 [package.metadata.generate-rpm]
-package = "x56linux"
-summary = "Configurador y driver de usuario para Saitek / Logitech G X56 HOTAS"
+package = "x56-hotas-deck"
+summary = "X56 HOTAS Deck - Configurador y driver de usuario para Saitek / Logitech G X56 HOTAS"
 description = """\
-Configurador y controlador en espacio de usuario para Saitek / Logitech G X56 HOTAS.
-Incluye CLI (x56) y GUI Avionics Vector (x56-gui) con soporte udev sin root."""
+X56 HOTAS Deck - Configurador y controlador en espacio de usuario para Saitek / Logitech G X56 HOTAS.
+Incluye CLI (x56 / x56-cli) y GUI Avionics Vector (x56-deck / x56-gui) con soporte udev sin root."""
 license = "GPL-3.0-or-later"
 assets = [
     { source = "../../target/release/x56", dest = "/usr/bin/x56", mode = "755" },
+    { source = "../../target/release/x56-cli", dest = "/usr/bin/x56-cli", mode = "755" },
+    { source = "../../target/release/x56-deck", dest = "/usr/bin/x56-deck", mode = "755" },
     { source = "../../target/release/x56-gui", dest = "/usr/bin/x56-gui", mode = "755" },
     { source = "../../packaging/70-x56.rules", dest = "/usr/lib/udev/rules.d/70-x56.rules", mode = "644" },
     { source = "../../packaging/com.saitek.x56.desktop", dest = "/usr/share/applications/com.saitek.x56.desktop", mode = "644" },
