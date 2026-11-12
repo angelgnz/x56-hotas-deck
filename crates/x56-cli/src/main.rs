@@ -608,7 +608,10 @@ fn handle_profile_save(
                     println!("  • Palanca (Stick) : {} ejes exportados", s.axes.len());
                 }
                 if let Some(ref t) = profile.throttle {
-                    println!("  • Gases (Throttle): {} ejes exportados", t.axes.len());
+                    println!(
+                        "  • Acelerador (Throttle): {} ejes exportados",
+                        t.axes.len()
+                    );
                 }
                 ExitCode::SUCCESS
             }

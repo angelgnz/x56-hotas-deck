@@ -297,7 +297,7 @@ impl X56App {
                             .unwrap_or(0);
                         self.top_banner_message = Some((
                             format!(
-                                "Perfil '{}' activo ({} ejes stick, {} gases, {} botones)",
+                                "Perfil '{}' activo ({} ejes stick, {} ejes acelerador, {} botones)",
                                 self.active_profile_name,
                                 summary.stick_axes_updated,
                                 summary.throttle_axes_updated,

@@ -265,7 +265,7 @@ pub struct LiveAxesState {
     pub raw_adc_y: u16,
     pub raw_adc_z: u16,
 
-    // Cuadrante de Gases (Throttle)
+    // Acelerador (Throttle)
     pub throttle_left: f64,        // 0.0 .. 1.0 (Unipolar)
     pub throttle_right: f64,       // 0.0 .. 1.0 (Unipolar)
     pub throttle_ministick_x: f64, // -1.0 .. 1.0 (Throttle Slew X / Mini-Gimbal)
