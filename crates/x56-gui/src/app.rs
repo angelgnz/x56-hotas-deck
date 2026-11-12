@@ -71,6 +71,10 @@ pub struct X56App {
 
     // Canal asíncrono para explorador de archivos nativo (rfd)
     pub file_dialog_rx: Option<std::sync::mpsc::Receiver<(ProfileDialogMode, Option<PathBuf>)>>,
+
+    // Bandeja del sistema (Tray) y ejecución en segundo plano al cerrar
+    pub minimize_to_tray_on_close: bool,
+    pub tray_handle: Option<crate::tray::TrayHandle>,
 }
 
 impl Default for X56App {
@@ -102,6 +106,8 @@ impl Default for X56App {
             top_banner_message: None,
             sidebar_collapsed: false,
             file_dialog_rx: None,
+            minimize_to_tray_on_close: true,
+            tray_handle: None,
         };
         app.refresh_hardware_status();
         if Path::new(&app.profile_path_buf).exists() {
@@ -112,6 +118,52 @@ impl Default for X56App {
 }
 
 impl X56App {
+    pub fn new(egui_ctx: &egui::Context) -> Self {
+        let mut app = Self::default();
+        app.init_tray(egui_ctx);
+        app
+    }
+
+    pub fn init_tray(&mut self, egui_ctx: &egui::Context) {
+        let tray_handle = crate::tray::start_tray(egui_ctx.clone(), &self.active_profile_name);
+        self.tray_handle = Some(tray_handle);
+    }
+
+    pub fn sync_tray_state(&self) {
+        if let Some(ref tray) = self.tray_handle {
+            if let Ok(mut p) = tray.active_profile.lock() {
+                *p = self.active_profile_name.clone();
+            }
+        }
+    }
+
+    pub fn poll_tray_commands(&mut self, ctx: &egui::Context) {
+        let mut show_win = false;
+        let mut quit_app = false;
+
+        if let Some(ref tray) = self.tray_handle {
+            while let Ok(cmd) = tray.rx.try_recv() {
+                match cmd {
+                    crate::tray::TrayCommand::ShowWindow => {
+                        show_win = true;
+                    }
+                    crate::tray::TrayCommand::Quit => {
+                        quit_app = true;
+                    }
+                }
+            }
+        }
+
+        if show_win {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+        }
+
+        if quit_app {
+            self.minimize_to_tray_on_close = false;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+    }
     pub fn refresh_hardware_status(&mut self) {
         let devices = X56Device::enumerate();
         self.stick_detected = devices
@@ -177,6 +229,7 @@ impl X56App {
         match FullProfile::load_from_file(&path) {
             Ok(prof) => {
                 self.active_profile_name = prof.name.to_uppercase().replace(' ', "_");
+                self.sync_tray_state();
 
                 if let Some(ref stick_prof) = prof.stick {
                     if let Some(ref sp_str) = stick_prof.spring {
@@ -785,6 +838,29 @@ impl X56App {
                                     },
                                 );
                             });
+
+                            ui.add_space(8.0);
+                            ui.separator();
+                            ui.add_space(6.0);
+
+                            // Opción de quedar corriendo en segundo plano al cerrar
+                            ui.horizontal(|ui| {
+                                ui.checkbox(&mut self.minimize_to_tray_on_close, "");
+                                let lbl = RichText::new("SEGUNDO PLANO AL CERRAR")
+                                    .color(if self.minimize_to_tray_on_close {
+                                        COLOR_PRIMARY_CONTAINER
+                                    } else {
+                                        COLOR_OUTLINE
+                                    })
+                                    .size(9.0)
+                                    .strong()
+                                    .monospace();
+                                if ui.add(egui::Label::new(lbl).sense(Sense::click())).clicked() {
+                                    self.minimize_to_tray_on_close = !self.minimize_to_tray_on_close;
+                                }
+                            })
+                            .response
+                            .on_hover_text("Si está activado, cerrar la ventana mantendrá la aplicación y el mapeo uinput activos en la bandeja del sistema (tray).");
                         });
                     });
             });
@@ -1242,12 +1318,30 @@ impl X56App {
 
 impl eframe::App for X56App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // Procesar órdenes desde el system tray (mostrar ventana, salir)
+        self.poll_tray_commands(ui.ctx());
+
         // Procesar cualquier selección del explorador de archivos nativo
         self.poll_file_dialog();
 
-        // Redibujar continuo a ~30 fps para telemetría en vivo fluida
-        ui.ctx()
-            .request_repaint_after(std::time::Duration::from_millis(33));
+        // Si el usuario solicita cerrar la ventana y tiene activado el segundo plano,
+        // cancelamos el cierre del proceso y ocultamos la ventana a la bandeja del sistema.
+        if ui.input(|i| i.viewport().close_requested()) && self.minimize_to_tray_on_close {
+            ui.ctx()
+                .send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            ui.ctx()
+                .send_viewport_cmd(egui::ViewportCommand::Visible(false));
+        }
+
+        // Tasa de refresco dinámica: 30 FPS cuando está visible, 4 FPS cuando está en tray/segundo plano
+        let is_visible = ui.input(|i| i.viewport().visible().unwrap_or(true));
+        if is_visible {
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(33));
+        } else {
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(250));
+        }
 
         // 1. HeaderBar superior fija (48px de alto)
         egui::Panel::top("avionics_header_bar")

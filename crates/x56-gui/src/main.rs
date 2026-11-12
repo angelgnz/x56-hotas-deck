@@ -3,6 +3,7 @@ mod curve_math;
 pub mod icons;
 mod tabs;
 pub mod theme;
+pub mod tray;
 
 use app::X56App;
 use eframe::egui;
@@ -37,11 +38,17 @@ fn init_logging() {
 fn main() -> eframe::Result<()> {
     init_logging();
 
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_inner_size([1200.0, 800.0])
+        .with_min_inner_size([720.0, 520.0])
+        .with_title("X-56 RHINO // RUST-EVDEV Control Center");
+
+    if let Some(icon) = tray::load_window_icon() {
+        viewport = viewport.with_icon(icon);
+    }
+
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1200.0, 800.0])
-            .with_min_inner_size([720.0, 520.0])
-            .with_title("X-56 RHINO // RUST-EVDEV Control Center"),
+        viewport,
         ..Default::default()
     };
 
@@ -50,7 +57,7 @@ fn main() -> eframe::Result<()> {
         options,
         Box::new(|cc| {
             theme::configure_theme(&cc.egui_ctx);
-            Ok(Box::new(X56App::default()))
+            Ok(Box::new(X56App::new(&cc.egui_ctx)))
         }),
     )
 }
