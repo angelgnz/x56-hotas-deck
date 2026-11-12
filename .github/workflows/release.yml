@@ -90,6 +90,8 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Build Arch Linux package with makepkg
         run: |
@@ -101,6 +103,10 @@ jobs:
           mkdir -p /tmp/arch-build
           cp packaging/PKGBUILD /tmp/arch-build/
           chown -R builder:builder /tmp/arch-build
+
+          # Configure git and point makepkg source to local workspace for exact commit build
+          su builder -c "git config --global --add safe.directory '*'"
+          sed -i "s|source=.*|source=(\"\${_pkgname}::git+file://$GITHUB_WORKSPACE\")|" /tmp/arch-build/PKGBUILD
 
           su builder -c "cd /tmp/arch-build && makepkg -s --noconfirm --nodeps"
 

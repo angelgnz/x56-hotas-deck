@@ -6,6 +6,6 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-hidapi = { version = "2.6", default-features = false, features = ["linux-static-hidraw"] }
+hidapi = { version = "2.6", default-features = false, features = ["linux-native"] }
 log = "0.4"
 x56-proto = { path = "../x56-proto" }

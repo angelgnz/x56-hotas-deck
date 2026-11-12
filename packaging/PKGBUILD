@@ -34,16 +34,12 @@ build() {
   cd "$srcdir/$_pkgname"
   export RUSTUP_TOOLCHAIN=stable
   export CARGO_TARGET_DIR=target
-  unset LDFLAGS
-  export RUSTFLAGS="-C link-arg=-fuse-ld=bfd"
   cargo build --frozen --release --workspace
 }
 
 check() {
   cd "$srcdir/$_pkgname"
   export RUSTUP_TOOLCHAIN=stable
-  unset LDFLAGS
-  export RUSTFLAGS="-C link-arg=-fuse-ld=bfd"
   cargo test --frozen --workspace
 }
 
