@@ -3,6 +3,7 @@
 //! Permite que x56-gui continúe ejecutándose en segundo plano (minimizada en el tray)
 //! al cerrar la ventana, manteniendo el daemon uinput y el mapeo activo.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 
@@ -13,6 +14,8 @@ use ksni::{menu::*, Category, Icon, MenuItem, Status, ToolTip, Tray};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrayCommand {
     ShowWindow,
+    HideWindow,
+    ToggleWindow,
     Quit,
 }
 
@@ -21,6 +24,7 @@ pub struct X56Tray {
     egui_ctx: egui::Context,
     active_profile: Arc<Mutex<String>>,
     uinput_online: Arc<Mutex<bool>>,
+    window_visible: Arc<AtomicBool>,
     pixmaps: Vec<Icon>,
 }
 
@@ -68,7 +72,7 @@ impl Tray for X56Tray {
     }
 
     fn activate(&mut self, _x: i32, _y: i32) {
-        let _ = self.tx.send(TrayCommand::ShowWindow);
+        let _ = self.tx.send(TrayCommand::ToggleWindow);
         self.egui_ctx.request_repaint();
     }
 
@@ -83,13 +87,19 @@ impl Tray for X56Tray {
         } else {
             "✗ Uinput Daemon: Offline"
         };
+        let is_vis = self.window_visible.load(Ordering::Relaxed);
+        let toggle_label = if is_vis {
+            "Ocultar ventana"
+        } else {
+            "Mostrar ventana"
+        };
 
         vec![
             StandardItem {
-                label: "Abrir X-56 Control Center".into(),
+                label: toggle_label.into(),
                 icon_name: "input-gaming".into(),
                 activate: Box::new(|this: &mut Self| {
-                    let _ = this.tx.send(TrayCommand::ShowWindow);
+                    let _ = this.tx.send(TrayCommand::ToggleWindow);
                     this.egui_ctx.request_repaint();
                 }),
                 ..Default::default()
@@ -110,7 +120,7 @@ impl Tray for X56Tray {
             .into(),
             MenuItem::Separator,
             StandardItem {
-                label: "Salir de x56linux".into(),
+                label: "Cerrar por completo".into(),
                 icon_name: "application-exit".into(),
                 activate: Box::new(|this: &mut Self| {
                     let _ = this.tx.send(TrayCommand::Quit);
@@ -127,6 +137,7 @@ pub struct TrayHandle {
     pub rx: Receiver<TrayCommand>,
     pub active_profile: Arc<Mutex<String>>,
     pub uinput_online: Arc<Mutex<bool>>,
+    pub window_visible: Arc<AtomicBool>,
     _handle: Option<ksni::blocking::Handle<X56Tray>>,
     _x11_shutdown: Option<Sender<()>>,
 }
@@ -324,6 +335,181 @@ fn spawn_x11_xembed_tray(tx: Sender<TrayCommand>, egui_ctx: egui::Context) -> Op
                 Some(out)
             };
 
+            let menu_n_data = png_to_bgra(include_bytes!("../assets/menu_normal.png"));
+            let menu_h0_data = png_to_bgra(include_bytes!("../assets/menu_hover_0.png"));
+            let menu_h1_data = png_to_bgra(include_bytes!("../assets/menu_hover_1.png"));
+
+            let show_context_menu = |root_x: i16, root_y: i16| {
+                let (menu_w, menu_h, bgra_n) = match menu_n_data {
+                    Some(ref d) => (d.0, d.1, &d.2),
+                    None => return,
+                };
+                let bgra_0 = menu_h0_data.as_ref().map(|d| &d.2).unwrap_or(bgra_n);
+                let bgra_1 = menu_h1_data.as_ref().map(|d| &d.2).unwrap_or(bgra_n);
+                let item_h = menu_h / 2;
+
+                let max_x = screen.width_in_pixels.saturating_sub(menu_w) as i16;
+                let max_y = screen.height_in_pixels.saturating_sub(menu_h) as i16;
+                let menu_x = root_x.clamp(4, max_x.max(4));
+                let menu_y = if root_y + (menu_h as i16) > max_y {
+                    (root_y - (menu_h as i16)).max(4)
+                } else {
+                    root_y.clamp(4, max_y.max(4))
+                };
+
+                let menu_id = match conn.generate_id() {
+                    Ok(id) => id,
+                    Err(_) => return,
+                };
+
+                let menu_vals = CreateWindowAux::new()
+                    .override_redirect(1)
+                    .background_pixel(0x11141b)
+                    .border_pixel(0x00f0ff)
+                    .event_mask(
+                        EventMask::EXPOSURE
+                            | EventMask::BUTTON_PRESS
+                            | EventMask::POINTER_MOTION
+                            | EventMask::LEAVE_WINDOW,
+                    );
+
+                if conn
+                    .create_window(
+                        screen.root_depth,
+                        menu_id,
+                        screen.root,
+                        menu_x,
+                        menu_y,
+                        menu_w,
+                        menu_h,
+                        1,
+                        WindowClass::INPUT_OUTPUT,
+                        screen.root_visual,
+                        &menu_vals,
+                    )
+                    .is_err()
+                {
+                    return;
+                }
+
+                let menu_gc = match conn.generate_id() {
+                    Ok(id) => {
+                        let _ = conn.create_gc(id, menu_id, &CreateGCAux::new());
+                        id
+                    }
+                    Err(_) => 0,
+                };
+
+                let _ = conn.map_window(menu_id);
+                let _ = conn.flush();
+
+                let _ = conn.grab_pointer(
+                    false,
+                    menu_id,
+                    EventMask::BUTTON_PRESS | EventMask::POINTER_MOTION | EventMask::BUTTON_RELEASE,
+                    GrabMode::ASYNC,
+                    GrabMode::ASYNC,
+                    x11rb::NONE,
+                    x11rb::NONE,
+                    x11rb::CURRENT_TIME,
+                );
+                let _ = conn.flush();
+
+                let draw_menu_state = |hover: Option<usize>| {
+                    if menu_gc == 0 {
+                        return;
+                    }
+                    let data = match hover {
+                        Some(0) => bgra_0,
+                        Some(1) => bgra_1,
+                        _ => bgra_n,
+                    };
+                    let _ = conn.put_image(
+                        ImageFormat::Z_PIXMAP,
+                        menu_id,
+                        menu_gc,
+                        menu_w,
+                        menu_h,
+                        0,
+                        0,
+                        0,
+                        screen.root_depth,
+                        data,
+                    );
+                    let _ = conn.flush();
+                };
+
+                draw_menu_state(None);
+
+                let mut current_hover: Option<usize> = None;
+                let mut active = true;
+
+                while active {
+                    if shutdown_rx.try_recv().is_ok() {
+                        break;
+                    }
+
+                    match conn.poll_for_event() {
+                        Ok(Some(Event::MotionNotify(mev))) => {
+                            let new_hover = if mev.event_x >= 0
+                                && mev.event_x < (menu_w as i16)
+                                && mev.event_y >= 0
+                                && mev.event_y < (menu_h as i16)
+                            {
+                                Some((mev.event_y as u16 / item_h) as usize)
+                            } else {
+                                None
+                            };
+                            if new_hover != current_hover {
+                                current_hover = new_hover;
+                                draw_menu_state(current_hover);
+                            }
+                        }
+                        Ok(Some(Event::Expose(eev))) => {
+                            if eev.window == menu_id {
+                                draw_menu_state(current_hover);
+                            }
+                        }
+                        Ok(Some(Event::ButtonPress(bev))) => {
+                            if bev.event == menu_id
+                                && bev.event_x >= 0
+                                && bev.event_x < (menu_w as i16)
+                                && bev.event_y >= 0
+                                && bev.event_y < (menu_h as i16)
+                            {
+                                let clicked = (bev.event_y as u16 / item_h) as usize;
+                                if clicked == 0 {
+                                    let _ = tx.send(TrayCommand::ToggleWindow);
+                                    egui_ctx.request_repaint();
+                                } else {
+                                    let _ = tx.send(TrayCommand::Quit);
+                                    egui_ctx.request_repaint();
+                                }
+                            }
+                            active = false;
+                        }
+                        Ok(Some(Event::LeaveNotify(lev))) => {
+                            if lev.event == menu_id {
+                                current_hover = None;
+                                draw_menu_state(None);
+                            }
+                        }
+                        Ok(Some(_)) => {}
+                        Ok(None) => {
+                            std::thread::sleep(std::time::Duration::from_millis(20));
+                        }
+                        Err(_) => break,
+                    }
+                }
+
+                let _ = conn.ungrab_pointer(x11rb::CURRENT_TIME);
+                if menu_gc != 0 {
+                    let _ = conn.free_gc(menu_gc);
+                }
+                let _ = conn.destroy_window(menu_id);
+                let _ = conn.flush();
+            };
+
             loop {
                 if shutdown_rx.try_recv().is_ok() {
                     let _ = conn.destroy_window(win_id);
@@ -359,9 +545,11 @@ fn spawn_x11_xembed_tray(tx: Sender<TrayCommand>, egui_ctx: egui::Context) -> Op
                         }
                     }
                     Ok(Some(Event::ButtonPress(ev))) => {
-                        if ev.detail == 1 || ev.detail == 3 {
-                            let _ = tx.send(TrayCommand::ShowWindow);
+                        if ev.detail == 1 {
+                            let _ = tx.send(TrayCommand::ToggleWindow);
                             egui_ctx.request_repaint();
+                        } else if ev.detail == 3 {
+                            show_context_menu(ev.root_x, ev.root_y);
                         }
                     }
                     Ok(Some(_)) => {}
@@ -375,6 +563,21 @@ fn spawn_x11_xembed_tray(tx: Sender<TrayCommand>, egui_ctx: egui::Context) -> Op
         .ok()?;
 
     Some(shutdown_tx)
+}
+
+fn png_to_bgra(bytes: &[u8]) -> Option<(u16, u16, Vec<u8>)> {
+    let img = image::load_from_memory_with_format(bytes, image::ImageFormat::Png).ok()?;
+    let rgba = img.to_rgba8();
+    let w = rgba.width() as u16;
+    let h = rgba.height() as u16;
+    let mut bgra = Vec::with_capacity((w as usize) * (h as usize) * 4);
+    for &[r, g, b, _a] in rgba.as_chunks::<4>().0 {
+        bgra.push(b);
+        bgra.push(g);
+        bgra.push(r);
+        bgra.push(0);
+    }
+    Some((w, h, bgra))
 }
 
 fn load_png_as_icon(png_bytes: &[u8]) -> Option<Icon> {
@@ -414,6 +617,7 @@ pub fn start_tray(egui_ctx: egui::Context, initial_profile: &str) -> TrayHandle 
     let (tx, rx) = channel();
     let active_profile = Arc::new(Mutex::new(initial_profile.to_string()));
     let uinput_online = Arc::new(Mutex::new(true));
+    let window_visible = Arc::new(AtomicBool::new(true));
 
     let mut pixmaps = Vec::new();
     if let Some(i32) = load_png_as_icon(include_bytes!("../assets/tray_icon_32.png")) {
@@ -430,6 +634,7 @@ pub fn start_tray(egui_ctx: egui::Context, initial_profile: &str) -> TrayHandle 
         egui_ctx,
         active_profile: active_profile.clone(),
         uinput_online: uinput_online.clone(),
+        window_visible: window_visible.clone(),
         pixmaps,
     };
 
@@ -448,6 +653,7 @@ pub fn start_tray(egui_ctx: egui::Context, initial_profile: &str) -> TrayHandle 
         rx,
         active_profile,
         uinput_online,
+        window_visible,
         _handle: handle,
         _x11_shutdown: x11_shutdown,
     }

@@ -74,6 +74,7 @@ pub struct X56App {
 
     // Bandeja del sistema (Tray) y ejecución en segundo plano al cerrar
     pub minimize_to_tray_on_close: bool,
+    pub window_visible_state: bool,
     pub tray_handle: Option<crate::tray::TrayHandle>,
 }
 
@@ -107,6 +108,7 @@ impl Default for X56App {
             sidebar_collapsed: false,
             file_dialog_rx: None,
             minimize_to_tray_on_close: true,
+            window_visible_state: true,
             tray_handle: None,
         };
         app.refresh_hardware_status();
@@ -139,6 +141,8 @@ impl X56App {
 
     pub fn poll_tray_commands(&mut self, ctx: &egui::Context) {
         let mut show_win = false;
+        let mut hide_win = false;
+        let mut toggle_win = false;
         let mut quit_app = false;
 
         if let Some(ref tray) = self.tray_handle {
@@ -147,6 +151,12 @@ impl X56App {
                     crate::tray::TrayCommand::ShowWindow => {
                         show_win = true;
                     }
+                    crate::tray::TrayCommand::HideWindow => {
+                        hide_win = true;
+                    }
+                    crate::tray::TrayCommand::ToggleWindow => {
+                        toggle_win = true;
+                    }
                     crate::tray::TrayCommand::Quit => {
                         quit_app = true;
                     }
@@ -154,9 +164,29 @@ impl X56App {
             }
         }
 
-        if show_win {
+        if toggle_win {
+            if self.window_visible_state {
+                self.window_visible_state = false;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+            } else {
+                self.window_visible_state = true;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+            }
+        } else if show_win {
+            self.window_visible_state = true;
             ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
             ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+        } else if hide_win {
+            self.window_visible_state = false;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+        }
+
+        if let Some(ref tray) = self.tray_handle {
+            tray.window_visible.store(
+                self.window_visible_state,
+                std::sync::atomic::Ordering::Relaxed,
+            );
         }
 
         if quit_app {
@@ -1327,6 +1357,11 @@ impl eframe::App for X56App {
         // Si el usuario solicita cerrar la ventana y tiene activado el segundo plano,
         // cancelamos el cierre del proceso y ocultamos la ventana a la bandeja del sistema.
         if ui.input(|i| i.viewport().close_requested()) && self.minimize_to_tray_on_close {
+            self.window_visible_state = false;
+            if let Some(ref tray) = self.tray_handle {
+                tray.window_visible
+                    .store(false, std::sync::atomic::Ordering::Relaxed);
+            }
             ui.ctx()
                 .send_viewport_cmd(egui::ViewportCommand::CancelClose);
             ui.ctx()
@@ -1334,8 +1369,7 @@ impl eframe::App for X56App {
         }
 
         // Tasa de refresco dinámica: 30 FPS cuando está visible, 4 FPS cuando está en tray/segundo plano
-        let is_visible = ui.input(|i| i.viewport().visible().unwrap_or(true));
-        if is_visible {
+        if self.window_visible_state {
             ui.ctx()
                 .request_repaint_after(std::time::Duration::from_millis(33));
         } else {
