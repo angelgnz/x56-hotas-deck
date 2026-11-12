@@ -47,7 +47,7 @@ jobs:
 
       - name: Build RedHat package (.rpm)
         run: |
-          cargo generate-rpm -p crates/x56-cli/Cargo.toml
+          cargo generate-rpm -p crates/x56-cli
           cp target/generate-rpm/*.rpm dist/
 
       - name: Package Universal Standalone Tarball (.tar.gz)
@@ -86,7 +86,7 @@ jobs:
     steps:
       - name: Install Arch build dependencies
         run: |
-          pacman -Syu --noconfirm base-devel git rust cargo pkgconf libxkbcommon systemd-libs
+          pacman -Syu --noconfirm base-devel git rust cargo pkgconf libxkbcommon systemd-libs systemd
 
       - name: Checkout repository
         uses: actions/checkout@v4

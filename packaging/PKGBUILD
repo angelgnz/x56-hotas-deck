@@ -34,12 +34,14 @@ build() {
   cd "$srcdir/$_pkgname"
   export RUSTUP_TOOLCHAIN=stable
   export CARGO_TARGET_DIR=target
+  unset LDFLAGS
   cargo build --frozen --release --workspace
 }
 
 check() {
   cd "$srcdir/$_pkgname"
   export RUSTUP_TOOLCHAIN=stable
+  unset LDFLAGS
   cargo test --frozen --workspace
 }
 
