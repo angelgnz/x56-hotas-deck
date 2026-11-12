@@ -53,10 +53,12 @@ jobs:
       - name: Package Universal Standalone Tarball (.tar.gz)
         run: |
           TAG_NAME="${GITHUB_REF_NAME:-v0.1.0}"
-          TAR_DIR="x56linux-${TAG_NAME}-x86_64"
+          TAR_DIR="x56-hotas-deck-${TAG_NAME}-x86_64"
           mkdir -p "${TAR_DIR}/examples"
 
           cp target/release/x56 "${TAR_DIR}/"
+          cp target/release/x56-cli "${TAR_DIR}/"
+          cp target/release/x56-deck "${TAR_DIR}/"
           cp target/release/x56-gui "${TAR_DIR}/"
           cp packaging/70-x56.rules "${TAR_DIR}/"
           cp packaging/com.saitek.x56.desktop "${TAR_DIR}/"
