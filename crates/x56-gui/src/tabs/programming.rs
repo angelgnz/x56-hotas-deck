@@ -100,6 +100,7 @@ pub enum InteractState {
 }
 
 impl InteractState {
+    #[allow(dead_code)]
     pub fn is_active(self) -> bool {
         self != Self::Idle
     }
@@ -137,9 +138,30 @@ impl Dir4Interact {
 pub struct InteractionMap<'a> {
     pub pressed: &'a HashSet<String>,
     pub hovered: Option<&'a str>,
+    pub profile: &'a ProgrammingProfile,
+    pub mode: ModeSlot,
 }
 
 impl InteractionMap<'_> {
+    pub fn is_assigned(&self, id: &str) -> bool {
+        self.profile
+            .get_cell(self.mode, id)
+            .is_some_and(|c| c.is_assigned())
+    }
+
+    pub fn assigned_dir2(&self, up: &str, down: &str) -> (bool, bool) {
+        (self.is_assigned(up), self.is_assigned(down))
+    }
+
+    pub fn assigned_dir4(&self, u: &str, r: &str, d: &str, l: &str) -> (bool, bool, bool, bool) {
+        (
+            self.is_assigned(u),
+            self.is_assigned(r),
+            self.is_assigned(d),
+            self.is_assigned(l),
+        )
+    }
+
     pub fn get(&self, id: &str) -> InteractState {
         if self.pressed.contains(id) {
             InteractState::Pressed
@@ -1072,6 +1094,8 @@ impl ProgrammingTab {
             let im = InteractionMap {
                 pressed: &snapshot.pressed_buttons,
                 hovered: active_hovered,
+                profile: &self.profile,
+                mode: self.selected_mode,
             };
 
             // Dibujar siluetas vectoriales y componentes tácticos interactivos con la suite de interacción
@@ -1080,26 +1104,8 @@ impl ProgrammingTab {
                 DeviceKind::Throttle => self.draw_vector_throttle_silhouette(&painter, rect, &im),
             }
 
-            // Indicadores de asignación personalizada y tooltips tácticos
+            // Tooltips tácticos al pasar el ratón
             for node in &nodes {
-                let center = egui::pos2(
-                    Self::compact_vector_map_x(rect, node.norm_x, self.selected_device),
-                    rect.min.y + node.norm_y * rect.height(),
-                );
-
-                let is_assigned = self
-                    .profile
-                    .get_cell(self.selected_mode, node.id)
-                    .is_some_and(|c| c.is_assigned());
-
-                if is_assigned {
-                    painter.circle_filled(
-                        egui::pos2(center.x + node.radius * 0.7, center.y - node.radius * 0.7),
-                        3.5,
-                        COLOR_WARNING_AMBER,
-                    );
-                }
-
                 if active_hovered == Some(node.id) {
                     let default_info = default_mapping_for(node.id);
                     let mapped_str =
@@ -1249,6 +1255,12 @@ impl ProgrammingTab {
                 "stick_pov_down",
                 "stick_pov_left",
             ),
+            im.assigned_dir4(
+                "stick_pov_up",
+                "stick_pov_right",
+                "stick_pov_down",
+                "stick_pov_left",
+            ),
             "POV",
         );
 
@@ -1258,6 +1270,7 @@ impl ProgrammingTab {
             p(0.415, 0.138),
             0.32 * s,
             im.get("stick_btn_a"),
+            im.is_assigned("stick_btn_a"),
             "A",
             true,
         );
@@ -1273,6 +1286,12 @@ impl ProgrammingTab {
                 "stick_h1_down",
                 "stick_h1_left",
             ),
+            im.assigned_dir4(
+                "stick_h1_up",
+                "stick_h1_right",
+                "stick_h1_down",
+                "stick_h1_left",
+            ),
             "H1",
         );
 
@@ -1282,6 +1301,7 @@ impl ProgrammingTab {
             p(0.670, 0.072),
             0.30 * s,
             im.get("stick_btn_b"),
+            im.is_assigned("stick_btn_b"),
             "B",
             false,
         );
@@ -1297,11 +1317,23 @@ impl ProgrammingTab {
                 "stick_h2_down",
                 "stick_h2_left",
             ),
+            im.assigned_dir4(
+                "stick_h2_up",
+                "stick_h2_right",
+                "stick_h2_down",
+                "stick_h2_left",
+            ),
             "H2",
         );
 
         // 9. Gatillo Principal (TRG: cx: 0.500, cy: 0.420)
-        Self::draw_stick_trigger(painter, p(0.500, 0.420), s, im.get("stick_trigger"));
+        Self::draw_stick_trigger(
+            painter,
+            p(0.500, 0.420),
+            s,
+            im.get("stick_trigger"),
+            im.is_assigned("stick_trigger"),
+        );
 
         // 10. Botón C: Minipalanca Analógica / C-Stick Push (cx: 0.440, cy: 0.560, scale: 0.28)
         Self::draw_circular_button(
@@ -1309,12 +1341,19 @@ impl ProgrammingTab {
             p(0.440, 0.560),
             0.28 * s,
             im.get("stick_btn_c"),
+            im.is_assigned("stick_btn_c"),
             "C",
             false,
         );
 
         // 11. Palanca Meñique (PNK: cx: 0.500, cy: 0.700)
-        Self::draw_stick_pinkie_lever(painter, p(0.500, 0.700), s, im.get("stick_pinkie"));
+        Self::draw_stick_pinkie_lever(
+            painter,
+            p(0.500, 0.700),
+            s,
+            im.get("stick_pinkie"),
+            im.is_assigned("stick_pinkie"),
+        );
 
         // 12. Botón D: Meñique / Base Rest (cx: 0.570, cy: 0.840, scale: 0.28)
         Self::draw_circular_button(
@@ -1322,13 +1361,20 @@ impl ProgrammingTab {
             p(0.570, 0.840),
             0.28 * s,
             im.get("stick_btn_d"),
+            im.is_assigned("stick_btn_d"),
             "D",
             false,
         );
     }
 
     /// Dibuja el gatillo principal (Trigger) del Stick con protector y hoja móvil iluminada.
-    fn draw_stick_trigger(painter: &egui::Painter, center: egui::Pos2, s: f32, st: InteractState) {
+    fn draw_stick_trigger(
+        painter: &egui::Painter,
+        center: egui::Pos2,
+        s: f32,
+        st: InteractState,
+        is_assigned: bool,
+    ) {
         let cyan = COLOR_PRIMARY_CONTAINER;
         let is_pressed = st == InteractState::Pressed;
         let guard_w = 68.0 * s;
@@ -1372,7 +1418,7 @@ impl ProgrammingTab {
             InteractState::Idle => (
                 Color32::from_rgb(24, 32, 46),
                 Color32::from_rgb(67, 86, 117),
-                Color32::from_rgb(203, 213, 225),
+                if is_assigned { cyan } else { Color32::WHITE },
             ),
         };
 
@@ -1398,6 +1444,7 @@ impl ProgrammingTab {
         center: egui::Pos2,
         s: f32,
         st: InteractState,
+        is_assigned: bool,
     ) {
         let cyan = COLOR_PRIMARY_CONTAINER;
         let is_pressed = st == InteractState::Pressed;
@@ -1424,7 +1471,7 @@ impl ProgrammingTab {
             InteractState::Idle => (
                 Color32::from_rgb(24, 32, 46),
                 Color32::from_rgb(67, 86, 117),
-                Color32::from_rgb(203, 213, 225),
+                if is_assigned { cyan } else { Color32::WHITE },
             ),
         };
 
@@ -1468,6 +1515,7 @@ impl ProgrammingTab {
             sc_center,
             0.38 * s,
             im.dir2("thr_scroll_fwd", "thr_scroll_bck"),
+            im.assigned_dir2("thr_scroll_fwd", "thr_scroll_bck"),
         );
 
         // 2. K1: Toggle Doble Vertical (cx: 235.1, cy: 210.8, scale: 0.38)
@@ -1477,14 +1525,31 @@ impl ProgrammingTab {
             k1_center,
             0.38 * s,
             im.dir2("thr_k1_up", "thr_k1_down"),
+            im.assigned_dir2("thr_k1_up", "thr_k1_down"),
         );
 
         // 3. Botones Circulares del Grip: I y H (scale: 0.29)
         let i_center = p(484.6, 184.6);
-        Self::draw_circular_button(painter, i_center, 0.29 * s, im.get("thr_btn_i"), "I", false);
+        Self::draw_circular_button(
+            painter,
+            i_center,
+            0.29 * s,
+            im.get("thr_btn_i"),
+            im.is_assigned("thr_btn_i"),
+            "I",
+            false,
+        );
 
         let h_center = p(594.6, 184.6);
-        Self::draw_circular_button(painter, h_center, 0.29 * s, im.get("thr_btn_h"), "H", false);
+        Self::draw_circular_button(
+            painter,
+            h_center,
+            0.29 * s,
+            im.get("thr_btn_h"),
+            im.is_assigned("thr_btn_h"),
+            "H",
+            false,
+        );
 
         // 4. Giratorios Superiores F y G (scale: 0.40)
         let f_center = p(745.0, 118.0);
@@ -1493,6 +1558,7 @@ impl ProgrammingTab {
             f_center,
             0.40 * s,
             im.get("thr_rty_f_push"),
+            im.is_assigned("thr_rty_f_push"),
             "F",
             true,
         );
@@ -1503,6 +1569,7 @@ impl ProgrammingTab {
             g_center,
             0.40 * s,
             im.get("thr_rty_g_push"),
+            im.is_assigned("thr_rty_g_push"),
             "G",
             true,
         );
@@ -1510,11 +1577,25 @@ impl ProgrammingTab {
         // 5. SLD: Toggle Horizontal (cx: 594.0, cy: 290.0, scale: 0.40)
         let sld_center = p(594.0, 290.0);
         let sld_on = im.get("thr_sld") == InteractState::Pressed;
-        Self::draw_horizontal_slider_sld(painter, sld_center, 0.40 * s, im.get("thr_sld"), sld_on);
+        Self::draw_horizontal_slider_sld(
+            painter,
+            sld_center,
+            0.40 * s,
+            im.get("thr_sld"),
+            im.is_assigned("thr_sld"),
+            sld_on,
+        );
 
         // 6. E: Botón Cuadrado (cx: 581.6, cy: 391.6, scale: 0.29)
         let e_center = p(581.6, 391.6);
-        Self::draw_square_button(painter, e_center, 0.29 * s, im.get("thr_btn_e"), "E");
+        Self::draw_square_button(
+            painter,
+            e_center,
+            0.29 * s,
+            im.get("thr_btn_e"),
+            im.is_assigned("thr_btn_e"),
+            "E",
+        );
 
         // 7. H3: Cruceta Circular (cx: 694.7, cy: 394.7, scale: 0.31)
         let h3_center = p(694.7, 394.7);
@@ -1523,6 +1604,7 @@ impl ProgrammingTab {
             h3_center,
             0.31 * s,
             im.dir4("thr_h3_up", "thr_h3_right", "thr_h3_down", "thr_h3_left"),
+            im.assigned_dir4("thr_h3_up", "thr_h3_right", "thr_h3_down", "thr_h3_left"),
             "H3",
         );
 
@@ -1533,6 +1615,7 @@ impl ProgrammingTab {
             h4_center,
             0.31 * s,
             im.dir4("thr_h4_up", "thr_h4_right", "thr_h4_down", "thr_h4_left"),
+            im.assigned_dir4("thr_h4_up", "thr_h4_right", "thr_h4_down", "thr_h4_left"),
             "H4",
         );
 
@@ -1543,6 +1626,7 @@ impl ProgrammingTab {
             tgl4_center,
             0.34 * s,
             im.dir2("thr_sw_13", "thr_sw_14"),
+            im.assigned_dir2("thr_sw_13", "thr_sw_14"),
             "TGL 4",
             false,
             "",
@@ -1555,6 +1639,7 @@ impl ProgrammingTab {
             tgl3_center,
             0.34 * s,
             im.dir2("thr_sw_11", "thr_sw_12"),
+            im.assigned_dir2("thr_sw_11", "thr_sw_12"),
             "TGL 3",
             false,
             "",
@@ -1567,6 +1652,7 @@ impl ProgrammingTab {
             tgl2_center,
             0.34 * s,
             im.dir2("thr_sw_9", "thr_sw_10"),
+            im.assigned_dir2("thr_sw_9", "thr_sw_10"),
             "TGL 2",
             false,
             "",
@@ -1579,6 +1665,7 @@ impl ProgrammingTab {
             tgl1_center,
             0.34 * s,
             im.dir2("thr_sw_7", "thr_sw_8"),
+            im.assigned_dir2("thr_sw_7", "thr_sw_8"),
             "TGL 1",
             false,
             "",
@@ -1592,6 +1679,7 @@ impl ProgrammingTab {
             sw12_center,
             0.36 * s,
             im.dir2("thr_sw_1", "thr_sw_2"),
+            im.assigned_dir2("thr_sw_1", "thr_sw_2"),
             "SW",
             true,
             "1",
@@ -1604,6 +1692,7 @@ impl ProgrammingTab {
             sw34_center,
             0.36 * s,
             im.dir2("thr_sw_3", "thr_sw_4"),
+            im.assigned_dir2("thr_sw_3", "thr_sw_4"),
             "SW",
             true,
             "3",
@@ -1616,6 +1705,7 @@ impl ProgrammingTab {
             sw56_center,
             0.36 * s,
             im.dir2("thr_sw_5", "thr_sw_6"),
+            im.assigned_dir2("thr_sw_5", "thr_sw_6"),
             "SW",
             true,
             "5",
@@ -1630,11 +1720,14 @@ impl ProgrammingTab {
         center: egui::Pos2,
         s: f32,
         d: Dir2Interact,
+        assigned: (bool, bool),
         center_label: &str,
         is_numbered: bool,
         top_num: &str,
         bot_num: &str,
     ) {
+        let (ass_up, ass_down) = assigned;
+        let any_assigned = ass_up || ass_down;
         let cyan = COLOR_PRIMARY_CONTAINER;
         let is_up = d.up == InteractState::Pressed;
         let is_down = d.down == InteractState::Pressed;
@@ -1753,27 +1846,38 @@ impl ProgrammingTab {
 
         // Indicador Superior
         let top_y = center.y - 100.0 * s;
+        let top_stroke = match d.up {
+            InteractState::Pressed => Stroke::new(2.4 * s, cyan),
+            InteractState::Hovered => Stroke::new(2.2 * s, Color32::WHITE),
+            InteractState::Idle => {
+                if ass_up {
+                    Stroke::new(1.8 * s, cyan)
+                } else {
+                    Stroke::new(1.8 * s, Color32::WHITE)
+                }
+            }
+        };
+
         if is_numbered {
             let tri = vec![
                 egui::pos2(center.x, top_y - 20.0 * s),
                 egui::pos2(center.x - 22.0 * s, top_y + 14.0 * s),
                 egui::pos2(center.x + 22.0 * s, top_y + 14.0 * s),
             ];
-            let (f_col, s_col, t_col) = match d.up {
-                InteractState::Pressed => (cyan, Color32::WHITE, Color32::from_rgb(6, 8, 13)),
-                InteractState::Hovered => {
-                    (Color32::WHITE, Color32::WHITE, Color32::from_rgb(6, 8, 13))
+            let t_col = match d.up {
+                InteractState::Pressed | InteractState::Hovered => Color32::WHITE,
+                InteractState::Idle => {
+                    if ass_up {
+                        cyan
+                    } else {
+                        Color32::WHITE
+                    }
                 }
-                InteractState::Idle => (
-                    Color32::from_rgb(11, 16, 27),
-                    Color32::from_rgb(71, 85, 105),
-                    Color32::from_rgb(203, 213, 225),
-                ),
             };
             painter.add(egui::Shape::convex_polygon(
                 tri,
-                f_col,
-                Stroke::new(1.8 * s, s_col),
+                Color32::TRANSPARENT,
+                top_stroke,
             ));
             painter.text(
                 egui::pos2(center.x, top_y + 2.0 * s),
@@ -1788,41 +1892,47 @@ impl ProgrammingTab {
                 egui::pos2(center.x - 18.0 * s, top_y + 6.0 * s),
                 egui::pos2(center.x + 18.0 * s, top_y + 6.0 * s),
             ];
-            let (f_col, s_col) = match d.up {
-                InteractState::Pressed => (cyan, Color32::WHITE),
-                InteractState::Hovered => (Color32::WHITE, Color32::WHITE),
-                InteractState::Idle => (Color32::from_rgb(30, 41, 59), cyan),
-            };
             painter.add(egui::Shape::convex_polygon(
                 tri,
-                f_col,
-                Stroke::new(1.8 * s, s_col),
+                Color32::TRANSPARENT,
+                top_stroke,
             ));
         }
 
         // Indicador Inferior
         let bot_y = center.y + 100.0 * s;
+        let bot_stroke = match d.down {
+            InteractState::Pressed => Stroke::new(2.4 * s, cyan),
+            InteractState::Hovered => Stroke::new(2.2 * s, Color32::WHITE),
+            InteractState::Idle => {
+                if ass_down {
+                    Stroke::new(1.8 * s, cyan)
+                } else {
+                    Stroke::new(1.8 * s, Color32::WHITE)
+                }
+            }
+        };
+
         if is_numbered {
             let tri = vec![
                 egui::pos2(center.x, bot_y + 20.0 * s),
                 egui::pos2(center.x - 22.0 * s, bot_y - 14.0 * s),
                 egui::pos2(center.x + 22.0 * s, bot_y - 14.0 * s),
             ];
-            let (f_col, s_col, t_col) = match d.down {
-                InteractState::Pressed => (cyan, Color32::WHITE, Color32::from_rgb(6, 8, 13)),
-                InteractState::Hovered => {
-                    (Color32::WHITE, Color32::WHITE, Color32::from_rgb(6, 8, 13))
+            let t_col = match d.down {
+                InteractState::Pressed | InteractState::Hovered => Color32::WHITE,
+                InteractState::Idle => {
+                    if ass_down {
+                        cyan
+                    } else {
+                        Color32::WHITE
+                    }
                 }
-                InteractState::Idle => (
-                    Color32::from_rgb(11, 16, 27),
-                    Color32::from_rgb(71, 85, 105),
-                    Color32::from_rgb(203, 213, 225),
-                ),
             };
             painter.add(egui::Shape::convex_polygon(
                 tri,
-                f_col,
-                Stroke::new(1.8 * s, s_col),
+                Color32::TRANSPARENT,
+                bot_stroke,
             ));
             painter.text(
                 egui::pos2(center.x, bot_y - 2.0 * s),
@@ -1837,15 +1947,10 @@ impl ProgrammingTab {
                 egui::pos2(center.x - 18.0 * s, bot_y - 6.0 * s),
                 egui::pos2(center.x + 18.0 * s, bot_y - 6.0 * s),
             ];
-            let (f_col, s_col) = match d.down {
-                InteractState::Pressed => (cyan, Color32::WHITE),
-                InteractState::Hovered => (Color32::WHITE, Color32::WHITE),
-                InteractState::Idle => (Color32::from_rgb(30, 41, 59), cyan),
-            };
             painter.add(egui::Shape::convex_polygon(
                 tri,
-                f_col,
-                Stroke::new(1.8 * s, s_col),
+                Color32::TRANSPARENT,
+                bot_stroke,
             ));
         }
 
@@ -1871,12 +1976,22 @@ impl ProgrammingTab {
         } else {
             16.5 * s
         };
+        let knob_text_col = match d.any() {
+            InteractState::Pressed | InteractState::Hovered => Color32::WHITE,
+            InteractState::Idle => {
+                if any_assigned {
+                    cyan
+                } else {
+                    Color32::WHITE
+                }
+            }
+        };
         painter.text(
             knob_pos,
             egui::Align2::CENTER_CENTER,
             center_label,
             egui::FontId::monospace(knob_font_sz),
-            Color32::WHITE,
+            knob_text_col,
         );
     }
 
@@ -1886,6 +2001,7 @@ impl ProgrammingTab {
         center: egui::Pos2,
         s: f32,
         st: InteractState,
+        is_assigned: bool,
         letter: &str,
         is_large: bool,
     ) {
@@ -1940,7 +2056,13 @@ impl ProgrammingTab {
         let font_sz = if is_large { 52.0 * s } else { 48.0 * s };
         let t_col = match st {
             InteractState::Pressed | InteractState::Hovered => Color32::WHITE,
-            InteractState::Idle => cyan,
+            InteractState::Idle => {
+                if is_assigned {
+                    cyan
+                } else {
+                    Color32::WHITE
+                }
+            }
         };
         painter.text(
             egui::pos2(center.x, center.y + 1.5 * s),
@@ -1957,6 +2079,7 @@ impl ProgrammingTab {
         center: egui::Pos2,
         s: f32,
         st: InteractState,
+        is_assigned: bool,
         letter: &str,
     ) {
         let cyan = COLOR_PRIMARY_CONTAINER;
@@ -2021,7 +2144,13 @@ impl ProgrammingTab {
 
         let t_col = match st {
             InteractState::Pressed | InteractState::Hovered => Color32::WHITE,
-            InteractState::Idle => cyan,
+            InteractState::Idle => {
+                if is_assigned {
+                    cyan
+                } else {
+                    Color32::WHITE
+                }
+            }
         };
         painter.text(
             egui::pos2(center.x, center.y + 1.5 * s),
@@ -2033,7 +2162,15 @@ impl ProgrammingTab {
     }
 
     /// Dibuja la rueda scroll táctica SC con punteros laterales y ranuras rotativas.
-    fn draw_scroll_wheel(painter: &egui::Painter, center: egui::Pos2, s: f32, d: Dir2Interact) {
+    fn draw_scroll_wheel(
+        painter: &egui::Painter,
+        center: egui::Pos2,
+        s: f32,
+        d: Dir2Interact,
+        assigned: (bool, bool),
+    ) {
+        let (ass_up, ass_down) = assigned;
+        let any_assigned = ass_up || ass_down;
         let cyan = COLOR_PRIMARY_CONTAINER;
 
         let w = 164.0 * s;
@@ -2054,19 +2191,21 @@ impl ProgrammingTab {
             egui::pos2(center.x - 15.0 * s, center.y - 114.0 * s),
             egui::pos2(center.x + 15.0 * s, center.y - 114.0 * s),
         ];
-        let top_col = match d.up {
-            InteractState::Pressed => cyan,
-            InteractState::Hovered => Color32::WHITE,
-            InteractState::Idle => Color32::from_rgb(71, 85, 105),
+        let top_stroke = match d.up {
+            InteractState::Pressed => Stroke::new(2.2 * s, cyan),
+            InteractState::Hovered => Stroke::new(2.0 * s, Color32::WHITE),
+            InteractState::Idle => {
+                if ass_up {
+                    Stroke::new(1.5 * s, cyan)
+                } else {
+                    Stroke::new(1.5 * s, Color32::WHITE)
+                }
+            }
         };
         painter.add(egui::Shape::convex_polygon(
             top_arrow,
-            top_col,
-            if d.up.is_active() {
-                Stroke::new(1.5 * s, Color32::WHITE)
-            } else {
-                Stroke::NONE
-            },
+            Color32::TRANSPARENT,
+            top_stroke,
         ));
 
         let bot_arrow = vec![
@@ -2074,19 +2213,21 @@ impl ProgrammingTab {
             egui::pos2(center.x - 15.0 * s, center.y + 114.0 * s),
             egui::pos2(center.x + 15.0 * s, center.y + 114.0 * s),
         ];
-        let bot_col = match d.down {
-            InteractState::Pressed => cyan,
-            InteractState::Hovered => Color32::WHITE,
-            InteractState::Idle => Color32::from_rgb(71, 85, 105),
+        let bot_stroke = match d.down {
+            InteractState::Pressed => Stroke::new(2.2 * s, cyan),
+            InteractState::Hovered => Stroke::new(2.0 * s, Color32::WHITE),
+            InteractState::Idle => {
+                if ass_down {
+                    Stroke::new(1.5 * s, cyan)
+                } else {
+                    Stroke::new(1.5 * s, Color32::WHITE)
+                }
+            }
         };
         painter.add(egui::Shape::convex_polygon(
             bot_arrow,
-            bot_col,
-            if d.down.is_active() {
-                Stroke::new(1.5 * s, Color32::WHITE)
-            } else {
-                Stroke::NONE
-            },
+            Color32::TRANSPARENT,
+            bot_stroke,
         ));
 
         // Cavidad del tambor
@@ -2155,17 +2296,35 @@ impl ProgrammingTab {
             Stroke::new(1.2 * s, badge_border),
             egui::StrokeKind::Inside,
         );
+        let sc_text_col = match d.any() {
+            InteractState::Pressed | InteractState::Hovered => Color32::WHITE,
+            InteractState::Idle => {
+                if any_assigned {
+                    cyan
+                } else {
+                    Color32::WHITE
+                }
+            }
+        };
         painter.text(
             center,
             egui::Align2::CENTER_CENTER,
             "SC",
             egui::FontId::monospace(18.0 * s),
-            Color32::WHITE,
+            sc_text_col,
         );
     }
 
     /// Dibuja el conmutador vertical K1 con su manija animada y LEDs.
-    fn draw_double_toggle_k1(painter: &egui::Painter, center: egui::Pos2, s: f32, d: Dir2Interact) {
+    fn draw_double_toggle_k1(
+        painter: &egui::Painter,
+        center: egui::Pos2,
+        s: f32,
+        d: Dir2Interact,
+        assigned: (bool, bool),
+    ) {
+        let (ass_up, ass_down) = assigned;
+        let any_assigned = ass_up || ass_down;
         let cyan = COLOR_PRIMARY_CONTAINER;
         let is_up = d.up == InteractState::Pressed;
         let is_down = d.down == InteractState::Pressed;
@@ -2201,18 +2360,22 @@ impl ProgrammingTab {
             egui::pos2(center.x - 13.0 * s, center.y - 124.0 * s),
             egui::pos2(center.x + 13.0 * s, center.y - 124.0 * s),
         ];
-        let (top_col, top_led_col) = match d.up {
-            InteractState::Pressed => (cyan, cyan),
-            InteractState::Hovered => (Color32::WHITE, Color32::WHITE),
+        let (top_stroke, top_led_col) = match d.up {
+            InteractState::Pressed => (Stroke::new(2.2 * s, cyan), cyan),
+            InteractState::Hovered => (Stroke::new(2.0 * s, Color32::WHITE), Color32::WHITE),
             InteractState::Idle => (
-                Color32::from_rgb(71, 85, 105),
+                if ass_up {
+                    Stroke::new(1.5 * s, cyan)
+                } else {
+                    Stroke::new(1.5 * s, Color32::WHITE)
+                },
                 Color32::from_rgb(24, 32, 44),
             ),
         };
         painter.add(egui::Shape::convex_polygon(
             top_arrow,
-            top_col,
-            Stroke::NONE,
+            Color32::TRANSPARENT,
+            top_stroke,
         ));
         painter.circle_filled(
             egui::pos2(center.x, center.y - 110.0 * s),
@@ -2270,20 +2433,34 @@ impl ProgrammingTab {
             Color32::from_rgb(32, 42, 59),
             handle_border,
         ));
+        let k1_text_col = match d.any() {
+            InteractState::Pressed | InteractState::Hovered => Color32::WHITE,
+            InteractState::Idle => {
+                if any_assigned {
+                    cyan
+                } else {
+                    Color32::WHITE
+                }
+            }
+        };
         painter.text(
             h_pos,
             egui::Align2::CENTER_CENTER,
             "K1",
             egui::FontId::monospace(19.0 * s),
-            Color32::WHITE,
+            k1_text_col,
         );
 
         // LED + Flecha Abajo
-        let (bot_col, bot_led_col) = match d.down {
-            InteractState::Pressed => (cyan, cyan),
-            InteractState::Hovered => (Color32::WHITE, Color32::WHITE),
+        let (bot_stroke, bot_led_col) = match d.down {
+            InteractState::Pressed => (Stroke::new(2.2 * s, cyan), cyan),
+            InteractState::Hovered => (Stroke::new(2.0 * s, Color32::WHITE), Color32::WHITE),
             InteractState::Idle => (
-                Color32::from_rgb(71, 85, 105),
+                if ass_down {
+                    Stroke::new(1.5 * s, cyan)
+                } else {
+                    Stroke::new(1.5 * s, Color32::WHITE)
+                },
                 Color32::from_rgb(24, 32, 44),
             ),
         };
@@ -2299,8 +2476,8 @@ impl ProgrammingTab {
         ];
         painter.add(egui::Shape::convex_polygon(
             bot_arrow,
-            bot_col,
-            Stroke::NONE,
+            Color32::TRANSPARENT,
+            bot_stroke,
         ));
     }
 
@@ -2310,6 +2487,7 @@ impl ProgrammingTab {
         center: egui::Pos2,
         s: f32,
         st: InteractState,
+        is_assigned: bool,
         is_on: bool,
     ) {
         let cyan = COLOR_PRIMARY_CONTAINER;
@@ -2402,12 +2580,22 @@ impl ProgrammingTab {
             Color32::from_rgb(32, 42, 59),
             handle_stroke,
         ));
+        let text_col = match st {
+            InteractState::Pressed | InteractState::Hovered => Color32::WHITE,
+            InteractState::Idle => {
+                if is_assigned {
+                    cyan
+                } else {
+                    Color32::WHITE
+                }
+            }
+        };
         painter.text(
             h_pos,
             egui::Align2::CENTER_CENTER,
             "SLD",
             egui::FontId::monospace(19.0 * s),
-            Color32::WHITE,
+            text_col,
         );
     }
 
@@ -2417,8 +2605,11 @@ impl ProgrammingTab {
         center: egui::Pos2,
         s: f32,
         d: Dir4Interact,
+        assigned: (bool, bool, bool, bool),
         label: &str,
     ) {
+        let (ass_up, ass_right, ass_down, ass_left) = assigned;
+        let any_assigned = ass_up || ass_right || ass_down || ass_left;
         let cyan = COLOR_PRIMARY_CONTAINER;
         let r_rim = 162.0 * s;
         let r_dish = 140.0 * s;
@@ -2463,13 +2654,16 @@ impl ProgrammingTab {
         let d_offset = 116.0 * s;
         let arrow_size = 18.0 * s;
 
-        let arrow_fill_stroke = |st: InteractState| match st {
-            InteractState::Pressed => (cyan, Stroke::new(1.2 * s, Color32::WHITE)),
-            InteractState::Hovered => (Color32::WHITE, Stroke::new(1.2 * s, Color32::WHITE)),
-            InteractState::Idle => (
-                Color32::from_rgba_unmultiplied(0, 240, 255, 120),
-                Stroke::new(1.2 * s, cyan),
-            ),
+        let arrow_stroke = |st: InteractState, is_assigned: bool| match st {
+            InteractState::Pressed => Stroke::new(2.2 * s, cyan),
+            InteractState::Hovered => Stroke::new(2.0 * s, Color32::WHITE),
+            InteractState::Idle => {
+                if is_assigned {
+                    Stroke::new(1.4 * s, cyan)
+                } else {
+                    Stroke::new(1.4 * s, Color32::WHITE)
+                }
+            }
         };
 
         // Up arrow
@@ -2484,8 +2678,11 @@ impl ProgrammingTab {
                 center.y - d_offset + arrow_size,
             ),
         ];
-        let (f_up, s_up) = arrow_fill_stroke(d.up);
-        painter.add(egui::Shape::convex_polygon(up_tri, f_up, s_up));
+        painter.add(egui::Shape::convex_polygon(
+            up_tri,
+            Color32::TRANSPARENT,
+            arrow_stroke(d.up, ass_up),
+        ));
 
         // Down arrow
         let down_tri = vec![
@@ -2499,8 +2696,11 @@ impl ProgrammingTab {
                 center.y + d_offset - arrow_size,
             ),
         ];
-        let (f_down, s_down) = arrow_fill_stroke(d.down);
-        painter.add(egui::Shape::convex_polygon(down_tri, f_down, s_down));
+        painter.add(egui::Shape::convex_polygon(
+            down_tri,
+            Color32::TRANSPARENT,
+            arrow_stroke(d.down, ass_down),
+        ));
 
         // Left arrow
         let left_tri = vec![
@@ -2514,8 +2714,11 @@ impl ProgrammingTab {
                 center.y + arrow_size * 0.7,
             ),
         ];
-        let (f_left, s_left) = arrow_fill_stroke(d.left);
-        painter.add(egui::Shape::convex_polygon(left_tri, f_left, s_left));
+        painter.add(egui::Shape::convex_polygon(
+            left_tri,
+            Color32::TRANSPARENT,
+            arrow_stroke(d.left, ass_left),
+        ));
 
         // Right arrow
         let right_tri = vec![
@@ -2529,23 +2732,42 @@ impl ProgrammingTab {
                 center.y + arrow_size * 0.7,
             ),
         ];
-        let (f_right, s_right) = arrow_fill_stroke(d.right);
-        painter.add(egui::Shape::convex_polygon(right_tri, f_right, s_right));
+        painter.add(egui::Shape::convex_polygon(
+            right_tri,
+            Color32::TRANSPARENT,
+            arrow_stroke(d.right, ass_right),
+        ));
 
         // Botón central con H3 / H4 / POV / H1 / H2
         painter.circle_filled(center, 40.0 * s, Color32::from_rgb(18, 24, 36));
         let center_stroke = match d.any() {
             InteractState::Pressed => Stroke::new(2.0 * s, cyan),
             InteractState::Hovered => Stroke::new(2.0 * s, Color32::WHITE),
-            InteractState::Idle => Stroke::new(1.8 * s, cyan),
+            InteractState::Idle => {
+                if any_assigned {
+                    Stroke::new(1.8 * s, cyan)
+                } else {
+                    Stroke::new(1.8 * s, Color32::WHITE)
+                }
+            }
         };
         painter.circle_stroke(center, 40.0 * s, center_stroke);
+        let label_col = match d.any() {
+            InteractState::Pressed | InteractState::Hovered => Color32::WHITE,
+            InteractState::Idle => {
+                if any_assigned {
+                    cyan
+                } else {
+                    Color32::WHITE
+                }
+            }
+        };
         painter.text(
             center,
             egui::Align2::CENTER_CENTER,
             label,
             egui::FontId::monospace(24.0 * s),
-            Color32::WHITE,
+            label_col,
         );
     }
 
