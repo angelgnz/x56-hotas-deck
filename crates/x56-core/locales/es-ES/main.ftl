@@ -175,6 +175,17 @@ prog-test-loop = TEST LOOP
 prog-sync-hw-on = SYNC HW: ON
 prog-sync-hw-off = SYNC HW: OFF
 prog-sync-hw-tooltip = Sincroniza automáticamente la capa visible con el selector físico del Throttle
+prog-export-xml = EXPORTAR XML (STAR CITIZEN)
+prog-export-xml-tooltip = Exportar asignaciones de botones como archivo XML ActionMaps para Star Citizen
+prog-export-xml-title = Exportar XML ActionMaps de Star Citizen
+prog-export-xml-filter = XML de Star Citizen (*.xml)
+prog-export-xml-ok = XML ActionMaps exportado a: { $path }
+prog-export-xml-err = Error exportando XML: { $err }
+prog-uinput-active = INYECCIÓN UINPUT: ACTIVA (PAUSAR)
+prog-uinput-paused = INYECCIÓN UINPUT: PAUSADA (ACTIVAR)
+prog-uinput-toggle-tooltip = Activar o pausar la emisión de teclas virtuales (/dev/uinput) al vuelo sin guardar TOML ni tocar curvas
+prog-uinput-resumed-msg = Emisión de teclado virtual ACTIVA (/dev/uinput)
+prog-uinput-paused-msg = Emisión de teclado virtual PAUSADA
 
 # Pestaña de Calibración Hall
 cal-title = Calibración Neutral de Sensores de Efecto Hall

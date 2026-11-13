@@ -7,7 +7,7 @@
 //!   matriz POV Hat 1 con brújula octogonal y botones de acción rápida de macros.
 //! - Columna Derecha: Buscador táctico, estadísticas telemétricas, chips de filtro y filas de mapeo
 //!   con badges destacados uinput y metadatos de Star Citizen / Simuladores.
-//! - Footer Táctico: Badge de compatibilidad Proton/Steam Deck y acciones globales de exportación y commit.
+//! - Footer Táctico: Exportación de perfil a Star Citizen XML y toggle en vivo del router uinput.
 
 use std::collections::HashSet;
 
@@ -88,6 +88,7 @@ pub struct ProgrammingTab {
     pub prev_pressed_buttons: HashSet<String>,
     pub currently_pressed_count: usize,
     pub active_pressed_summary: String,
+    pub xml_dialog_rx: Option<std::sync::mpsc::Receiver<Option<std::path::PathBuf>>>,
 }
 
 /// Estado de interacción táctil para los componentes del mapa vectorial.
@@ -226,6 +227,7 @@ impl ProgrammingTab {
             prev_pressed_buttons: HashSet::new(),
             currently_pressed_count: 0,
             active_pressed_summary: String::new(),
+            xml_dialog_rx: None,
         }
     }
 
@@ -249,6 +251,8 @@ impl ProgrammingTab {
 
     /// Renderizado principal de la pestaña de programación.
     pub fn ui(&mut self, ui: &mut Ui, monitor: &ButtonMonitor, poller: &LiveInputPoller) {
+        self.poll_xml_export_dialog();
+
         // Establecer el ancho máximo disponible para evitar cualquier desbordamiento horizontal
         let avail_w = ui.available_width();
         ui.set_max_width(avail_w);
@@ -3684,61 +3688,107 @@ impl ProgrammingTab {
     // FOOTER TÁCTICO
     // ========================================================================
 
-    fn render_tactical_footer(&mut self, ui: &mut Ui, monitor: &ButtonMonitor) {
-        theme::dock_frame().show(ui, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                // Botones de exportación
-                let exp_xml = format!("{} EXPORTAR XML", icons::FILE_CODE);
-                if tactical_button(ui, &exp_xml, false, false).clicked() {
-                    let xml = generate_star_citizen_xml(&self.profile);
-                    if let Err(e) = std::fs::write("examples/star_citizen_actionmaps.xml", &xml) {
-                        self.status_message = Some((format!("Error exportando XML: {e}"), true));
-                    } else {
+    /// Abre el selector nativo de archivos en un hilo separado para exportar Star Citizen XML
+    /// sin bloquear el bucle de renderizado de egui.
+    pub fn spawn_xml_export_dialog(&mut self) {
+        if self.xml_dialog_rx.is_some() {
+            return;
+        }
+
+        let start_dir = std::env::current_dir()
+            .ok()
+            .map(|d| d.join("examples"))
+            .filter(|p| p.exists())
+            .or_else(|| std::env::current_dir().ok());
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.xml_dialog_rx = Some(rx);
+
+        std::thread::spawn(move || {
+            let filter_xml = x56_core::t!("prog-export-xml-filter");
+            let filter_all = x56_core::t!("filter-all");
+            let mut dialog = rfd::FileDialog::new()
+                .add_filter(&filter_xml, &["xml"])
+                .add_filter(&filter_all, &["*"])
+                .set_title(x56_core::t!("prog-export-xml-title"))
+                .set_file_name("star_citizen_actionmaps.xml");
+
+            if let Some(dir) = start_dir {
+                dialog = dialog.set_directory(dir);
+            }
+
+            let _ = tx.send(dialog.save_file());
+        });
+    }
+
+    /// Procesa de forma no bloqueante el resultado pendiente del diálogo de exportación XML.
+    pub fn poll_xml_export_dialog(&mut self) {
+        let Some(rx) = self.xml_dialog_rx.as_ref() else {
+            return;
+        };
+
+        match rx.try_recv() {
+            Ok(Some(path)) => {
+                self.xml_dialog_rx = None;
+                let mut p = path.display().to_string();
+                if !p.to_ascii_lowercase().ends_with(".xml") {
+                    p.push_str(".xml");
+                }
+                let xml = generate_star_citizen_xml(&self.profile);
+                match std::fs::write(&p, &xml) {
+                    Ok(()) => {
+                        self.status_message =
+                            Some((x56_core::t!("prog-export-xml-ok", "path" => &p), false));
+                    }
+                    Err(e) => {
                         self.status_message = Some((
-                            "MAPEO EXPORTADO: examples/star_citizen_actionmaps.xml".to_string(),
-                            false,
+                            x56_core::t!("prog-export-xml-err", "err" => &e.to_string()),
+                            true,
                         ));
                     }
                 }
+            }
+            Ok(None) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                self.xml_dialog_rx = None;
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => {}
+        }
+    }
 
-                let exp_json = format!("{} EXPORTAR JSON", icons::FILE_TEXT);
-                if tactical_button(ui, &exp_json, false, false).clicked() {
-                    let json = export_programming_json(&self.profile);
-                    if let Err(e) = std::fs::write("examples/x56_buttons_config.json", &json) {
-                        self.status_message = Some((format!("Error exportando JSON: {e}"), true));
-                    } else {
-                        self.status_message = Some((
-                            "CONFIGURACIÓN EXPORTADA: examples/x56_buttons_config.json".to_string(),
-                            false,
-                        ));
-                    }
+    fn render_tactical_footer(&mut self, ui: &mut Ui, monitor: &ButtonMonitor) {
+        theme::dock_frame().show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                let exp_xml = format!("{} {}", icons::FILE_CODE, x56_core::t!("prog-export-xml"));
+                if tactical_button(ui, &exp_xml, false, false)
+                    .on_hover_text(x56_core::t!("prog-export-xml-tooltip"))
+                    .clicked()
+                {
+                    self.spawn_xml_export_dialog();
                 }
 
                 ui.separator();
 
-                // Descartar cambios
-                let discard_lbl = format!("{} DESCARTAR CAMBIOS", icons::ROTATE_CCW);
-                if tactical_button(ui, &discard_lbl, false, false).clicked() {
-                    self.profile = ProgrammingProfile::default();
-                    monitor.set_profile(self.profile.clone());
-                    self.editing_button_id = None;
-                    self.pending_keys.clear();
-                    self.pending_name.clear();
-                    self.status_message = Some((
-                        "CAMBIOS DESCARTADOS // PERFIL REINICIADO".to_string(),
-                        false,
-                    ));
-                }
-
-                // Botón primario azul con resplandor
-                let apply_uinput = format!("{} ESCRIBIR MAPEO A UINPUT", icons::UPLOAD);
-                if tactical_button(ui, &apply_uinput, false, true).clicked() {
-                    monitor.set_profile(self.profile.clone());
-                    monitor.set_active(true);
-                    self.status_message = Some((
-                        "MAPEO ESCRITO A /dev/uinput // ROUTER ACTIVO".to_string(),
-                        false,
-                    ));
+                let is_active = monitor.is_active();
+                if is_active {
+                    let lbl = format!("{} {}", icons::PLAY, x56_core::t!("prog-uinput-active"));
+                    if tactical_button(ui, &lbl, true, false)
+                        .on_hover_text(x56_core::t!("prog-uinput-toggle-tooltip"))
+                        .clicked()
+                    {
+                        monitor.set_active(false);
+                        self.status_message = Some((x56_core::t!("prog-uinput-paused-msg"), false));
+                    }
+                } else {
+                    let lbl = format!("{} {}", icons::UPLOAD, x56_core::t!("prog-uinput-paused"));
+                    if tactical_button(ui, &lbl, false, true)
+                        .on_hover_text(x56_core::t!("prog-uinput-toggle-tooltip"))
+                        .clicked()
+                    {
+                        monitor.set_profile(self.profile.clone());
+                        monitor.set_active(true);
+                        self.status_message =
+                            Some((x56_core::t!("prog-uinput-resumed-msg"), false));
+                    }
                 }
             });
         });
@@ -4229,8 +4279,23 @@ fn map_key_to_name(key: Key) -> Option<&'static str> {
 }
 
 // ============================================================================
-// EXPORTACIÓN STAR CITIZEN XML Y JSON
+// EXPORTACIÓN STAR CITIZEN XML
 // ============================================================================
+
+fn escape_xml(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&apos;"),
+            _ => out.push(ch),
+        }
+    }
+    out
+}
 
 fn generate_star_citizen_xml(profile: &ProgrammingProfile) -> String {
     let mut xml = String::from("<!-- Star Citizen ActionMaps X-56 HOTAS (Avionics Vector) -->\n");
@@ -4250,12 +4315,15 @@ fn generate_star_citizen_xml(profile: &ProgrammingProfile) -> String {
         let bindings = profile.bindings_for(*mode);
         for (id, cell) in &bindings.cells {
             if cell.is_assigned() {
+                let action_name = escape_xml(&cell.name.replace(' ', "_").to_lowercase());
+                let input_id = escape_xml(id);
+                let keys_joined = escape_xml(&cell.keys.join("+"));
                 xml.push_str(&format!(
                     "  <actionmap name=\"spaceship_general_m{}\">\n    <action name=\"{}\">\n      <rebind device=\"joystick\" input=\"{}\" key=\"{}\"/>\n    </action>\n  </actionmap>\n",
                     mode_idx + 1,
-                    cell.name.replace(' ', "_").to_lowercase(),
-                    id,
-                    cell.keys.join("+")
+                    action_name,
+                    input_id,
+                    keys_joined
                 ));
             }
         }
@@ -4263,39 +4331,6 @@ fn generate_star_citizen_xml(profile: &ProgrammingProfile) -> String {
 
     xml.push_str("</ActionMaps>\n");
     xml
-}
-
-fn export_programming_json(profile: &ProgrammingProfile) -> String {
-    let mut json = String::from("{\n  \"schema\": \"x56linux_programming_v1\",\n");
-    for (mode_name, bindings) in [
-        ("m1", &profile.m1),
-        ("m2", &profile.m2),
-        ("s1", &profile.s1),
-    ] {
-        json.push_str(&format!("  \"{}\": {{\n", mode_name));
-        let mut first = true;
-        for (id, cell) in &bindings.cells {
-            if !first {
-                json.push_str(",\n");
-            }
-            first = false;
-            json.push_str(&format!(
-                "    \"{}\": {{ \"name\": \"{}\", \"keys\": [{}] }}",
-                id,
-                cell.name,
-                cell.keys
-                    .iter()
-                    .map(|k| format!("\"{}\"", k))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ));
-        }
-        json.push_str("\n  },\n");
-    }
-    json.push_str("  \"total_assigned\": ");
-    json.push_str(&profile.total_assigned_count().to_string());
-    json.push_str("\n}\n");
-    json
 }
 
 // ============================================================================

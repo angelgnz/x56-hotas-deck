@@ -176,6 +176,17 @@ prog-test-loop = TEST LOOP
 prog-sync-hw-on = SYNC HW: ON
 prog-sync-hw-off = SYNC HW: OFF
 prog-sync-hw-tooltip = Automatically synchronize visible layer with physical throttle mode dial
+prog-export-xml = EXPORT STAR CITIZEN XML
+prog-export-xml-tooltip = Export button bindings as a Star Citizen ActionMaps XML file
+prog-export-xml-title = Export Star Citizen ActionMaps XML
+prog-export-xml-filter = Star Citizen XML (*.xml)
+prog-export-xml-ok = ActionMaps XML exported to: { $path }
+prog-export-xml-err = Error exporting XML: { $err }
+prog-uinput-active = UINPUT INJECTION: ACTIVE (PAUSE)
+prog-uinput-paused = UINPUT INJECTION: PAUSED (ACTIVATE)
+prog-uinput-toggle-tooltip = Toggle live virtual keyboard emission (/dev/uinput) without modifying curves or saving TOML
+prog-uinput-resumed-msg = Virtual keyboard emission ACTIVE (/dev/uinput)
+prog-uinput-paused-msg = Virtual keyboard emission PAUSED
 
 # Hall Calibration Tab
 cal-title = Hall-Effect Sensor Neutral Calibration
