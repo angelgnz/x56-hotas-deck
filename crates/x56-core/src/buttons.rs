@@ -308,6 +308,24 @@ pub fn all_button_descriptors() -> Vec<ButtonDescriptor> {
 // Celdas y perfiles de programación
 // ---------------------------------------------------------------------------
 
+/// Paso individual dentro de una secuencia de macro programada.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct MacroStep {
+    /// Teclas que componen este paso (pulsación simple o acorde con modificadores).
+    #[serde(default)]
+    pub keys: Vec<String>,
+    /// Pausa en milisegundos antes de ejecutar este paso respecto al paso anterior.
+    #[serde(default)]
+    pub delay_ms: u64,
+}
+
+impl MacroStep {
+    /// Teclas del paso unidas con `"+"` (p. ej. `Ctrl+A`).
+    pub fn keys_display(&self) -> String {
+        self.keys.join("+")
+    }
+}
+
 /// Comando asignado a un botón dentro de un modo.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct CommandCell {
@@ -316,18 +334,54 @@ pub struct CommandCell {
     /// Nombre del comando (p. ej. "Tren de aterrizaje").
     pub name: String,
     /// Teclas a emitir, en orden de pulsación (p. ej. `["Ctrl", "G"]`).
+    #[serde(default)]
     pub keys: Vec<String>,
+    /// Secuencia ordenada de pasos de macro con pausas entre sí.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub steps: Vec<MacroStep>,
 }
 
 impl CommandCell {
-    /// Una celda está asignada cuando define al menos una tecla a emitir.
+    /// Una celda está asignada cuando define al menos una tecla o paso de secuencia.
     pub fn is_assigned(&self) -> bool {
-        !self.keys.is_empty()
+        !self.keys.is_empty() || self.steps.iter().any(|s| !s.keys.is_empty())
     }
 
-    /// Teclas unidas con `" + "` (cadena vacía si no hay teclas).
+    /// Indica si la celda representa una secuencia de macro multi-paso.
+    pub fn is_sequence(&self) -> bool {
+        !self.steps.is_empty()
+    }
+
+    /// Representación legible de las teclas o pasos asignados.
     pub fn keys_display(&self) -> String {
-        self.keys.join(" + ")
+        if !self.steps.is_empty() {
+            self.steps
+                .iter()
+                .filter(|s| !s.keys.is_empty())
+                .map(MacroStep::keys_display)
+                .collect::<Vec<_>>()
+                .join(" → ")
+        } else {
+            self.keys.join(" + ")
+        }
+    }
+
+    /// Devuelve los pasos efectivos de la celda (normalizando un acorde único si `steps` está vacío).
+    pub fn effective_steps(&self) -> Vec<MacroStep> {
+        if !self.steps.is_empty() {
+            self.steps
+                .iter()
+                .filter(|s| !s.keys.is_empty())
+                .cloned()
+                .collect()
+        } else if !self.keys.is_empty() {
+            vec![MacroStep {
+                keys: self.keys.clone(),
+                delay_ms: 0,
+            }]
+        } else {
+            Vec::new()
+        }
     }
 }
 
@@ -1065,6 +1119,14 @@ fn pressed_ids(descriptors: &[ButtonDescriptor], raw: &RawState) -> HashSet<Stri
         .collect()
 }
 
+const MAX_MACRO_STEP_DELAY_MS: u64 = 5_000;
+const MIN_MACRO_STEP_GAP_MS: u64 = 15;
+
+struct PendingMacroStep {
+    due: Instant,
+    codes: Vec<u16>,
+}
+
 struct Worker {
     shared: Arc<Shared>,
     keyboard: Option<VirtualKeyboard>,
@@ -1079,6 +1141,7 @@ struct Worker {
     rgb_tx: mpsc::Sender<RgbDispatchCommand>,
     last_scan: Instant,
     last_keyboard_try: Instant,
+    pending_steps: VecDeque<PendingMacroStep>,
 }
 
 impl Worker {
@@ -1103,6 +1166,7 @@ impl Worker {
             // Fuerza un escaneo inmediato.
             last_scan: now.checked_sub(RESCAN_INTERVAL).unwrap_or(now),
             last_keyboard_try: now,
+            pending_steps: VecDeque::new(),
         }
     }
 
@@ -1132,6 +1196,21 @@ impl Worker {
             self.shared
                 .uinput
                 .store(self.keyboard.is_some(), Ordering::SeqCst);
+        }
+
+        if !self.shared.active.load(Ordering::SeqCst) {
+            self.pending_steps.clear();
+        } else if let Some(kb) = self.keyboard.as_mut() {
+            let now = Instant::now();
+            while let Some(front) = self.pending_steps.front() {
+                if front.due <= now {
+                    if let Some(step) = self.pending_steps.pop_front() {
+                        let _ = kb.tap(&step.codes);
+                    }
+                } else {
+                    break;
+                }
+            }
         }
 
         // Throttle: modo físico, SLD y botones.
@@ -1242,23 +1321,72 @@ impl Worker {
             let mut emitted = false;
             if self.shared.active.load(Ordering::SeqCst) {
                 if let Some(kb) = self.keyboard.as_mut() {
-                    let codes: Vec<u16> = cell
-                        .keys
-                        .iter()
-                        .filter_map(|k| key_name_to_code(k))
-                        .collect();
-                    if !codes.is_empty() {
-                        emitted = kb.tap(&codes).is_ok();
+                    if !cell.steps.is_empty() {
+                        let resolved: Vec<(Vec<u16>, u64)> = cell
+                            .steps
+                            .iter()
+                            .filter_map(|step| {
+                                let codes: Vec<u16> = step
+                                    .keys
+                                    .iter()
+                                    .filter_map(|k| key_name_to_code(k))
+                                    .collect();
+                                if codes.is_empty() {
+                                    None
+                                } else {
+                                    Some((codes, step.delay_ms))
+                                }
+                            })
+                            .collect();
+                        if !resolved.is_empty() {
+                            let mut cursor = Instant::now();
+                            for (idx, (codes, raw_delay)) in resolved.into_iter().enumerate() {
+                                if idx == 0 && raw_delay == 0 {
+                                    if kb.tap(&codes).is_ok() {
+                                        emitted = true;
+                                    }
+                                } else {
+                                    let delay = if idx == 0 {
+                                        raw_delay.min(MAX_MACRO_STEP_DELAY_MS)
+                                    } else {
+                                        raw_delay
+                                            .clamp(MIN_MACRO_STEP_GAP_MS, MAX_MACRO_STEP_DELAY_MS)
+                                    };
+                                    cursor += Duration::from_millis(delay);
+                                    self.pending_steps
+                                        .push_back(PendingMacroStep { due: cursor, codes });
+                                    emitted = true;
+                                }
+                            }
+                        }
+                    } else {
+                        let codes: Vec<u16> = cell
+                            .keys
+                            .iter()
+                            .filter_map(|k| key_name_to_code(k))
+                            .collect();
+                        if !codes.is_empty() {
+                            emitted = kb.tap(&codes).is_ok();
+                        }
                     }
                 }
             }
+            let event_keys = if !cell.steps.is_empty() {
+                cell.steps
+                    .iter()
+                    .filter(|s| !s.keys.is_empty())
+                    .map(MacroStep::keys_display)
+                    .collect()
+            } else {
+                cell.keys.clone()
+            };
             let event = TriggeredCommandEvent {
                 timestamp_hms: now_hms(),
                 mode,
                 button_id: id,
                 button_label: label,
                 command_name: cell.name.clone(),
-                keys: cell.keys.clone(),
+                keys: event_keys,
                 uinput_emitted: emitted,
             };
             let mut st = self.shared.lock();
@@ -1549,6 +1677,7 @@ mod tests {
             button_id: "stick_trigger".into(),
             name: "Disparar".into(),
             keys: vec!["Ctrl".into(), "F".into()],
+            steps: Vec::new(),
         };
         assert!(cell.is_assigned());
         assert_eq!(cell.keys_display(), "Ctrl + F");
@@ -1581,6 +1710,7 @@ mod tests {
                 button_id: "thr_sw_1".into(),
                 name: "Tren".into(),
                 keys: vec!["G".into()],
+                steps: Vec::new(),
             },
         );
         let s = toml::to_string(&p).unwrap();
@@ -1692,6 +1822,7 @@ rgb = "#0088ff"
                 button_id: "stick_trigger".into(),
                 name: "x".into(),
                 keys: vec!["A".into()],
+                steps: Vec::new(),
             },
         );
         m.set_profile(p.clone());
@@ -1711,5 +1842,79 @@ rgb = "#0088ff"
             !snap.pressed_buttons.contains("stick_flying_pinkie"),
             "stick_flying_pinkie no debe existir ni detectarse como presionado"
         );
+    }
+
+    #[test]
+    fn macro_step_sequence_display_and_toml_roundtrip() {
+        let step1 = MacroStep {
+            keys: vec!["Ctrl".into(), "A".into()],
+            delay_ms: 0,
+        };
+        let step2 = MacroStep {
+            keys: vec!["C".into()],
+            delay_ms: 120,
+        };
+        let empty_step = MacroStep::default();
+        assert_eq!(step1.keys_display(), "Ctrl+A");
+        assert_eq!(step2.keys_display(), "C");
+
+        let seq_cell = CommandCell {
+            button_id: "stick_pinkie".into(),
+            name: "Secuencia".into(),
+            keys: Vec::new(),
+            steps: vec![step1.clone(), empty_step, step2.clone()],
+        };
+        assert!(seq_cell.is_assigned());
+        assert!(seq_cell.is_sequence());
+        assert_eq!(seq_cell.keys_display(), "Ctrl+A → C");
+        assert_eq!(
+            seq_cell.effective_steps(),
+            vec![step1.clone(), step2.clone()]
+        );
+
+        let chord_cell = CommandCell {
+            button_id: "stick_trigger".into(),
+            name: "Disparo".into(),
+            keys: vec!["Ctrl".into(), "F".into()],
+            steps: Vec::new(),
+        };
+        assert!(chord_cell.is_assigned());
+        assert!(!chord_cell.is_sequence());
+        assert_eq!(chord_cell.keys_display(), "Ctrl + F");
+        assert_eq!(
+            chord_cell.effective_steps(),
+            vec![MacroStep {
+                keys: vec!["Ctrl".into(), "F".into()],
+                delay_ms: 0,
+            }]
+        );
+
+        let empty_cell = CommandCell::default();
+        assert!(!empty_cell.is_assigned());
+        assert!(!empty_cell.is_sequence());
+        assert!(empty_cell.effective_steps().is_empty());
+
+        let mut profile = ProgrammingProfile::default();
+        profile.set_cell(ModeSlot::M1, seq_cell.clone());
+        profile.set_cell(ModeSlot::M2, chord_cell.clone());
+        let encoded = toml::to_string(&profile).unwrap();
+        let decoded: ProgrammingProfile = toml::from_str(&encoded).unwrap();
+        assert_eq!(decoded, profile);
+
+        // Retrocompatibilidad cuando `steps` está ausente en TOML.
+        let legacy_toml = r#"
+[m1.cells.stick_trigger]
+button_id = "stick_trigger"
+name = "Legacy"
+keys = ["Space"]
+"#;
+        let legacy_profile: ProgrammingProfile = toml::from_str(legacy_toml).unwrap();
+        let legacy_cell = legacy_profile
+            .get_cell(ModeSlot::M1, "stick_trigger")
+            .unwrap();
+        assert!(legacy_cell.steps.is_empty());
+        assert!(legacy_cell.is_assigned());
+        assert!(!legacy_cell.is_sequence());
+        assert_eq!(legacy_cell.keys_display(), "Space");
     }
 }

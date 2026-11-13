@@ -2,19 +2,19 @@
 //! para el Saitek / Logitech G X56 HOTAS (Inspirada en la Sección 8 del Manual).
 //!
 //! Implementa la arquitectura visual Avionics Vector:
-//! - Top Bar táctica con selector de dispositivo, pills M1/M2/S1 y estado del router uinput.
+//! - Top Bar táctica con selector de dispositivo, pills M1/M2/S1 y toggle en vivo del router uinput.
 //! - Columna Izquierda: Monitor de detección en vivo (evdev hook 1000 Hz), mapa vectorial 2D interactivo,
 //!   matriz POV Hat 1 con brújula octogonal y botones de acción rápida de macros.
 //! - Columna Derecha: Buscador táctico, estadísticas telemétricas, chips de filtro y filas de mapeo
 //!   con badges destacados uinput y metadatos de Star Citizen / Simuladores.
-//! - Footer Táctico: Badge de compatibilidad Proton/Steam Deck y acciones globales de exportación y commit.
 
 use std::collections::HashSet;
+use std::time::Instant;
 
 use eframe::egui::{self, Color32, Key, RichText, Stroke, Ui, Vec2};
 use x56_core::{
     catalog_for_device, ButtonDescriptor, ButtonMonitor, CommandCell, DeviceKind,
-    LiveButtonsSnapshot, ModeSlot, ProgrammingProfile, TriggeredCommandEvent,
+    LiveButtonsSnapshot, MacroStep, ModeSlot, ProgrammingProfile, TriggeredCommandEvent,
 };
 
 use crate::curve_math::{LiveAxesState, LiveInputPoller};
@@ -83,7 +83,12 @@ pub struct ProgrammingTab {
     pub last_latency_ms: f32,
     pub last_state_down: bool,
     pub is_recording_macro: bool,
-    pub macro_record_buffer: Vec<String>,
+    pub recorded_steps: Vec<MacroStep>,
+    pub macro_recorder_open: bool,
+    pub macro_target_button_id: Option<String>,
+    pub macro_name_draft: String,
+    pub macro_record_timings: bool,
+    pub last_record_instant: Option<Instant>,
     pub active_detected_id: Option<String>,
     pub prev_pressed_buttons: HashSet<String>,
     pub currently_pressed_count: usize,
@@ -221,7 +226,12 @@ impl ProgrammingTab {
             last_latency_ms: 0.82,
             last_state_down: false,
             is_recording_macro: false,
-            macro_record_buffer: Vec::new(),
+            recorded_steps: Vec::new(),
+            macro_recorder_open: false,
+            macro_target_button_id: None,
+            macro_name_draft: String::new(),
+            macro_record_timings: true,
+            last_record_instant: None,
             active_detected_id: None,
             prev_pressed_buttons: HashSet::new(),
             currently_pressed_count: 0,
@@ -264,8 +274,12 @@ impl ProgrammingTab {
         // 2. Detección en vivo de pulsaciones físicas para telemetría
         self.update_live_detection_state(&snapshot);
 
-        // 3. Captura interactiva de teclas cuando una celda está en edición
-        self.handle_live_key_capture(ui);
+        // 3. Captura interactiva de teclas (grabación de secuencia vs edición de celda)
+        if self.is_recording_macro {
+            self.handle_live_macro_recording(ui);
+        } else {
+            self.handle_live_key_capture(ui);
+        }
 
         // 4. Barra Superior Táctica (Top Bar)
         self.render_tactical_top_bar(ui, monitor, &snapshot);
@@ -374,6 +388,9 @@ impl ProgrammingTab {
                             self.render_filter_pills(ui);
                             ui.add_space(6.0);
 
+                            // B2. Grabador de secuencias cuando está activo/abierto
+                            self.render_macro_recorder_panel(ui, monitor);
+
                             // C. Filas de mapeo tácticas en tarjetas
                             egui::ScrollArea::vertical()
                                 .id_salt("mapping_rows_scroll")
@@ -412,6 +429,8 @@ impl ProgrammingTab {
 
                         // Botones de acción rápida de macros
                         self.render_quick_macro_actions(ui);
+                        ui.add_space(6.0);
+                        self.render_macro_recorder_panel(ui, monitor);
                         ui.add_space(10.0);
                         ui.separator();
                         ui.add_space(10.0);
@@ -439,6 +458,7 @@ impl ProgrammingTab {
                     ui.add_space(6.0);
                     self.render_filter_pills(ui);
                     ui.add_space(6.0);
+                    self.render_macro_recorder_panel(ui, monitor);
                     egui::ScrollArea::vertical()
                         .id_salt("mapping_rows_scroll_full")
                         .max_width(total_w)
@@ -451,10 +471,7 @@ impl ProgrammingTab {
             );
         }
 
-        // 6. Footer Táctico con Compatibilidad y Acciones Globales
-        self.render_tactical_footer(ui, monitor);
-
-        // 7. Modal de prueba de loop evdev
+        // 6. Modal de prueba de loop evdev
         if self.show_test_window {
             self.render_test_modal(ui, monitor, &snapshot);
         }
@@ -536,6 +553,10 @@ impl ProgrammingTab {
                 self.last_detected_button = Some(btn_id.to_uppercase());
                 self.hovered_button_id = Some(btn_id.clone());
             }
+
+            if self.macro_recorder_open && self.macro_target_button_id.is_none() {
+                self.macro_target_button_id = Some(btn_id.clone());
+            }
         }
     }
 
@@ -571,6 +592,85 @@ impl ProgrammingTab {
                     }
                 }
             }
+        });
+    }
+
+    /// Captura secuencias de teclado en vivo mientras el grabador de macros está activo.
+    fn handle_live_macro_recording(&mut self, ui: &mut Ui) {
+        if !self.is_recording_macro || ui.ctx().egui_wants_keyboard_input() {
+            return;
+        }
+
+        let captured_chords: Vec<Vec<String>> = ui.input(|i| {
+            let mut chords = Vec::new();
+            for event in &i.events {
+                if let egui::Event::Key {
+                    key,
+                    pressed: true,
+                    repeat: false,
+                    modifiers,
+                    ..
+                } = event
+                {
+                    if matches!(
+                        key,
+                        Key::ControlLeft
+                            | Key::ControlRight
+                            | Key::ShiftLeft
+                            | Key::ShiftRight
+                            | Key::AltLeft
+                            | Key::AltRight
+                    ) {
+                        continue;
+                    }
+
+                    if let Some(name) = map_key_to_name(*key) {
+                        let mut chord = Vec::new();
+                        if modifiers.ctrl {
+                            chord.push("Ctrl".to_string());
+                        }
+                        if modifiers.shift {
+                            chord.push("Shift".to_string());
+                        }
+                        if modifiers.alt {
+                            chord.push("Alt".to_string());
+                        }
+                        if !chord.iter().any(|k| k == name) {
+                            chord.push(name.to_string());
+                        }
+                        chords.push(chord);
+                    }
+                }
+            }
+            chords
+        });
+
+        let now = Instant::now();
+        for chord in captured_chords {
+            self.record_key_chord(chord, now);
+        }
+    }
+
+    /// Registra un acorde de teclas como nuevo paso en la secuencia grabada.
+    pub(crate) fn record_key_chord(&mut self, chord: Vec<String>, now: Instant) {
+        if chord.is_empty() {
+            return;
+        }
+
+        let delay_ms = if self.recorded_steps.is_empty() {
+            0
+        } else if self.macro_record_timings {
+            self.last_record_instant
+                .map(|prev| now.saturating_duration_since(prev).as_millis().min(5_000) as u64)
+                .unwrap_or(0)
+        } else {
+            50
+        };
+
+        self.last_record_instant = Some(now);
+        self.recorded_steps.push(MacroStep {
+            keys: chord,
+            delay_ms,
         });
     }
 
@@ -726,34 +826,79 @@ impl ProgrammingTab {
 
                 ui.separator();
 
-                // Estado del Router uinput
+                // Estado / Toggle en vivo del Router uinput
                 let uinput_ready = monitor.uinput_available();
-                let dot_col = if uinput_ready {
-                    COLOR_TERTIARY_CONTAINER
-                } else {
-                    COLOR_ERROR
-                };
-                let router_text = format!(
-                    "{}: {}",
-                    x56_core::t!("prog-router-uinput"),
-                    if uinput_ready {
-                        x56_core::t!("prog-router-online")
-                    } else {
+                if !uinput_ready {
+                    let router_text = format!(
+                        "{}: {}",
+                        x56_core::t!("prog-router-uinput"),
                         x56_core::t!("prog-router-offline")
-                    }
-                );
+                    );
+                    theme::sunken_frame()
+                        .inner_margin(egui::Margin::symmetric(8, 3))
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.label(
+                                    RichText::new(icons::CIRCLE_DOT)
+                                        .color(COLOR_ERROR)
+                                        .size(11.0),
+                                );
+                                ui.label(
+                                    RichText::new(router_text)
+                                        .color(COLOR_ERROR)
+                                        .size(10.0)
+                                        .monospace(),
+                                );
+                            });
+                        })
+                        .response
+                        .on_hover_text(x56_core::t!("sidebar-uinput-offline-tooltip"));
+                } else {
+                    let is_active = monitor.is_active();
+                    let (label, accent_col) = if is_active {
+                        (
+                            format!(
+                                "{} {}",
+                                icons::CIRCLE_DOT,
+                                x56_core::t!("prog-uinput-active-short")
+                            ),
+                            COLOR_TERTIARY_CONTAINER,
+                        )
+                    } else {
+                        (
+                            format!("{} {}", icons::UPLOAD, x56_core::t!("prog-uinput-paused-short")),
+                            COLOR_WARNING_AMBER,
+                        )
+                    };
 
-                theme::sunken_frame().inner_margin(egui::Margin::symmetric(8, 3)).show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label(RichText::new(icons::CIRCLE_DOT).color(dot_col).size(11.0));
-                        ui.label(
-                            RichText::new(router_text)
-                                .color(COLOR_PRIMARY_FIXED)
-                                .size(10.0)
-                                .monospace(),
-                        );
-                    });
-                });
+                    let btn = egui::Button::new(
+                        RichText::new(label)
+                            .color(accent_col)
+                            .size(10.0)
+                            .monospace()
+                            .strong(),
+                    )
+                    .fill(COLOR_SURFACE_HIGH)
+                    .stroke(Stroke::new(1.2, accent_col))
+                    .corner_radius(egui::CornerRadius::same(4));
+
+                    if ui
+                        .add(btn)
+                        .on_hover_text(x56_core::t!("prog-uinput-toggle-tooltip"))
+                        .clicked()
+                    {
+                        if is_active {
+                            monitor.set_active(false);
+                            self.status_message =
+                                Some((x56_core::t!("prog-uinput-paused-msg"), false));
+                        } else {
+                            monitor.set_profile(self.profile.clone());
+                            monitor.set_active(true);
+                            self.status_message =
+                                Some((x56_core::t!("prog-uinput-resumed-msg"), false));
+                        }
+                    }
+                }
 
                 // Botón TEST EVDEV LOOP
                 let test_loop_lbl = format!("{} {}", icons::ZAP, x56_core::t!("prog-test-loop"));
@@ -1168,15 +1313,20 @@ impl ProgrammingTab {
             }
 
             if let Some(pin_id) = clicked_pin {
-                self.search_query = pin_id.clone();
-                self.editing_button_id = Some(pin_id.clone());
-                if let Some(cell) = self.profile.get_cell(self.selected_mode, &pin_id) {
-                    self.pending_name = cell.name.clone();
-                    self.pending_keys = cell.keys.clone();
+                if self.macro_recorder_open || self.is_recording_macro {
+                    self.macro_target_button_id = Some(pin_id.clone());
+                    self.hovered_button_id = Some(pin_id);
                 } else {
-                    let def = default_mapping_for(&pin_id);
-                    self.pending_name = def.action.to_string();
-                    self.pending_keys = vec![def.key_display.replace(['[', ']'], "")];
+                    self.search_query = pin_id.clone();
+                    self.editing_button_id = Some(pin_id.clone());
+                    if let Some(cell) = self.profile.get_cell(self.selected_mode, &pin_id) {
+                        self.pending_name = cell.name.clone();
+                        self.pending_keys = cell.keys.clone();
+                    } else {
+                        let def = default_mapping_for(&pin_id);
+                        self.pending_name = def.action.to_string();
+                        self.pending_keys = vec![def.key_display.replace(['[', ']'], "")];
+                    }
                 }
             }
         });
@@ -3043,8 +3193,9 @@ impl ProgrammingTab {
             ui.set_width(ui.available_width());
             ui.label(
                 RichText::new(format!(
-                    "{} ACCIONES RÁPIDAS DE MACROS // EVDEV",
-                    icons::ZAP
+                    "{} {}",
+                    icons::ZAP,
+                    x56_core::t!("prog-macro-title")
                 ))
                 .color(COLOR_PRIMARY)
                 .size(11.0)
@@ -3054,39 +3205,59 @@ impl ProgrammingTab {
             ui.add_space(4.0);
 
             ui.horizontal_wrapped(|ui| {
-                let new_macro_lbl = format!("{} NUEVA MACRO", icons::PLUS);
+                let new_macro_lbl = format!("{} {}", icons::PLUS, x56_core::t!("prog-macro-new"));
                 if tactical_button(ui, &new_macro_lbl, false, false).clicked() {
-                    self.status_message = Some((
-                        "ASISTENTE DE MACROS TEMPORIZADAS (TIMED COMBOS) INICIALIZADO".to_string(),
-                        false,
-                    ));
+                    self.macro_recorder_open = true;
+                    self.is_recording_macro = false;
+                    self.recorded_steps.clear();
+                    self.last_record_instant = None;
+                    if self.macro_target_button_id.is_none() {
+                        self.macro_target_button_id = self
+                            .editing_button_id
+                            .clone()
+                            .or_else(|| self.hovered_button_id.clone());
+                    }
+                    if self.macro_name_draft.trim().is_empty() {
+                        self.macro_name_draft = "Macro Secuencial".to_string();
+                    }
+                    self.status_message = Some((x56_core::t!("prog-macro-ready"), false));
                 }
 
                 let rec_label = if self.is_recording_macro {
-                    format!("{} DETENER GRABACIÓN", icons::SQUARE)
+                    format!("{} {}", icons::SQUARE, x56_core::t!("prog-macro-stop"))
                 } else {
-                    format!("{} GRABAR SECUENCIA", icons::CIRCLE)
+                    format!("{} {}", icons::CIRCLE, x56_core::t!("prog-macro-record"))
                 };
                 if tactical_button(ui, &rec_label, self.is_recording_macro, false).clicked() {
-                    self.is_recording_macro = !self.is_recording_macro;
-                    if self.is_recording_macro {
-                        self.macro_record_buffer.clear();
-                        self.status_message = Some((
-                            "GRABANDO SECUENCIA EVDEV EN VIVO // PULSA CUALQUIER BOTÓN".to_string(),
-                            false,
-                        ));
+                    if !self.is_recording_macro {
+                        self.is_recording_macro = true;
+                        self.macro_recorder_open = true;
+                        self.recorded_steps.clear();
+                        self.last_record_instant = None;
+                        if self.macro_target_button_id.is_none() {
+                            self.macro_target_button_id = self
+                                .editing_button_id
+                                .clone()
+                                .or_else(|| self.hovered_button_id.clone());
+                        }
+                        ui.ctx().memory_mut(|m| m.request_focus(egui::Id::NULL));
+                        self.status_message = Some((x56_core::t!("prog-macro-rec-live"), false));
                     } else {
+                        self.is_recording_macro = false;
+                        self.last_record_instant = None;
                         self.status_message = Some((
                             format!(
-                                "SECUENCIA FINALIZADA ({} EVENTOS CAPTURADOS)",
-                                self.macro_record_buffer.len()
+                                "{} ({})",
+                                x56_core::t!("prog-macro-captured-msg"),
+                                self.recorded_steps.len()
                             ),
                             false,
                         ));
                     }
                 }
 
-                let shift_lbl = format!("{} PINKIE SHIFT (x24)", icons::SPARKLES);
+                let shift_lbl =
+                    format!("{} {}", icons::SPARKLES, x56_core::t!("prog-macro-pinkie"));
                 if tactical_button(ui, &shift_lbl, false, false).clicked() {
                     self.filter_category = FilterCategory::Shift;
                     self.status_message = Some((
@@ -3096,6 +3267,257 @@ impl ProgrammingTab {
                 }
             });
         });
+    }
+
+    fn render_macro_recorder_panel(&mut self, ui: &mut Ui, monitor: &ButtonMonitor) {
+        if !(self.macro_recorder_open || self.is_recording_macro || !self.recorded_steps.is_empty())
+        {
+            return;
+        }
+
+        let border = if self.is_recording_macro {
+            Stroke::new(1.5, COLOR_WARNING_AMBER)
+        } else {
+            Stroke::new(1.0, COLOR_PRIMARY_CONTAINER)
+        };
+        egui::Frame::new()
+            .fill(COLOR_SURFACE_CONTAINER)
+            .stroke(border)
+            .corner_radius(egui::CornerRadius::same(6))
+            .inner_margin(egui::Margin::symmetric(10, 8))
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+
+                // Banner de estado del grabador + botón rápido de Stop/Rec
+                ui.horizontal_wrapped(|ui| {
+                    if self.is_recording_macro {
+                        ui.label(RichText::new("●").color(COLOR_ERROR).size(11.0).strong());
+                        ui.label(
+                            RichText::new(x56_core::t!("prog-macro-rec-live"))
+                                .color(COLOR_WARNING_AMBER)
+                                .size(10.5)
+                                .strong()
+                                .monospace(),
+                        );
+                    } else {
+                        ui.label(
+                            RichText::new(format!(
+                                "{} ({})",
+                                x56_core::t!("prog-macro-ready"),
+                                self.recorded_steps.len()
+                            ))
+                            .color(COLOR_PRIMARY)
+                            .size(10.5)
+                            .strong()
+                            .monospace(),
+                        );
+                    }
+                });
+
+                ui.add_space(4.0);
+
+                // Selector de botón destino
+                let all_desc = x56_core::all_button_descriptors();
+                let selected_label = self
+                    .macro_target_button_id
+                    .as_deref()
+                    .and_then(|id| all_desc.iter().find(|d| d.id == id))
+                    .map(|d| {
+                        let prefix = if d.device == DeviceKind::Stick {
+                            "STICK"
+                        } else {
+                            "THR"
+                        };
+                        format!("{prefix} // {}", d.label)
+                    })
+                    .unwrap_or_else(|| x56_core::t!("prog-macro-no-target"));
+
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(
+                        RichText::new(x56_core::t!("prog-macro-target-btn"))
+                            .color(COLOR_ON_SURFACE_VARIANT)
+                            .size(10.0)
+                            .monospace(),
+                    );
+                    egui::ComboBox::from_id_salt("macro_target_btn_combo")
+                        .selected_text(selected_label)
+                        .width(220.0)
+                        .show_ui(ui, |ui| {
+                            for desc in &all_desc {
+                                let prefix = if desc.device == DeviceKind::Stick {
+                                    "STICK"
+                                } else {
+                                    "THR"
+                                };
+                                let item_label = format!("{prefix} // {}", desc.label);
+                                ui.selectable_value(
+                                    &mut self.macro_target_button_id,
+                                    Some(desc.id.clone()),
+                                    item_label,
+                                );
+                            }
+                        });
+                });
+
+                ui.add_space(4.0);
+
+                // Nombre de la macro y toggle de tiempos reales
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(
+                        RichText::new(x56_core::t!("prog-macro-name-label"))
+                            .color(COLOR_ON_SURFACE_VARIANT)
+                            .size(10.0)
+                            .monospace(),
+                    );
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.macro_name_draft)
+                            .hint_text(x56_core::t!("prog-macro-name-hint"))
+                            .desired_width(170.0),
+                    );
+                    ui.checkbox(
+                        &mut self.macro_record_timings,
+                        x56_core::t!("prog-macro-keep-delays"),
+                    );
+                });
+
+                ui.add_space(4.0);
+
+                // Lista de pasos capturados
+                egui::ScrollArea::vertical()
+                    .id_salt("macro_steps_scroll")
+                    .max_height(130.0)
+                    .stick_to_bottom(self.is_recording_macro)
+                    .auto_shrink([false, true])
+                    .show(ui, |ui| {
+                        if self.recorded_steps.is_empty() {
+                            ui.label(
+                                RichText::new(x56_core::t!("prog-macro-no-steps"))
+                                    .color(COLOR_OUTLINE)
+                                    .size(10.0)
+                                    .italics(),
+                            );
+                        } else {
+                            let mut remove_idx: Option<usize> = None;
+                            for (idx, step) in self.recorded_steps.iter_mut().enumerate() {
+                                ui.horizontal(|ui| {
+                                    ui.label(
+                                        RichText::new(format!("#{}", idx + 1))
+                                            .color(COLOR_PRIMARY)
+                                            .size(10.0)
+                                            .strong()
+                                            .monospace(),
+                                    );
+
+                                    if idx > 0 {
+                                        ui.add(
+                                            egui::DragValue::new(&mut step.delay_ms)
+                                                .range(0..=5000)
+                                                .speed(10.0)
+                                                .suffix(" ms"),
+                                        );
+                                    }
+
+                                    egui::Frame::new()
+                                        .fill(COLOR_SURFACE_LOW)
+                                        .stroke(Stroke::new(1.0, COLOR_OUTLINE_VARIANT))
+                                        .corner_radius(egui::CornerRadius::same(4))
+                                        .inner_margin(egui::Margin::symmetric(6, 2))
+                                        .show(ui, |ui| {
+                                            ui.label(
+                                                RichText::new(step.keys_display())
+                                                    .color(COLOR_ON_SURFACE)
+                                                    .size(10.0)
+                                                    .monospace(),
+                                            );
+                                        });
+
+                                    if ui
+                                        .small_button(
+                                            RichText::new("×")
+                                                .color(COLOR_ERROR)
+                                                .size(11.0)
+                                                .strong(),
+                                        )
+                                        .clicked()
+                                    {
+                                        remove_idx = Some(idx);
+                                    }
+                                });
+                            }
+                            if let Some(idx) = remove_idx {
+                                self.recorded_steps.remove(idx);
+                                if idx == 0 {
+                                    if let Some(first) = self.recorded_steps.first_mut() {
+                                        first.delay_ms = 0;
+                                    }
+                                }
+                            }
+                        }
+                    });
+
+                ui.add_space(6.0);
+
+                // Barra inferior de acciones del grabador
+                ui.horizontal_wrapped(|ui| {
+                    let can_save =
+                        self.macro_target_button_id.is_some() && !self.recorded_steps.is_empty();
+                    let save_lbl = format!("{} {}", icons::SAVE, x56_core::t!("prog-macro-save"));
+                    let save_clicked = ui
+                        .add_enabled_ui(can_save, |ui| {
+                            tactical_button(ui, &save_lbl, false, true).clicked()
+                        })
+                        .inner;
+                    if save_clicked {
+                        if let Some(button_id) = self.macro_target_button_id.clone() {
+                            let btn_label = all_desc
+                                .iter()
+                                .find(|d| d.id == button_id)
+                                .map(|d| d.label)
+                                .unwrap_or(button_id.as_str())
+                                .to_string();
+                            let name = if self.macro_name_draft.trim().is_empty() {
+                                format!("{btn_label} (Macro)")
+                            } else {
+                                self.macro_name_draft.trim().to_string()
+                            };
+                            let cell = CommandCell {
+                                button_id,
+                                name,
+                                keys: Vec::new(),
+                                steps: self.recorded_steps.clone(),
+                            };
+                            self.profile.set_cell(self.selected_mode, cell);
+                            monitor.set_profile(self.profile.clone());
+
+                            self.is_recording_macro = false;
+                            self.macro_recorder_open = false;
+                            self.recorded_steps.clear();
+                            self.last_record_instant = None;
+                            self.macro_name_draft.clear();
+                            self.status_message = Some((
+                                format!("{} {btn_label}", x56_core::t!("prog-macro-saved-msg")),
+                                false,
+                            ));
+                        }
+                    }
+
+                    let clear_lbl =
+                        format!("{} {}", icons::TRASH, x56_core::t!("prog-macro-clear"));
+                    if tactical_button(ui, &clear_lbl, false, false).clicked() {
+                        self.recorded_steps.clear();
+                        self.last_record_instant = None;
+                    }
+
+                    let close_lbl = format!("{} {}", icons::X, x56_core::t!("prog-macro-close"));
+                    if tactical_button(ui, &close_lbl, false, false).clicked() {
+                        self.is_recording_macro = false;
+                        self.macro_recorder_open = false;
+                        self.recorded_steps.clear();
+                        self.last_record_instant = None;
+                    }
+                });
+            });
+        ui.add_space(6.0);
     }
 
     // ========================================================================
@@ -3312,7 +3734,7 @@ impl ProgrammingTab {
             }
             FilterCategory::Macros => {
                 if let Some(cell) = self.profile.get_cell(self.selected_mode, id) {
-                    cell.keys.len() > 1
+                    cell.is_sequence() || cell.keys.len() > 1
                 } else {
                     false
                 }
@@ -3471,9 +3893,16 @@ impl ProgrammingTab {
                 .monospace(),
             );
             if let Some(ref c) = cell_opt {
-                if c.keys.len() > 1 {
+                if c.is_sequence() {
                     ui.label(
-                        RichText::new(format!("// SECUENCIA x{}", c.keys.len()))
+                        RichText::new(format!("// SECUENCIA x{}", c.steps.len()))
+                            .color(COLOR_WARNING_AMBER)
+                            .size(9.0)
+                            .monospace(),
+                    );
+                } else if c.keys.len() > 1 {
+                    ui.label(
+                        RichText::new(format!("// COMBO x{}", c.keys.len()))
                             .color(COLOR_WARNING_AMBER)
                             .size(9.0)
                             .monospace(),
@@ -3521,11 +3950,22 @@ impl ProgrammingTab {
             .on_hover_text("Editar asignación de teclas y comando")
             .clicked()
         {
-            self.editing_button_id = Some(btn.id.clone());
             if let Some(ref c) = cell_opt {
-                self.pending_name = c.name.clone();
-                self.pending_keys = c.keys.clone();
+                if c.is_sequence() {
+                    self.macro_recorder_open = true;
+                    self.is_recording_macro = false;
+                    self.macro_target_button_id = Some(btn.id.clone());
+                    self.macro_name_draft = c.name.clone();
+                    self.recorded_steps = c.steps.clone();
+                    self.last_record_instant = None;
+                    self.editing_button_id = None;
+                } else {
+                    self.editing_button_id = Some(btn.id.clone());
+                    self.pending_name = c.name.clone();
+                    self.pending_keys = c.keys.clone();
+                }
             } else {
+                self.editing_button_id = Some(btn.id.clone());
                 let default_info = default_mapping_for(&btn.id);
                 self.pending_name = default_info.action.to_string();
                 self.pending_keys = vec![default_info.key_display.replace(['[', ']'], "")];
@@ -3650,6 +4090,7 @@ impl ProgrammingTab {
                         button_id: btn.id.clone(),
                         name: name_final,
                         keys: self.pending_keys.clone(),
+                        steps: Vec::new(),
                     };
 
                     self.profile.set_cell(self.selected_mode, cell);
@@ -3683,66 +4124,6 @@ impl ProgrammingTab {
     // ========================================================================
     // FOOTER TÁCTICO
     // ========================================================================
-
-    fn render_tactical_footer(&mut self, ui: &mut Ui, monitor: &ButtonMonitor) {
-        theme::dock_frame().show(ui, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                // Botones de exportación
-                let exp_xml = format!("{} EXPORTAR XML", icons::FILE_CODE);
-                if tactical_button(ui, &exp_xml, false, false).clicked() {
-                    let xml = generate_star_citizen_xml(&self.profile);
-                    if let Err(e) = std::fs::write("examples/star_citizen_actionmaps.xml", &xml) {
-                        self.status_message = Some((format!("Error exportando XML: {e}"), true));
-                    } else {
-                        self.status_message = Some((
-                            "MAPEO EXPORTADO: examples/star_citizen_actionmaps.xml".to_string(),
-                            false,
-                        ));
-                    }
-                }
-
-                let exp_json = format!("{} EXPORTAR JSON", icons::FILE_TEXT);
-                if tactical_button(ui, &exp_json, false, false).clicked() {
-                    let json = export_programming_json(&self.profile);
-                    if let Err(e) = std::fs::write("examples/x56_buttons_config.json", &json) {
-                        self.status_message = Some((format!("Error exportando JSON: {e}"), true));
-                    } else {
-                        self.status_message = Some((
-                            "CONFIGURACIÓN EXPORTADA: examples/x56_buttons_config.json".to_string(),
-                            false,
-                        ));
-                    }
-                }
-
-                ui.separator();
-
-                // Descartar cambios
-                let discard_lbl = format!("{} DESCARTAR CAMBIOS", icons::ROTATE_CCW);
-                if tactical_button(ui, &discard_lbl, false, false).clicked() {
-                    self.profile = ProgrammingProfile::default();
-                    monitor.set_profile(self.profile.clone());
-                    self.editing_button_id = None;
-                    self.pending_keys.clear();
-                    self.pending_name.clear();
-                    self.status_message = Some((
-                        "CAMBIOS DESCARTADOS // PERFIL REINICIADO".to_string(),
-                        false,
-                    ));
-                }
-
-                // Botón primario azul con resplandor
-                let apply_uinput = format!("{} ESCRIBIR MAPEO A UINPUT", icons::UPLOAD);
-                if tactical_button(ui, &apply_uinput, false, true).clicked() {
-                    monitor.set_profile(self.profile.clone());
-                    monitor.set_active(true);
-                    self.status_message = Some((
-                        "MAPEO ESCRITO A /dev/uinput // ROUTER ACTIVO".to_string(),
-                        false,
-                    ));
-                }
-            });
-        });
-    }
 
     // ========================================================================
     // MODAL DE PRUEBA DE LOOP EVDEV
@@ -4226,76 +4607,6 @@ fn map_key_to_name(key: Key) -> Option<&'static str> {
         Key::Backtick => Some("`"),
         _ => None,
     }
-}
-
-// ============================================================================
-// EXPORTACIÓN STAR CITIZEN XML Y JSON
-// ============================================================================
-
-fn generate_star_citizen_xml(profile: &ProgrammingProfile) -> String {
-    let mut xml = String::from("<!-- Star Citizen ActionMaps X-56 HOTAS (Avionics Vector) -->\n");
-    xml.push_str("<ActionMaps version=\"1\" profileName=\"x56linux\">\n");
-    xml.push_str("  <CustomisationUIHeader label=\"Logitech G X56 HOTAS (Rust Avionics Vector)\" description=\"Perfil táctico generado por x56-gui\">\n");
-    xml.push_str("    <devices>\n");
-    xml.push_str("      <joystick instance=\"1\"/>\n");
-    xml.push_str("      <joystick instance=\"2\"/>\n");
-    xml.push_str("    </devices>\n");
-    xml.push_str("  </CustomisationUIHeader>\n");
-
-    for (mode_idx, mode) in [ModeSlot::M1, ModeSlot::M2, ModeSlot::S1]
-        .iter()
-        .enumerate()
-    {
-        xml.push_str(&format!("  <!-- MODO FÍSICO {} -->\n", mode.as_str()));
-        let bindings = profile.bindings_for(*mode);
-        for (id, cell) in &bindings.cells {
-            if cell.is_assigned() {
-                xml.push_str(&format!(
-                    "  <actionmap name=\"spaceship_general_m{}\">\n    <action name=\"{}\">\n      <rebind device=\"joystick\" input=\"{}\" key=\"{}\"/>\n    </action>\n  </actionmap>\n",
-                    mode_idx + 1,
-                    cell.name.replace(' ', "_").to_lowercase(),
-                    id,
-                    cell.keys.join("+")
-                ));
-            }
-        }
-    }
-
-    xml.push_str("</ActionMaps>\n");
-    xml
-}
-
-fn export_programming_json(profile: &ProgrammingProfile) -> String {
-    let mut json = String::from("{\n  \"schema\": \"x56linux_programming_v1\",\n");
-    for (mode_name, bindings) in [
-        ("m1", &profile.m1),
-        ("m2", &profile.m2),
-        ("s1", &profile.s1),
-    ] {
-        json.push_str(&format!("  \"{}\": {{\n", mode_name));
-        let mut first = true;
-        for (id, cell) in &bindings.cells {
-            if !first {
-                json.push_str(",\n");
-            }
-            first = false;
-            json.push_str(&format!(
-                "    \"{}\": {{ \"name\": \"{}\", \"keys\": [{}] }}",
-                id,
-                cell.name,
-                cell.keys
-                    .iter()
-                    .map(|k| format!("\"{}\"", k))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ));
-        }
-        json.push_str("\n  },\n");
-    }
-    json.push_str("  \"total_assigned\": ");
-    json.push_str(&profile.total_assigned_count().to_string());
-    json.push_str("\n}\n");
-    json
 }
 
 // ============================================================================
@@ -4893,5 +5204,64 @@ mod tests {
         assert!(!FilterCategory::BotonesFrontales.label().is_empty());
         assert!(!FilterCategory::Macros.label().is_empty());
         assert!(!FilterCategory::Shift.label().is_empty());
+    }
+
+    #[test]
+    fn test_record_key_chord_timing_and_filtering() {
+        use std::time::Duration;
+
+        let mut tab = ProgrammingTab::default();
+        let t0 = Instant::now();
+
+        // Empty chord is ignored
+        tab.record_key_chord(Vec::new(), t0);
+        assert!(tab.recorded_steps.is_empty());
+
+        // First step always has delay_ms == 0
+        tab.record_key_chord(vec!["Ctrl".to_string(), "A".to_string()], t0);
+        assert_eq!(tab.recorded_steps.len(), 1);
+        assert_eq!(tab.recorded_steps[0].delay_ms, 0);
+        assert_eq!(tab.recorded_steps[0].keys, vec!["Ctrl", "A"]);
+
+        // Second step with macro_record_timings == true uses elapsed ms, capped at 5000
+        let t1 = t0 + Duration::from_millis(240);
+        tab.record_key_chord(vec!["B".to_string()], t1);
+        assert_eq!(tab.recorded_steps.len(), 2);
+        assert_eq!(tab.recorded_steps[1].delay_ms, 240);
+
+        let t2 = t1 + Duration::from_secs(12);
+        tab.record_key_chord(vec!["C".to_string()], t2);
+        assert_eq!(tab.recorded_steps.len(), 3);
+        assert_eq!(tab.recorded_steps[2].delay_ms, 5000);
+
+        // With macro_record_timings == false, subsequent steps use fixed 50ms
+        tab.macro_record_timings = false;
+        let t3 = t2 + Duration::from_millis(900);
+        tab.record_key_chord(vec!["D".to_string()], t3);
+        assert_eq!(tab.recorded_steps.len(), 4);
+        assert_eq!(tab.recorded_steps[3].delay_ms, 50);
+    }
+
+    #[test]
+    fn test_filter_category_macros_matches_sequences() {
+        let mut tab = ProgrammingTab {
+            filter_category: FilterCategory::Macros,
+            ..Default::default()
+        };
+        assert!(!tab.matches_category("stick_trigger"));
+
+        tab.profile.set_cell(
+            tab.selected_mode,
+            CommandCell {
+                button_id: "stick_trigger".to_string(),
+                name: "Secuencia".to_string(),
+                keys: Vec::new(),
+                steps: vec![MacroStep {
+                    keys: vec!["A".to_string()],
+                    delay_ms: 0,
+                }],
+            },
+        );
+        assert!(tab.matches_category("stick_trigger"));
     }
 }
