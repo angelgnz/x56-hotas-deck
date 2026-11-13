@@ -2,12 +2,11 @@
 //! para el Saitek / Logitech G X56 HOTAS (Inspirada en la Sección 8 del Manual).
 //!
 //! Implementa la arquitectura visual Avionics Vector:
-//! - Top Bar táctica con selector de dispositivo, pills M1/M2/S1 y estado del router uinput.
+//! - Top Bar táctica con selector de dispositivo, pills M1/M2/S1 y toggle en vivo del router uinput.
 //! - Columna Izquierda: Monitor de detección en vivo (evdev hook 1000 Hz), mapa vectorial 2D interactivo,
 //!   matriz POV Hat 1 con brújula octogonal y botones de acción rápida de macros.
 //! - Columna Derecha: Buscador táctico, estadísticas telemétricas, chips de filtro y filas de mapeo
 //!   con badges destacados uinput y metadatos de Star Citizen / Simuladores.
-//! - Footer Táctico: Exportación de perfil a Star Citizen XML y toggle en vivo del router uinput.
 
 use std::collections::HashSet;
 
@@ -88,7 +87,6 @@ pub struct ProgrammingTab {
     pub prev_pressed_buttons: HashSet<String>,
     pub currently_pressed_count: usize,
     pub active_pressed_summary: String,
-    pub xml_dialog_rx: Option<std::sync::mpsc::Receiver<Option<std::path::PathBuf>>>,
 }
 
 /// Estado de interacción táctil para los componentes del mapa vectorial.
@@ -227,7 +225,6 @@ impl ProgrammingTab {
             prev_pressed_buttons: HashSet::new(),
             currently_pressed_count: 0,
             active_pressed_summary: String::new(),
-            xml_dialog_rx: None,
         }
     }
 
@@ -251,8 +248,6 @@ impl ProgrammingTab {
 
     /// Renderizado principal de la pestaña de programación.
     pub fn ui(&mut self, ui: &mut Ui, monitor: &ButtonMonitor, poller: &LiveInputPoller) {
-        self.poll_xml_export_dialog();
-
         // Establecer el ancho máximo disponible para evitar cualquier desbordamiento horizontal
         let avail_w = ui.available_width();
         ui.set_max_width(avail_w);
@@ -455,10 +450,7 @@ impl ProgrammingTab {
             );
         }
 
-        // 6. Footer Táctico con Compatibilidad y Acciones Globales
-        self.render_tactical_footer(ui, monitor);
-
-        // 7. Modal de prueba de loop evdev
+        // 6. Modal de prueba de loop evdev
         if self.show_test_window {
             self.render_test_modal(ui, monitor, &snapshot);
         }
@@ -730,34 +722,79 @@ impl ProgrammingTab {
 
                 ui.separator();
 
-                // Estado del Router uinput
+                // Estado / Toggle en vivo del Router uinput
                 let uinput_ready = monitor.uinput_available();
-                let dot_col = if uinput_ready {
-                    COLOR_TERTIARY_CONTAINER
-                } else {
-                    COLOR_ERROR
-                };
-                let router_text = format!(
-                    "{}: {}",
-                    x56_core::t!("prog-router-uinput"),
-                    if uinput_ready {
-                        x56_core::t!("prog-router-online")
-                    } else {
+                if !uinput_ready {
+                    let router_text = format!(
+                        "{}: {}",
+                        x56_core::t!("prog-router-uinput"),
                         x56_core::t!("prog-router-offline")
-                    }
-                );
+                    );
+                    theme::sunken_frame()
+                        .inner_margin(egui::Margin::symmetric(8, 3))
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.label(
+                                    RichText::new(icons::CIRCLE_DOT)
+                                        .color(COLOR_ERROR)
+                                        .size(11.0),
+                                );
+                                ui.label(
+                                    RichText::new(router_text)
+                                        .color(COLOR_ERROR)
+                                        .size(10.0)
+                                        .monospace(),
+                                );
+                            });
+                        })
+                        .response
+                        .on_hover_text(x56_core::t!("sidebar-uinput-offline-tooltip"));
+                } else {
+                    let is_active = monitor.is_active();
+                    let (label, accent_col) = if is_active {
+                        (
+                            format!(
+                                "{} {}",
+                                icons::CIRCLE_DOT,
+                                x56_core::t!("prog-uinput-active-short")
+                            ),
+                            COLOR_TERTIARY_CONTAINER,
+                        )
+                    } else {
+                        (
+                            format!("{} {}", icons::UPLOAD, x56_core::t!("prog-uinput-paused-short")),
+                            COLOR_WARNING_AMBER,
+                        )
+                    };
 
-                theme::sunken_frame().inner_margin(egui::Margin::symmetric(8, 3)).show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label(RichText::new(icons::CIRCLE_DOT).color(dot_col).size(11.0));
-                        ui.label(
-                            RichText::new(router_text)
-                                .color(COLOR_PRIMARY_FIXED)
-                                .size(10.0)
-                                .monospace(),
-                        );
-                    });
-                });
+                    let btn = egui::Button::new(
+                        RichText::new(label)
+                            .color(accent_col)
+                            .size(10.0)
+                            .monospace()
+                            .strong(),
+                    )
+                    .fill(COLOR_SURFACE_HIGH)
+                    .stroke(Stroke::new(1.2, accent_col))
+                    .corner_radius(egui::CornerRadius::same(4));
+
+                    if ui
+                        .add(btn)
+                        .on_hover_text(x56_core::t!("prog-uinput-toggle-tooltip"))
+                        .clicked()
+                    {
+                        if is_active {
+                            monitor.set_active(false);
+                            self.status_message =
+                                Some((x56_core::t!("prog-uinput-paused-msg"), false));
+                        } else {
+                            monitor.set_profile(self.profile.clone());
+                            monitor.set_active(true);
+                            self.status_message =
+                                Some((x56_core::t!("prog-uinput-resumed-msg"), false));
+                        }
+                    }
+                }
 
                 // Botón TEST EVDEV LOOP
                 let test_loop_lbl = format!("{} {}", icons::ZAP, x56_core::t!("prog-test-loop"));
@@ -3688,112 +3725,6 @@ impl ProgrammingTab {
     // FOOTER TÁCTICO
     // ========================================================================
 
-    /// Abre el selector nativo de archivos en un hilo separado para exportar Star Citizen XML
-    /// sin bloquear el bucle de renderizado de egui.
-    pub fn spawn_xml_export_dialog(&mut self) {
-        if self.xml_dialog_rx.is_some() {
-            return;
-        }
-
-        let start_dir = std::env::current_dir()
-            .ok()
-            .map(|d| d.join("examples"))
-            .filter(|p| p.exists())
-            .or_else(|| std::env::current_dir().ok());
-
-        let (tx, rx) = std::sync::mpsc::channel();
-        self.xml_dialog_rx = Some(rx);
-
-        std::thread::spawn(move || {
-            let filter_xml = x56_core::t!("prog-export-xml-filter");
-            let filter_all = x56_core::t!("filter-all");
-            let mut dialog = rfd::FileDialog::new()
-                .add_filter(&filter_xml, &["xml"])
-                .add_filter(&filter_all, &["*"])
-                .set_title(x56_core::t!("prog-export-xml-title"))
-                .set_file_name("star_citizen_actionmaps.xml");
-
-            if let Some(dir) = start_dir {
-                dialog = dialog.set_directory(dir);
-            }
-
-            let _ = tx.send(dialog.save_file());
-        });
-    }
-
-    /// Procesa de forma no bloqueante el resultado pendiente del diálogo de exportación XML.
-    pub fn poll_xml_export_dialog(&mut self) {
-        let Some(rx) = self.xml_dialog_rx.as_ref() else {
-            return;
-        };
-
-        match rx.try_recv() {
-            Ok(Some(path)) => {
-                self.xml_dialog_rx = None;
-                let mut p = path.display().to_string();
-                if !p.to_ascii_lowercase().ends_with(".xml") {
-                    p.push_str(".xml");
-                }
-                let xml = generate_star_citizen_xml(&self.profile);
-                match std::fs::write(&p, &xml) {
-                    Ok(()) => {
-                        self.status_message =
-                            Some((x56_core::t!("prog-export-xml-ok", "path" => &p), false));
-                    }
-                    Err(e) => {
-                        self.status_message = Some((
-                            x56_core::t!("prog-export-xml-err", "err" => &e.to_string()),
-                            true,
-                        ));
-                    }
-                }
-            }
-            Ok(None) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                self.xml_dialog_rx = None;
-            }
-            Err(std::sync::mpsc::TryRecvError::Empty) => {}
-        }
-    }
-
-    fn render_tactical_footer(&mut self, ui: &mut Ui, monitor: &ButtonMonitor) {
-        theme::dock_frame().show(ui, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                let exp_xml = format!("{} {}", icons::FILE_CODE, x56_core::t!("prog-export-xml"));
-                if tactical_button(ui, &exp_xml, false, false)
-                    .on_hover_text(x56_core::t!("prog-export-xml-tooltip"))
-                    .clicked()
-                {
-                    self.spawn_xml_export_dialog();
-                }
-
-                ui.separator();
-
-                let is_active = monitor.is_active();
-                if is_active {
-                    let lbl = format!("{} {}", icons::PLAY, x56_core::t!("prog-uinput-active"));
-                    if tactical_button(ui, &lbl, true, false)
-                        .on_hover_text(x56_core::t!("prog-uinput-toggle-tooltip"))
-                        .clicked()
-                    {
-                        monitor.set_active(false);
-                        self.status_message = Some((x56_core::t!("prog-uinput-paused-msg"), false));
-                    }
-                } else {
-                    let lbl = format!("{} {}", icons::UPLOAD, x56_core::t!("prog-uinput-paused"));
-                    if tactical_button(ui, &lbl, false, true)
-                        .on_hover_text(x56_core::t!("prog-uinput-toggle-tooltip"))
-                        .clicked()
-                    {
-                        monitor.set_profile(self.profile.clone());
-                        monitor.set_active(true);
-                        self.status_message =
-                            Some((x56_core::t!("prog-uinput-resumed-msg"), false));
-                    }
-                }
-            });
-        });
-    }
-
     // ========================================================================
     // MODAL DE PRUEBA DE LOOP EVDEV
     // ========================================================================
@@ -4276,61 +4207,6 @@ fn map_key_to_name(key: Key) -> Option<&'static str> {
         Key::Backtick => Some("`"),
         _ => None,
     }
-}
-
-// ============================================================================
-// EXPORTACIÓN STAR CITIZEN XML
-// ============================================================================
-
-fn escape_xml(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for ch in s.chars() {
-        match ch {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            '\'' => out.push_str("&apos;"),
-            _ => out.push(ch),
-        }
-    }
-    out
-}
-
-fn generate_star_citizen_xml(profile: &ProgrammingProfile) -> String {
-    let mut xml = String::from("<!-- Star Citizen ActionMaps X-56 HOTAS (Avionics Vector) -->\n");
-    xml.push_str("<ActionMaps version=\"1\" profileName=\"x56linux\">\n");
-    xml.push_str("  <CustomisationUIHeader label=\"Logitech G X56 HOTAS (Rust Avionics Vector)\" description=\"Perfil táctico generado por x56-gui\">\n");
-    xml.push_str("    <devices>\n");
-    xml.push_str("      <joystick instance=\"1\"/>\n");
-    xml.push_str("      <joystick instance=\"2\"/>\n");
-    xml.push_str("    </devices>\n");
-    xml.push_str("  </CustomisationUIHeader>\n");
-
-    for (mode_idx, mode) in [ModeSlot::M1, ModeSlot::M2, ModeSlot::S1]
-        .iter()
-        .enumerate()
-    {
-        xml.push_str(&format!("  <!-- MODO FÍSICO {} -->\n", mode.as_str()));
-        let bindings = profile.bindings_for(*mode);
-        for (id, cell) in &bindings.cells {
-            if cell.is_assigned() {
-                let action_name = escape_xml(&cell.name.replace(' ', "_").to_lowercase());
-                let input_id = escape_xml(id);
-                let keys_joined = escape_xml(&cell.keys.join("+"));
-                xml.push_str(&format!(
-                    "  <actionmap name=\"spaceship_general_m{}\">\n    <action name=\"{}\">\n      <rebind device=\"joystick\" input=\"{}\" key=\"{}\"/>\n    </action>\n  </actionmap>\n",
-                    mode_idx + 1,
-                    action_name,
-                    input_id,
-                    keys_joined
-                ));
-            }
-        }
-    }
-
-    xml.push_str("</ActionMaps>\n");
-    xml
 }
 
 // ============================================================================
