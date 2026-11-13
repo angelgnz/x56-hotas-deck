@@ -494,26 +494,35 @@ impl X56App {
                     });
             }
 
-            // Derecha: Avatar táctico, botones rápidos y Badge ACTIVE PROFILE
+            // Derecha: Badge ACTIVE PROFILE en la esquina superior derecha y botones rápidos
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if screen_w >= 700.0 {
-                    // Avatar de piloto
-                    Frame::new()
-                        .fill(COLOR_SURFACE_HIGH)
-                        .stroke(Stroke::new(1.2, COLOR_PRIMARY_CONTAINER))
-                        .corner_radius(CornerRadius::same(14))
-                        .inner_margin(Margin::symmetric(7, 4))
-                        .show(ui, |ui| {
-                            ui.label(
-                                RichText::new(format!("{} PLT", icons::PALETTE))
-                                    .color(COLOR_PRIMARY)
-                                    .size(10.5)
-                                    .strong()
-                                    .monospace(),
-                            );
-                        });
-                    ui.add_space(6.0);
+                // Badge ACTIVE PROFILE
+                let prof_badge_text = if screen_w < 900.0 {
+                    format!("P: {}", self.active_profile_name)
+                } else {
+                    format!("{}: {}", t!("header-profile"), self.active_profile_name)
+                };
+                let prof_btn = egui::Button::new(
+                    RichText::new(prof_badge_text)
+                        .color(COLOR_PRIMARY_CONTAINER)
+                        .size(10.0)
+                        .strong()
+                        .monospace(),
+                )
+                .fill(COLOR_SURFACE_LOW)
+                .stroke(Stroke::new(1.0, COLOR_PRIMARY_CONTAINER))
+                .corner_radius(CornerRadius::same(4));
+
+                if ui
+                    .add(prof_btn)
+                    .on_hover_text("Haz clic para abrir el diálogo detallado de perfiles")
+                    .clicked()
+                {
+                    self.profile_dialog_mode = ProfileDialogMode::Load;
+                    self.show_profile_dialog = true;
                 }
+
+                ui.add_space(6.0);
 
                 // Botón rápido de Guardar con explorador nativo
                 let save_lbl = if screen_w < 780.0 {
@@ -541,34 +550,6 @@ impl X56App {
                     .clicked()
                 {
                     self.spawn_file_dialog(ProfileDialogMode::Load);
-                }
-
-                ui.add_space(6.0);
-
-                // Badge ACTIVE PROFILE
-                let prof_badge_text = if screen_w < 900.0 {
-                    format!("P: {}", self.active_profile_name)
-                } else {
-                    format!("{}: {}", t!("header-profile"), self.active_profile_name)
-                };
-                let prof_btn = egui::Button::new(
-                    RichText::new(prof_badge_text)
-                        .color(COLOR_PRIMARY_CONTAINER)
-                        .size(10.0)
-                        .strong()
-                        .monospace(),
-                )
-                .fill(COLOR_SURFACE_LOW)
-                .stroke(Stroke::new(1.0, COLOR_PRIMARY_CONTAINER))
-                .corner_radius(CornerRadius::same(4));
-
-                if ui
-                    .add(prof_btn)
-                    .on_hover_text("Haz clic para abrir el diálogo detallado de perfiles")
-                    .clicked()
-                {
-                    self.profile_dialog_mode = ProfileDialogMode::Load;
-                    self.show_profile_dialog = true;
                 }
             });
         });
