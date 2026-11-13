@@ -944,6 +944,7 @@ fn apply_bind(
         button_id: descriptor.id.clone(),
         name: name.unwrap_or_else(|| descriptor.label.to_string()),
         keys,
+        steps: Vec::new(),
     };
     profile
         .programming
