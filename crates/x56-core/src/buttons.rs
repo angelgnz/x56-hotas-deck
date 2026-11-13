@@ -1220,11 +1220,21 @@ impl Worker {
     fn tick(&mut self) {
         if self.last_scan.elapsed() >= RESCAN_INTERVAL {
             self.last_scan = Instant::now();
+            let mut reconnected = false;
             if self.stick.is_none() {
                 self.stick = open_node(DeviceKind::Stick);
+                if self.stick.is_some() {
+                    reconnected = true;
+                }
             }
             if self.throttle.is_none() {
                 self.throttle = open_node(DeviceKind::Throttle);
+                if self.throttle.is_some() {
+                    reconnected = true;
+                }
+            }
+            if reconnected {
+                let _ = self.rgb_tx.send(RgbDispatchCommand::ForceUpdate);
             }
         }
         if self.keyboard.is_none() && self.last_keyboard_try.elapsed() >= Duration::from_secs(2) {
@@ -1297,7 +1307,10 @@ impl Worker {
                     node.primed = true;
                     pressed.extend(ids);
                 }
-                Err(_) => self.throttle = None,
+                Err(_) => {
+                    self.throttle = None;
+                    self.candidate_mode = None;
+                }
             }
         }
 
@@ -1483,6 +1496,27 @@ impl RgbDispatcher {
         }
     }
 
+    /// Aplica un comando pendiente sobre el estado del despachador.
+    /// Devuelve `false` si se solicitó apagado (`Shutdown`).
+    fn absorb_command(&mut self, cmd: RgbDispatchCommand, mode_switched: &mut bool) -> bool {
+        match cmd {
+            RgbDispatchCommand::ModeChanged(mode) => {
+                self.current_mode = mode;
+                // Invalidar caché en cambios físicos de modo para garantizar reenvío al Stick.
+                self.applied_stick_color = None;
+                self.applied_throttle_color = None;
+                *mode_switched = true;
+                true
+            }
+            RgbDispatchCommand::ForceUpdate => {
+                self.applied_stick_color = None;
+                self.applied_throttle_color = None;
+                true
+            }
+            RgbDispatchCommand::Shutdown => false,
+        }
+    }
+
     fn run(mut self) {
         while !self.shared.stop.load(Ordering::SeqCst) {
             let cmd = match self.rx.recv_timeout(Duration::from_millis(200)) {
@@ -1494,32 +1528,28 @@ impl RgbDispatcher {
                 Err(mpsc::RecvTimeoutError::Disconnected) => break,
             };
 
-            match cmd {
-                RgbDispatchCommand::ModeChanged(mode) => {
-                    self.current_mode = mode;
-                    // Drenar comandos subsiguientes rápidos si la perilla se giró rápido
-                    while let Ok(newer_cmd) = self.rx.try_recv() {
-                        if let RgbDispatchCommand::ModeChanged(newer_mode) = newer_cmd {
-                            self.current_mode = newer_mode;
-                        }
-                    }
-                    info!(
-                        "RgbDispatcher: mode switch detected -> {}",
-                        self.current_mode.as_str()
-                    );
-                    self.reconcile_colors(true);
-                }
-                RgbDispatchCommand::ForceUpdate => {
-                    debug!("RgbDispatcher: forced RGB reconciliation requested");
-                    self.applied_stick_color = None;
-                    self.applied_throttle_color = None;
-                    self.reconcile_colors(true);
-                }
-                RgbDispatchCommand::Shutdown => {
+            let mut mode_switched = false;
+            if !self.absorb_command(cmd, &mut mode_switched) {
+                debug!("RgbDispatcher: shutting down");
+                break;
+            }
+            // Drenar comandos acumulados (p. ej. giro rápido de perilla) sin perder ForceUpdate/Shutdown.
+            while let Ok(newer_cmd) = self.rx.try_recv() {
+                if !self.absorb_command(newer_cmd, &mut mode_switched) {
                     debug!("RgbDispatcher: shutting down");
-                    break;
+                    return;
                 }
             }
+
+            if mode_switched {
+                info!(
+                    "RgbDispatcher: mode switch detected -> {}",
+                    self.current_mode.as_str()
+                );
+            } else {
+                debug!("RgbDispatcher: forced RGB reconciliation requested");
+            }
+            self.reconcile_colors(true);
         }
     }
 
@@ -2071,5 +2101,38 @@ keys = ["Space"]
         assert_eq!(events[1].command_name, "Custom Sequence");
         assert_eq!(events[1].keys, vec!["Ctrl+G".to_string()]);
         assert!(!events[1].uinput_emitted);
+    }
+
+    #[test]
+    fn rgb_dispatcher_invalidates_cache_on_mode_change_and_preserves_shutdown() {
+        let shared = Arc::new(Shared {
+            state: Mutex::new(MonitorState {
+                snapshot: LiveButtonsSnapshot::default(),
+                profile: ProgrammingProfile::default(),
+                fallback_stick_rgb: None,
+                fallback_throttle_rgb: None,
+                events: VecDeque::new(),
+            }),
+            active: AtomicBool::new(false),
+            uinput: AtomicBool::new(false),
+            stop: AtomicBool::new(false),
+        });
+        let (_rgb_tx, rgb_rx) = mpsc::channel();
+        let mut dispatcher = RgbDispatcher::new(rgb_rx, shared);
+        dispatcher.applied_stick_color = Some(RgbColor::new(255, 0, 0));
+        dispatcher.applied_throttle_color = Some(RgbColor::new(255, 0, 0));
+
+        let mut mode_switched = false;
+        assert!(dispatcher.absorb_command(
+            RgbDispatchCommand::ModeChanged(ModeSlot::S1),
+            &mut mode_switched
+        ));
+        assert!(mode_switched);
+        assert_eq!(dispatcher.current_mode, ModeSlot::S1);
+        assert!(dispatcher.applied_stick_color.is_none());
+        assert!(dispatcher.applied_throttle_color.is_none());
+
+        // Shutdown queued after ModeChanged must never be discarded during draining.
+        assert!(!dispatcher.absorb_command(RgbDispatchCommand::Shutdown, &mut mode_switched));
     }
 }

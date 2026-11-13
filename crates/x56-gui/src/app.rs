@@ -280,22 +280,6 @@ impl X56App {
                     }
                 }
 
-                if let Some(ref prog) = prof.programming {
-                    self.programming_tab
-                        .load_programming_profile(prog.clone(), &self.button_monitor);
-                }
-                let fallback_stick = prof.stick.as_ref().and_then(|s| s.rgb.clone());
-                let fallback_throttle = prof.throttle.as_ref().and_then(|t| t.rgb.clone());
-                self.button_monitor
-                    .set_fallback_rgb(fallback_stick, fallback_throttle);
-
-                let active_hw_mode = self.button_monitor.snapshot().active_mode;
-                self.rgb_tab.sync_from_loaded_profile(
-                    &prof,
-                    &self.programming_tab.profile,
-                    active_hw_mode,
-                );
-
                 match ProfileManager::apply(&prof) {
                     Ok(summary) => {
                         self.curves_tab.read_from_hardware();
@@ -320,6 +304,22 @@ impl X56App {
                             Some((format!("Error aplicando perfil: {err}"), true));
                     }
                 }
+
+                if let Some(ref prog) = prof.programming {
+                    self.programming_tab
+                        .load_programming_profile(prog.clone(), &self.button_monitor);
+                }
+                let fallback_stick = prof.stick.as_ref().and_then(|s| s.rgb.clone());
+                let fallback_throttle = prof.throttle.as_ref().and_then(|t| t.rgb.clone());
+                self.button_monitor
+                    .set_fallback_rgb(fallback_stick, fallback_throttle);
+
+                let active_hw_mode = self.button_monitor.snapshot().active_mode;
+                self.rgb_tab.sync_from_loaded_profile(
+                    &prof,
+                    &self.programming_tab.profile,
+                    active_hw_mode,
+                );
             }
             Err(err) => {
                 self.top_banner_message =
