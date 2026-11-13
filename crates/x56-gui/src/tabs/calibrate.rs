@@ -9,7 +9,6 @@ pub struct CalibrateTab {
     pub samples: usize,
     pub dry_run: bool,
     pub results: Option<Vec<HallCalibrationResult>>,
-    pub is_sampling: bool,
     pub status_message: Option<(String, bool)>,
 }
 
@@ -19,7 +18,6 @@ impl Default for CalibrateTab {
             samples: 60,
             dry_run: true,
             results: None,
-            is_sampling: false,
             status_message: None,
         }
     }
@@ -27,7 +25,6 @@ impl Default for CalibrateTab {
 
 impl CalibrateTab {
     pub fn execute_calibration(&mut self, dry_run: bool) {
-        self.is_sampling = true;
         match Calibrator::calibrate_stick(self.samples, dry_run) {
             Ok(res) => {
                 let msg = if dry_run {
@@ -42,7 +39,6 @@ impl CalibrateTab {
                 self.status_message = Some((format!("Error: {err}"), true));
             }
         }
-        self.is_sampling = false;
     }
 
     pub fn ui(&mut self, ui: &mut Ui) {
@@ -60,7 +56,10 @@ impl CalibrateTab {
             ui.label(
                 "1. Suelta la palanca por completo y permite que el resorte la centre libremente.",
             );
-            ui.label("2. No toques la base ni el vástago durante los 2 segundos de muestreo.");
+            ui.label(format!(
+                "2. No toques la base ni el vástago durante el muestreo (~{} ms).",
+                self.samples as u64 * 2
+            ));
             ui.label(
                 "3. Primero realiza un muestreo en modo simulación para revisar las desviaciones.",
             );
@@ -72,7 +71,7 @@ impl CalibrateTab {
             ui.label("Número de muestras:");
             ui.add(egui::Slider::new(&mut self.samples, 20..=200).text("paquetes"));
             ui.separator();
-            ui.checkbox(&mut self.dry_run, "Modo Simulación (Dry-Run)");
+            ui.checkbox(&mut self.dry_run, "Bloqueo EEPROM (Solo Simulación)");
         });
 
         ui.add_space(8.0);

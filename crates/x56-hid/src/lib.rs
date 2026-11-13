@@ -22,7 +22,14 @@ use x56_proto::{
 /// Retardo de asentamiento entre `PacketRgb` (Report `0x09`) y `PacketCommit` (Report `0x01`)
 /// requerido por el microcontrolador del Stick (especialmente Saitek `0738:2221`) para
 /// evitar que descarte el Feature Report de confirmación durante el volcado del buffer USB EP0.
-pub const RGB_COMMIT_SETTLE_DELAY: Duration = Duration::from_millis(4);
+pub const RGB_COMMIT_SETTLE_DELAY: Duration = Duration::from_millis(20);
+/// Cooldown posterior a `PacketCommit` (Report `0x01`) antes de cerrar el descriptor `hidraw`
+/// o emitir el siguiente comando, respetando la cadencia mínima de 20 ms del MCU Saitek/Logitech.
+pub const RGB_POST_COMMIT_DELAY: Duration = Duration::from_millis(20);
+
+/// Serializa las transacciones RGB entre hilos (p. ej. `RgbDispatcher` vs GUI/`ProfileManager`)
+/// para impedir el entrelazado de `PacketRgb` (`0x09`) y `PacketCommit` (`0x01`) sobre el mismo EP0.
+static HID_RGB_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// Vendor ID de Saitek / Mad Catz.
 pub const SAITEK_VID: u16 = 0x0738;
@@ -399,8 +406,8 @@ impl X56Device {
             HidTransportError::Hid(err)
         })?;
 
-        // El microcontrolador del Stick (especialmente Saitek 0738:2221) requiere ~4ms
-        // para procesar el buffer EP0 de PacketRgb antes de aceptar PacketCommit (0x01).
+        // El microcontrolador del Stick (especialmente Saitek 0738:2221) requiere >=20ms
+        // entre etapas para procesar el buffer EP0 de PacketRgb antes de aceptar PacketCommit (0x01).
         std::thread::sleep(RGB_COMMIT_SETTLE_DELAY);
 
         debug!(
@@ -419,6 +426,10 @@ impl X56Device {
             HidTransportError::Hid(err)
         })?;
 
+        // Respetar el cooldown mínimo de 20ms tras PacketCommit antes de cerrar `hidraw`
+        // o iniciar el siguiente paquete de configuración.
+        std::thread::sleep(RGB_POST_COMMIT_DELAY);
+
         info!(
             "RGB #{:02x}{:02x}{:02x} committed on {} ({:04x}:{:04x}) at {:?}",
             color.r,
@@ -433,8 +444,10 @@ impl X56Device {
     }
 
     /// Configura el color de iluminación LED RGB enviando [`PacketRgb`] (Report `0x09`)
-    /// seguido de un retardo de asentamiento de 4ms y [`PacketCommit`] (Report `0x01`) como Feature Reports.
+    /// seguido de un retardo de asentamiento de 20 ms, [`PacketCommit`] (Report `0x01`)
+    /// y un cooldown de 20 ms antes de liberar la sesión HID.
     pub fn set_rgb(&self, color: RgbColor) -> Result<(), HidTransportError> {
+        let _guard = HID_RGB_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         Self::send_rgb_reports(&self.device, &self.descriptor, color)
     }
 
@@ -446,6 +459,10 @@ impl X56Device {
         stick_color: Option<RgbColor>,
         throttle_color: Option<RgbColor>,
     ) -> Result<(bool, bool), HidTransportError> {
+        if stick_color.is_none() && throttle_color.is_none() {
+            return Ok((false, false));
+        }
+        let _guard = HID_RGB_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let api = HidApi::new().map_err(|err| {
             error!("Failed to initialize HidApi in set_rgb_unified: {err}");
             HidTransportError::Hid(err)
@@ -731,5 +748,11 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn rgb_delays_respect_20ms_hardware_cadence() {
+        assert!(RGB_COMMIT_SETTLE_DELAY >= Duration::from_millis(20));
+        assert!(RGB_POST_COMMIT_DELAY >= Duration::from_millis(20));
     }
 }

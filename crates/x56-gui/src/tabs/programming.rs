@@ -14,7 +14,8 @@ use std::time::Instant;
 use eframe::egui::{self, Color32, Key, RichText, Stroke, Ui, Vec2};
 use x56_core::{
     catalog_for_device, ButtonDescriptor, ButtonMonitor, CommandCell, DeviceKind,
-    LiveButtonsSnapshot, MacroStep, ModeSlot, ProgrammingProfile, TriggeredCommandEvent,
+    LiveButtonsSnapshot, MacroStep, ModeSlot, ProgrammingProfile, TestTriggerStatus,
+    TriggeredCommandEvent,
 };
 
 use crate::curve_math::{LiveAxesState, LiveInputPoller};
@@ -71,7 +72,6 @@ pub struct ProgrammingTab {
     pub hovered_button_id: Option<String>,
     pub show_test_window: bool,
     pub test_log: Vec<TriggeredCommandEvent>,
-    pub filter_group: Option<String>,
     pub status_message: Option<(String, bool)>,
     pub test_input_text: String,
 
@@ -80,7 +80,6 @@ pub struct ProgrammingTab {
     pub filter_category: FilterCategory,
     pub last_detected_button: Option<String>,
     pub last_hex_code: String,
-    pub last_latency_ms: f32,
     pub last_state_down: bool,
     pub is_recording_macro: bool,
     pub recorded_steps: Vec<MacroStep>,
@@ -215,15 +214,13 @@ impl ProgrammingTab {
             hovered_button_id: None,
             show_test_window: false,
             test_log: Vec::new(),
-            filter_group: None,
             status_message: None,
             test_input_text: String::new(),
 
             search_query: String::new(),
             filter_category: FilterCategory::Todos,
             last_detected_button: None,
-            last_hex_code: "0x0120".to_string(),
-            last_latency_ms: 0.82,
+            last_hex_code: "----".to_string(),
             last_state_down: false,
             is_recording_macro: false,
             recorded_steps: Vec::new(),
@@ -347,7 +344,7 @@ impl ProgrammingTab {
                                 .show(ui, |ui| {
                                     ui.set_width(ui.available_width());
                                     // A. Monitor de detección en vivo (EVDEV Hook)
-                                    self.render_evdev_hook_card(ui);
+                                    self.render_evdev_hook_card(ui, &snapshot);
                                     ui.add_space(8.0);
 
                                     // B. Mapa Vectorial de Entradas X-56 2D
@@ -412,7 +409,7 @@ impl ProgrammingTab {
                     .show(ui, |ui| {
                         ui.set_width(ui.available_width());
                         // Monitor de detección en vivo (EVDEV Hook)
-                        self.render_evdev_hook_card(ui);
+                        self.render_evdev_hook_card(ui, &snapshot);
                         ui.add_space(8.0);
 
                         // Mapa Vectorial de Entradas X-56 2D
@@ -787,6 +784,7 @@ impl ProgrammingTab {
 
                     if ui.add(btn).clicked() {
                         self.selected_mode = slot;
+                        self.follow_hardware_mode = false;
                         self.editing_button_id = None;
                     }
                 }
@@ -913,7 +911,7 @@ impl ProgrammingTab {
     // COLUMNA IZQUIERDA: TARJETA 1 - MONITOR DE DETECCIÓN EN VIVO
     // ========================================================================
 
-    fn render_evdev_hook_card(&self, ui: &mut Ui) {
+    fn render_evdev_hook_card(&self, ui: &mut Ui, snapshot: &LiveButtonsSnapshot) {
         theme::card_frame().show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal_wrapped(|ui| {
@@ -928,7 +926,11 @@ impl ProgrammingTab {
                     .strong()
                     .monospace(),
                 );
-                telemetry_badge(ui, "HOOK", "LISTENING 1000Hz", COLOR_TERTIARY_CONTAINER);
+                if snapshot.stick_connected || snapshot.throttle_connected {
+                    telemetry_badge(ui, "HOOK", "EVDEV ACTIVO (50Hz)", COLOR_TERTIARY_CONTAINER);
+                } else {
+                    telemetry_badge(ui, "HOOK", "SIN HARDWARE USB", COLOR_WARNING_AMBER);
+                }
             });
 
             ui.add_space(4.0);
@@ -983,7 +985,7 @@ impl ProgrammingTab {
 
             ui.add_space(4.0);
 
-            // 3 Tarjetas telemétricas en fila: HEX CODE, LATENCIA, ESTADO
+            // 3 Tarjetas telemétricas en fila: HEX CODE, MODO FÍSICO, ESTADO
             ui.columns(3, |cols| {
                 // HEX CODE
                 theme::sunken_frame().show(&mut cols[0], |ui| {
@@ -1004,17 +1006,17 @@ impl ProgrammingTab {
                     });
                 });
 
-                // LATENCIA
+                // MODO FÍSICO
                 theme::sunken_frame().show(&mut cols[1], |ui| {
                     ui.vertical(|ui| {
                         ui.label(
-                            RichText::new("LATENCIA")
+                            RichText::new("MODO FÍSICO")
                                 .color(COLOR_OUTLINE)
                                 .size(9.0)
                                 .monospace(),
                         );
                         ui.label(
-                            RichText::new(format!("{:.2} ms", self.last_latency_ms))
+                            RichText::new(snapshot.active_mode.as_str())
                                 .color(COLOR_TERTIARY_CONTAINER)
                                 .size(13.0)
                                 .strong()
@@ -3255,16 +3257,6 @@ impl ProgrammingTab {
                         ));
                     }
                 }
-
-                let shift_lbl =
-                    format!("{} {}", icons::SPARKLES, x56_core::t!("prog-macro-pinkie"));
-                if tactical_button(ui, &shift_lbl, false, false).clicked() {
-                    self.filter_category = FilterCategory::Shift;
-                    self.status_message = Some((
-                        "FILTRANDO CAPA DE MODIFICADOR PINKIE SHIFT (24 ASIGNACIONES)".to_string(),
-                        false,
-                    ));
-                }
             });
         });
     }
@@ -3569,7 +3561,7 @@ impl ProgrammingTab {
             telemetry_badge(
                 ui,
                 "CAPAS VIRTUALES",
-                "3 MODOS + SHIFT",
+                &x56_core::t!("prog-modes-real"),
                 COLOR_PRIMARY_CONTAINER,
             );
         });
@@ -3620,25 +3612,6 @@ impl ProgrammingTab {
 
                 if ui.add(btn).clicked() {
                     self.filter_category = cat;
-                    self.filter_group = None;
-                }
-            }
-
-            if let Some(ref grp) = self.filter_group {
-                ui.separator();
-                let grp_badge = egui::Button::new(
-                    RichText::new(format!("GRUPO: {} {}", grp, icons::X))
-                        .size(10.0)
-                        .color(COLOR_PRIMARY_CONTAINER)
-                        .strong()
-                        .monospace(),
-                )
-                .fill(COLOR_SURFACE_CONTAINER)
-                .stroke(Stroke::new(1.0, COLOR_PRIMARY_CONTAINER))
-                .corner_radius(egui::CornerRadius::same(4));
-
-                if ui.add(grp_badge).clicked() {
-                    self.filter_group = None;
                 }
             }
         });
@@ -3660,12 +3633,6 @@ impl ProgrammingTab {
         let mut displayed_count = 0;
 
         for btn in &catalog {
-            // Filtrado por grupo del manual si está activo
-            if let Some(ref grp) = self.filter_group {
-                if !btn.group.eq_ignore_ascii_case(grp) {
-                    continue;
-                }
-            }
             // Filtrado por buscador táctico
             if !q.is_empty() {
                 let matches_id = btn.id.to_lowercase().contains(&q);
@@ -3739,7 +3706,7 @@ impl ProgrammingTab {
                     false
                 }
             }
-            FilterCategory::Shift => id.contains("pinkie") || id.contains("flying"),
+            FilterCategory::Shift => id.contains("pinkie") || id.contains("sld"),
         }
     }
 
@@ -3796,14 +3763,20 @@ impl ProgrammingTab {
                             )
                         } else {
                             (
-                                format!("{} {}", default_info.key_display, default_info.action),
+                                format!(
+                                    "[SIN ASIGNAR] Sugerencia: {} {}",
+                                    default_info.key_display, default_info.action
+                                ),
                                 COLOR_SURFACE_HIGH,
                                 COLOR_ON_SURFACE_VARIANT,
                             )
                         }
                     } else {
                         (
-                            format!("{} {}", default_info.key_display, default_info.action),
+                            format!(
+                                "[SIN ASIGNAR] Sugerencia: {} {}",
+                                default_info.key_display, default_info.action
+                            ),
                             COLOR_SURFACE_HIGH,
                             COLOR_ON_SURFACE_VARIANT,
                         )
@@ -3882,15 +3855,24 @@ impl ProgrammingTab {
         cell_opt: &Option<CommandCell>,
         default_info: &DefaultMappingInfo,
     ) {
+        let is_assigned = cell_opt.as_ref().is_some_and(|c| c.is_assigned());
+        let meta_text = if is_assigned {
+            format!(
+                "TIPO: {} // GRUPO: {}",
+                default_info.map_type, default_info.group_sc
+            )
+        } else {
+            format!(
+                "REFERENCIA: TIPO: {} // GRUPO: {}",
+                default_info.map_type, default_info.group_sc
+            )
+        };
         ui.horizontal_wrapped(|ui| {
             ui.label(
-                RichText::new(format!(
-                    "TIPO: {} // GRUPO: {}",
-                    default_info.map_type, default_info.group_sc
-                ))
-                .color(COLOR_OUTLINE)
-                .size(9.0)
-                .monospace(),
+                RichText::new(meta_text)
+                    .color(COLOR_OUTLINE)
+                    .size(9.0)
+                    .monospace(),
             );
             if let Some(ref c) = cell_opt {
                 if c.is_sequence() {
@@ -3929,17 +3911,53 @@ impl ProgrammingTab {
                     .size(10.0)
                     .monospace(),
             )
-            .on_hover_text("Simular pulsación para verificar uinput")
+            .on_hover_text("Emitir asignación actual vía /dev/uinput")
             .clicked()
         {
-            self.last_detected_button = Some(format!("{} // {}", btn.id.to_uppercase(), btn.label));
-            self.last_hex_code = if btn.evdev_code != 0 {
-                format!("{:#06x}", btn.evdev_code)
+            if let Some(c) = cell_opt.as_ref().filter(|c| c.is_assigned()) {
+                match monitor.test_cell(c) {
+                    TestTriggerStatus::Emitted => {
+                        self.status_message = Some((
+                            format!(
+                                "TEST UINPUT EMITIDO: [{}] -> {}",
+                                c.keys_display(),
+                                btn.label
+                            ),
+                            false,
+                        ));
+                    }
+                    TestTriggerStatus::Paused => {
+                        self.status_message = Some((
+                            "ROUTER UINPUT EN PAUSA // ACTIVA 'UINPUT' ARRIBA PARA PROBAR"
+                                .to_string(),
+                            true,
+                        ));
+                    }
+                    TestTriggerStatus::UinputUnavailable => {
+                        self.status_message = Some((
+                            "/dev/uinput NO DISPONIBLE // REVISA PERMISOS UDEV".to_string(),
+                            true,
+                        ));
+                    }
+                    TestTriggerStatus::Unassigned => {
+                        self.status_message = Some((
+                            format!(
+                                "BOTÓN SIN ASIGNAR: {} (CONFIGURA TECLAS O MACRO PRIMERO)",
+                                btn.label
+                            ),
+                            true,
+                        ));
+                    }
+                }
             } else {
-                "0x0120".to_string()
-            };
-            self.last_state_down = true;
-            self.status_message = Some((format!("TEST SIMULADO: {}", btn.label), false));
+                self.status_message = Some((
+                    format!(
+                        "BOTÓN SIN ASIGNAR: {} (CONFIGURA TECLAS O MACRO PRIMERO)",
+                        btn.label
+                    ),
+                    true,
+                ));
+            }
         }
 
         ui.add_space(4.0);
@@ -5263,5 +5281,18 @@ mod tests {
             },
         );
         assert!(tab.matches_category("stick_trigger"));
+    }
+
+    #[test]
+    fn test_filter_category_shift_and_clean_defaults() {
+        let tab = ProgrammingTab {
+            filter_category: FilterCategory::Shift,
+            ..Default::default()
+        };
+        assert_eq!(tab.last_hex_code, "----");
+        assert!(tab.matches_category("stick_pinkie"));
+        assert!(tab.matches_category("thr_sld"));
+        assert!(!tab.matches_category("stick_flying"));
+        assert!(!tab.matches_category("stick_trigger"));
     }
 }

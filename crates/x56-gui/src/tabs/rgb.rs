@@ -306,6 +306,14 @@ impl RgbTab {
         };
 
         match X56Manager::set_rgb(target, color) {
+            Ok(0) => {
+                self.status_message = Some((
+                    format!(
+                        "Sin dispositivos USB conectados (0 aplicados); color {hex} guardado en perfil ({mode_lbl})"
+                    ),
+                    true,
+                ));
+            }
             Ok(count) => {
                 let count = count.to_string();
                 let count = count.as_str();
@@ -382,14 +390,21 @@ impl RgbTab {
         // Enviar al hardware el color del modo físico activo
         let active_hw = monitor.snapshot().active_mode;
         let active_hex = self.effective_hex_for(profile, active_hw, DeviceKind::Stick);
-        if let Ok(col) = parse_color(&active_hex) {
-            let _ = X56Manager::set_rgb(TargetDevice::All, col);
-        }
-
-        self.status_message = Some((
-            format!("Esquema por modo asignado: M1={m1_hex} | M2={m2_hex} | S1={s1_hex}"),
-            false,
-        ));
+        let scheme = format!("Esquema por modo asignado: M1={m1_hex} | M2={m2_hex} | S1={s1_hex}");
+        self.status_message = Some(match parse_color(&active_hex) {
+            Ok(col) => match X56Manager::set_rgb(TargetDevice::All, col) {
+                Ok(0) => (
+                    format!("{scheme} (sin dispositivos USB conectados; guardado solo en perfil)"),
+                    true,
+                ),
+                Ok(n) => (
+                    format!("{scheme} ({n} dispositivo(s) actualizados por USB)"),
+                    false,
+                ),
+                Err(e) => (format!("{scheme} (error USB: {e})"), true),
+            },
+            Err(_) => (scheme, false),
+        });
     }
 
     /// Renderiza la interfaz de iluminación RGB por modo.
