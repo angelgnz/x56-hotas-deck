@@ -39,6 +39,14 @@ sidebar-run-in-background-desc = If enabled, closing the window keeps the applic
 sidebar-language = LANGUAGE
 sidebar-lang-en = English (EN)
 sidebar-lang-es = Español (ES)
+sidebar-uinput-online = UINPUT DAEMON: ONLINE
+sidebar-uinput-offline = UINPUT DAEMON: OFFLINE
+sidebar-uinput-online-tooltip = Virtual keyboard /dev/uinput is ready for key injection (including Proton/Steam games).
+sidebar-uinput-offline-tooltip = /dev/uinput is unavailable or lacks write permission. Check 70-x56.rules and the uinput kernel module.
+sidebar-proton-udev-ok = PROTON / UDEV: READY (70-x56)
+sidebar-proton-udev-warn = PROTON / UDEV: PARTIAL (70-x56)
+sidebar-proton-udev-fail = PROTON / UDEV: MISSING
+sidebar-proton-udev-tooltip = { $detail } — Click to open System Diagnostics.
 
 # System Tray & Context Menu
 tray-toggle = Show / Hide

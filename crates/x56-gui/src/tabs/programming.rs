@@ -3687,23 +3687,6 @@ impl ProgrammingTab {
     fn render_tactical_footer(&mut self, ui: &mut Ui, monitor: &ButtonMonitor) {
         theme::dock_frame().show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
-                // Badge de compatibilidad Proton & Steam Deck
-                theme::sunken_frame()
-                    .inner_margin(egui::Margin::symmetric(8, 4))
-                    .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            ui.label(RichText::new(icons::SHIELD_CHECK).size(12.0));
-                            ui.label(
-                                RichText::new("PROTON & STEAM DECK (udev: 99-logitech-x56.rules)")
-                                    .color(COLOR_TERTIARY_CONTAINER)
-                                    .size(9.5)
-                                    .monospace(),
-                            );
-                        });
-                    });
-
-                ui.add_space(4.0);
-
                 // Botones de exportación
                 let exp_xml = format!("{} EXPORTAR XML", icons::FILE_CODE);
                 if tactical_button(ui, &exp_xml, false, false).clicked() {

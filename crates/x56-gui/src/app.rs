@@ -10,7 +10,8 @@ use eframe::egui::{self, CornerRadius, Frame, Margin, RichText, Sense, Stroke, U
 use x56_core::i18n::{self, Language};
 use x56_core::t;
 use x56_core::{
-    ButtonMonitor, DeviceProfile, FullProfile, ModeSlot, ProfileManager, TargetDevice, X56Device,
+    ButtonMonitor, CheckStatus, DeviceProfile, FullProfile, ModeSlot, ProfileManager, TargetDevice,
+    X56Device,
 };
 
 use crate::curve_math::LiveInputPoller;
@@ -137,6 +138,9 @@ impl X56App {
         if let Some(ref tray) = self.tray_handle {
             if let Ok(mut p) = tray.active_profile.lock() {
                 *p = self.active_profile_name.clone();
+            }
+            if let Ok(mut u) = tray.uinput_online.lock() {
+                *u = self.button_monitor.uinput_available();
             }
         }
     }
@@ -636,10 +640,21 @@ impl X56App {
 
                 ui.add_space(6.0);
 
-                // Punto uinput neon
-                let (dot_r, _) = ui.allocate_exact_size(Vec2::new(10.0, 10.0), Sense::hover());
+                // Punto uinput dinámico con tooltip
+                let uinput_ready = self.button_monitor.uinput_available();
+                let (uinput_color, uinput_tooltip) = if uinput_ready {
+                    (
+                        COLOR_TERTIARY_CONTAINER,
+                        t!("sidebar-uinput-online-tooltip"),
+                    )
+                } else {
+                    (COLOR_ERROR, t!("sidebar-uinput-offline-tooltip"))
+                };
+                let (dot_r, dot_resp) =
+                    ui.allocate_exact_size(Vec2::new(10.0, 10.0), Sense::hover());
                 ui.painter()
-                    .circle_filled(dot_r.center(), 4.0, COLOR_TERTIARY_CONTAINER);
+                    .circle_filled(dot_r.center(), 4.0, uinput_color);
+                dot_resp.on_hover_text(uinput_tooltip);
             });
         });
     }
@@ -762,23 +777,109 @@ impl X56App {
                     .show(ui, |ui| {
                         ui.set_min_width(ui.available_width());
                         ui.vertical(|ui| {
-                            // UINPUT DAEMON: ONLINE (verde neón #34f885)
+                            // UINPUT DAEMON (estado real de /dev/uinput)
+                            let uinput_ready = self.button_monitor.uinput_available();
+                            let (uinput_color, uinput_label, uinput_tooltip) = if uinput_ready {
+                                (
+                                    COLOR_TERTIARY_CONTAINER,
+                                    t!("sidebar-uinput-online"),
+                                    t!("sidebar-uinput-online-tooltip"),
+                                )
+                            } else {
+                                (
+                                    COLOR_ERROR,
+                                    t!("sidebar-uinput-offline"),
+                                    t!("sidebar-uinput-offline-tooltip"),
+                                )
+                            };
+
                             ui.horizontal(|ui| {
                                 let (dot_r, _) =
                                     ui.allocate_exact_size(Vec2::new(9.0, 9.0), Sense::hover());
-                                ui.painter().circle_filled(
-                                    dot_r.center(),
-                                    4.0,
-                                    COLOR_TERTIARY_CONTAINER,
-                                );
+                                ui.painter()
+                                    .circle_filled(dot_r.center(), 4.0, uinput_color);
                                 ui.label(
-                                    RichText::new("UINPUT DAEMON: ONLINE")
-                                        .color(COLOR_TERTIARY_CONTAINER)
+                                    RichText::new(uinput_label)
+                                        .color(uinput_color)
                                         .size(10.5)
                                         .strong()
                                         .monospace(),
                                 );
-                            });
+                            })
+                            .response
+                            .on_hover_text(uinput_tooltip);
+
+                            ui.add_space(4.0);
+
+                            // PROTON / UDEV (70-x56.rules)
+                            let udev_check = self
+                                .doctor_tab
+                                .report
+                                .checks
+                                .iter()
+                                .find(|c| c.category == "udev");
+                            let (proton_color, proton_icon, proton_label) = match udev_check {
+                                Some(c) if c.status == CheckStatus::Ok && uinput_ready => (
+                                    COLOR_TERTIARY_CONTAINER,
+                                    icons::SHIELD_CHECK,
+                                    t!("sidebar-proton-udev-ok"),
+                                ),
+                                Some(c) if c.status == CheckStatus::Fail => (
+                                    COLOR_ERROR,
+                                    icons::ALERT_TRIANGLE,
+                                    t!("sidebar-proton-udev-fail"),
+                                ),
+                                None => (
+                                    COLOR_ERROR,
+                                    icons::ALERT_TRIANGLE,
+                                    t!("sidebar-proton-udev-fail"),
+                                ),
+                                Some(_) => (
+                                    COLOR_WARNING_AMBER,
+                                    icons::ALERT_TRIANGLE,
+                                    t!("sidebar-proton-udev-warn"),
+                                ),
+                            };
+                            let uinput_status = if uinput_ready {
+                                "/dev/uinput: OK"
+                            } else {
+                                "/dev/uinput: unavailable"
+                            };
+                            let detail = match udev_check {
+                                Some(check) => match &check.remedy {
+                                    Some(remedy) => {
+                                        format!(
+                                            "{} ({}) [{}]",
+                                            check.message, remedy, uinput_status
+                                        )
+                                    }
+                                    None => format!("{} [{}]", check.message, uinput_status),
+                                },
+                                None => format!("udev check not run [{}]", uinput_status),
+                            };
+                            let proton_resp = ui
+                                .horizontal(|ui| {
+                                    ui.label(
+                                        RichText::new(proton_icon).color(proton_color).size(11.0),
+                                    );
+                                    ui.label(
+                                        RichText::new(proton_label)
+                                            .color(proton_color)
+                                            .size(10.0)
+                                            .strong()
+                                            .monospace(),
+                                    );
+                                })
+                                .response
+                                .interact(Sense::click())
+                                .on_hover_text(t!(
+                                    "sidebar-proton-udev-tooltip",
+                                    "detail" => detail.as_str()
+                                ));
+                            if proton_resp.clicked() {
+                                self.active_subsystem = ActiveSubsystem::Profiles;
+                                self.doctor_tab.refresh();
+                            }
 
                             ui.add_space(8.0);
                             ui.separator();

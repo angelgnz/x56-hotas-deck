@@ -90,11 +90,8 @@ impl Doctor {
         match found_rule {
             Some(path) => {
                 let content = fs::read_to_string(path).unwrap_or_default();
-                let has_uaccess = content.contains("uaccess");
-                let has_saitek = content.contains("0738");
-                let has_logitech = content.contains("046d");
 
-                if has_uaccess && has_saitek && has_logitech {
+                if is_udev_rule_complete(&content) {
                     report.add(DoctorCheck {
                         category: "udev".into(),
                         title: "Regla udev para acceso sin root".into(),
@@ -108,7 +105,7 @@ impl Doctor {
                         title: "Regla udev incompleta".into(),
                         status: CheckStatus::Warn,
                         message: format!(
-                            "Regla en {} carece de soporte para uaccess o marcas soportadas",
+                            "Regla en {} carece de soporte para uaccess, VIDs soportados (0738/046d) o regla uinput",
                             path.display()
                         ),
                         remedy: Some(
@@ -364,5 +361,49 @@ impl Doctor {
 
         let target_gid = unsafe { (*grp).gr_gid };
         groups.contains(&target_gid)
+    }
+}
+
+fn is_udev_rule_complete(content: &str) -> bool {
+    let has_uaccess = content.contains("uaccess");
+    let has_saitek = content.contains("0738");
+    let has_logitech = content.contains("046d");
+    let has_uinput = content.contains("uinput");
+    has_uaccess && has_saitek && has_logitech && has_uinput
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_udev_rule_complete;
+
+    #[test]
+    fn udev_rule_completeness_requires_uaccess_vids_and_uinput() {
+        let complete = r#"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0738", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", TAG+="uaccess"
+KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess"
+"#;
+        assert!(is_udev_rule_complete(complete));
+
+        let missing_uinput = r#"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0738", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", TAG+="uaccess"
+"#;
+        assert!(!is_udev_rule_complete(missing_uinput));
+
+        let missing_uaccess = r#"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0738", MODE="0666"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", MODE="0666"
+KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0666"
+"#;
+        assert!(!is_udev_rule_complete(missing_uaccess));
+
+        let missing_logitech = r#"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0738", TAG+="uaccess"
+KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess"
+"#;
+        assert!(!is_udev_rule_complete(missing_logitech));
+
+        assert!(!is_udev_rule_complete(""));
     }
 }

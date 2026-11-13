@@ -38,6 +38,14 @@ sidebar-run-in-background-desc = Si está activado, cerrar la ventana mantendrá
 sidebar-language = IDIOMA
 sidebar-lang-en = English (EN)
 sidebar-lang-es = Español (ES)
+sidebar-uinput-online = DAEMON UINPUT: EN LÍNEA
+sidebar-uinput-offline = DAEMON UINPUT: DESCONECTADO
+sidebar-uinput-online-tooltip = Teclado virtual /dev/uinput listo para inyección de teclas (incluidos juegos Proton/Steam).
+sidebar-uinput-offline-tooltip = /dev/uinput no está disponible o carece de permisos de escritura. Revisa 70-x56.rules y el módulo uinput.
+sidebar-proton-udev-ok = PROTON / UDEV: LISTO (70-x56)
+sidebar-proton-udev-warn = PROTON / UDEV: PARCIAL (70-x56)
+sidebar-proton-udev-fail = PROTON / UDEV: FALTA REGLA
+sidebar-proton-udev-tooltip = { $detail } — Haz clic para abrir Diagnóstico del Sistema.
 
 # Bandeja del Sistema y Menú Contextual
 tray-toggle = Mostrar / Ocultar
