@@ -31,6 +31,9 @@ pub struct CurvesTab {
     pub installed_spring: PhysicalSpring,
     pub eeprom_synced: bool,
     pub status_message: Option<(String, bool)>,
+    pub stick_usb: Option<(String, u16, u16)>,
+    pub throttle_usb: Option<(String, u16, u16)>,
+    last_hw_scan: std::time::Instant,
 }
 
 impl Default for CurvesTab {
@@ -41,8 +44,11 @@ impl Default for CurvesTab {
             params: CurveParameters::default(),
             hall_zero: 0x8000,
             installed_spring: PhysicalSpring::Green47mm,
-            eeprom_synced: true,
+            eeprom_synced: false,
             status_message: None,
+            stick_usb: None,
+            throttle_usb: None,
+            last_hw_scan: std::time::Instant::now(),
         };
         tab.read_from_hardware();
         tab
@@ -50,18 +56,64 @@ impl Default for CurvesTab {
 }
 
 impl CurvesTab {
-    /// Lee los parámetros del eje activo desde la EEPROM del hardware si está conectado.
-    pub fn read_from_hardware(&mut self) {
-        if (self.selected_device == DeviceKind::Stick
+    /// Actualiza la caché de dispositivos USB conectados usando `X56Device::enumerate()`.
+    fn refresh_usb_devices(&mut self) {
+        let mut stick = None;
+        let mut throttle = None;
+        for desc in X56Device::enumerate() {
+            let entry = (
+                desc.path.to_string_lossy().into_owned(),
+                desc.vendor_id,
+                desc.product_id,
+            );
+            match desc.kind {
+                DeviceKind::Stick if stick.is_none() => stick = Some(entry),
+                DeviceKind::Throttle if throttle.is_none() => throttle = Some(entry),
+                _ => {}
+            }
+        }
+        self.stick_usb = stick;
+        self.throttle_usb = throttle;
+        self.last_hw_scan = std::time::Instant::now();
+    }
+
+    fn is_virtual_ministick(&self) -> bool {
+        (self.selected_device == DeviceKind::Stick
             && matches!(self.selected_axis_id, AXIS_MINISTICK_X | AXIS_MINISTICK_Y))
             || (self.selected_device == DeviceKind::Throttle
                 && matches!(
                     self.selected_axis_id,
                     AXIS_THROTTLE_MINISTICK_X | AXIS_THROTTLE_MINISTICK_Y
                 ))
-        {
-            self.eeprom_synced = true;
-            self.status_message = Some((x56_core::t!("curves-status-gimbal-sync"), false));
+    }
+
+    /// Devuelve `(etiqueta_badge_adc, subetiqueta_tarjeta_raw)` según el dispositivo y eje activo.
+    fn axis_adc_spec(&self) -> (&'static str, &'static str) {
+        match (self.selected_device, self.selected_axis_id) {
+            (DeviceKind::Stick, 0x30 | 0x31) => ("16-BIT HALL (0..65535)", "16-BIT HALL SENSOR"),
+            (DeviceKind::Stick, 0x32 | 0x35) => ("12-BIT POT (0..4095)", "12-BIT POT (0..4095)"),
+            (
+                _,
+                AXIS_MINISTICK_X
+                | AXIS_MINISTICK_Y
+                | AXIS_THROTTLE_MINISTICK_X
+                | AXIS_THROTTLE_MINISTICK_Y,
+            ) => ("8-BIT SLEW (0..255)", "8-BIT SLEW (0..255)"),
+            (DeviceKind::Throttle, _) => ("10-BIT / ANALOG", "10-BIT / ANALOG (0..1023)"),
+            _ => ("16-BIT HALL (0..65535)", "16-BIT HALL SENSOR"),
+        }
+    }
+
+    /// Lee los parámetros del eje activo desde la EEPROM del hardware si está conectado.
+    pub fn read_from_hardware(&mut self) {
+        self.refresh_usb_devices();
+
+        if self.is_virtual_ministick() {
+            self.eeprom_synced = false;
+            self.status_message = Some((
+                "Mini-Gimbal sin soporte EEPROM en X56 (solo vista previa).".into(),
+                false,
+            ));
             return;
         }
 
@@ -80,7 +132,7 @@ impl CurvesTab {
             self.status_message = Some((x56_core::t!("curves-status-eeprom-synced"), false));
         } else {
             // Mantener valores tácticos predeterminados cuando se ejecuta sin hardware conectado
-            self.eeprom_synced = true;
+            self.eeprom_synced = false;
             let dev_str = format!("{:?}", self.selected_device);
             self.status_message = Some((
                 x56_core::t!("curves-status-sim-mode", "device" => &dev_str),
@@ -98,18 +150,14 @@ impl CurvesTab {
 
     /// Escribe los parámetros de la curva actual en el hardware físico.
     pub fn apply_to_hardware(&mut self) {
-        if (self.selected_device == DeviceKind::Stick
-            && matches!(self.selected_axis_id, AXIS_MINISTICK_X | AXIS_MINISTICK_Y))
-            || (self.selected_device == DeviceKind::Throttle
-                && matches!(
-                    self.selected_axis_id,
-                    AXIS_THROTTLE_MINISTICK_X | AXIS_THROTTLE_MINISTICK_Y
-                ))
-        {
-            self.eeprom_synced = true;
+        self.refresh_usb_devices();
+
+        if self.is_virtual_ministick() {
+            self.eeprom_synced = false;
             self.status_message = Some((
-                "Curva de Mini-Gimbal aplicada al traductor uinput.".into(),
-                false,
+                "Mini-Gimbal sin soporte EEPROM en X56 ni traductor uinput (solo vista previa)."
+                    .into(),
+                true,
             ));
             return;
         }
@@ -131,97 +179,118 @@ impl CurvesTab {
             match dev.set_axis_config(&cfg) {
                 Ok(_) => {
                     self.eeprom_synced = true;
-                    self.status_message = Some((x56_core::t!("curves-applied-success"), false));
+                    let mut preview_notes = Vec::new();
+                    if self.params.curve_type == CurveType::Bezier {
+                        preview_notes.push("Bézier libre");
+                    }
+                    if self.params.invert {
+                        preview_notes.push("Invertir Eje");
+                    }
+                    let msg = if preview_notes.is_empty() {
+                        x56_core::t!("curves-applied-success")
+                    } else {
+                        format!(
+                            "{} Nota: {} son solo vista previa en GUI (el hardware guarda S/J, Deadband, Expo y Saturación).",
+                            x56_core::t!("curves-applied-success"),
+                            preview_notes.join(" e ")
+                        )
+                    };
+                    self.status_message = Some((msg, false));
                 }
                 Err(err) => {
+                    self.eeprom_synced = false;
                     self.status_message =
                         Some((format!("Error aplicando al hardware: {err}"), true));
                 }
             }
         } else {
-            self.eeprom_synced = true;
+            self.eeprom_synced = false;
             self.status_message = Some((
                 format!(
-                    "Curva aplicada al perfil en memoria ({:?} sin conexión USB).",
+                    "Sin conexión USB ({:?}): cambios no guardados en EEPROM.",
                     self.selected_device
                 ),
-                false,
+                true,
             ));
         }
     }
 
-    /// Obtiene la entrada física normalizada y el valor ADC crudo del eje actualmente seleccionado.
+    /// Obtiene la entrada física normalizada y el valor ADC crudo escalado del eje actualmente seleccionado.
     fn current_live_input(&self, state: &LiveAxesState) -> (f64, u16) {
         match (self.selected_device, self.selected_axis_id) {
             (DeviceKind::Stick, 0x30) => (state.stick_x, state.raw_adc_x),
             (DeviceKind::Stick, 0x31) => (state.stick_y, state.raw_adc_y),
-            (DeviceKind::Stick, 0x35) => {
-                let adc16 = ((state.stick_z + 1.0) * 0.5 * 65535.0)
+            (DeviceKind::Stick, 0x32 | 0x35) => {
+                let adc12 = ((state.stick_z + 1.0) * 0.5 * 4095.0)
                     .round()
-                    .clamp(0.0, 65535.0) as u16;
-                (state.stick_z, adc16)
+                    .clamp(0.0, 4095.0) as u16;
+                (state.stick_z, adc12)
             }
             (DeviceKind::Stick, AXIS_MINISTICK_X) => {
-                let adc16 = ((state.ministick_x + 1.0) * 0.5 * 65535.0)
+                let adc8 = ((state.ministick_x + 1.0) * 0.5 * 255.0)
                     .round()
-                    .clamp(0.0, 65535.0) as u16;
-                (state.ministick_x, adc16)
+                    .clamp(0.0, 255.0) as u16;
+                (state.ministick_x, adc8)
             }
             (DeviceKind::Stick, AXIS_MINISTICK_Y) => {
-                let adc16 = ((state.ministick_y + 1.0) * 0.5 * 65535.0)
+                let adc8 = ((state.ministick_y + 1.0) * 0.5 * 255.0)
                     .round()
-                    .clamp(0.0, 65535.0) as u16;
-                (state.ministick_y, adc16)
+                    .clamp(0.0, 255.0) as u16;
+                (state.ministick_y, adc8)
             }
             (DeviceKind::Throttle, 0x30) => {
-                let adc = (state.throttle_left * 65535.0).round().clamp(0.0, 65535.0) as u16;
-                (state.throttle_left, adc)
+                let adc10 = (state.throttle_left * 1023.0).round().clamp(0.0, 1023.0) as u16;
+                (state.throttle_left, adc10)
             }
             (DeviceKind::Throttle, 0x31) => {
-                let adc = (state.throttle_right * 65535.0).round().clamp(0.0, 65535.0) as u16;
-                (state.throttle_right, adc)
+                let adc10 = (state.throttle_right * 1023.0).round().clamp(0.0, 1023.0) as u16;
+                (state.throttle_right, adc10)
             }
             (DeviceKind::Throttle, 0x32) => {
-                let adc = ((state.rotary_1 + 1.0) * 0.5 * 65535.0)
+                let adc10 = ((state.rotary_1 + 1.0) * 0.5 * 1023.0)
                     .round()
-                    .clamp(0.0, 65535.0) as u16;
-                (state.rotary_1, adc)
+                    .clamp(0.0, 1023.0) as u16;
+                (state.rotary_1, adc10)
             }
             (DeviceKind::Throttle, 0x35) => {
-                let adc = ((state.rotary_2 + 1.0) * 0.5 * 65535.0)
+                let adc10 = ((state.rotary_2 + 1.0) * 0.5 * 1023.0)
                     .round()
-                    .clamp(0.0, 65535.0) as u16;
-                (state.rotary_2, adc)
+                    .clamp(0.0, 1023.0) as u16;
+                (state.rotary_2, adc10)
             }
             (DeviceKind::Throttle, 0x36) => {
-                let adc = ((state.rotary_4 + 1.0) * 0.5 * 65535.0)
+                let adc10 = ((state.rotary_4 + 1.0) * 0.5 * 1023.0)
                     .round()
-                    .clamp(0.0, 65535.0) as u16;
-                (state.rotary_4, adc)
+                    .clamp(0.0, 1023.0) as u16;
+                (state.rotary_4, adc10)
             }
             (DeviceKind::Throttle, 0x37) => {
-                let adc = ((state.rotary_3 + 1.0) * 0.5 * 65535.0)
+                let adc10 = ((state.rotary_3 + 1.0) * 0.5 * 1023.0)
                     .round()
-                    .clamp(0.0, 65535.0) as u16;
-                (state.rotary_3, adc)
+                    .clamp(0.0, 1023.0) as u16;
+                (state.rotary_3, adc10)
             }
             (DeviceKind::Throttle, AXIS_THROTTLE_MINISTICK_X) => {
-                let adc16 = ((state.throttle_ministick_x + 1.0) * 0.5 * 65535.0)
+                let adc8 = ((state.throttle_ministick_x + 1.0) * 0.5 * 255.0)
                     .round()
-                    .clamp(0.0, 65535.0) as u16;
-                (state.throttle_ministick_x, adc16)
+                    .clamp(0.0, 255.0) as u16;
+                (state.throttle_ministick_x, adc8)
             }
             (DeviceKind::Throttle, AXIS_THROTTLE_MINISTICK_Y) => {
-                let adc16 = ((state.throttle_ministick_y + 1.0) * 0.5 * 65535.0)
+                let adc8 = ((state.throttle_ministick_y + 1.0) * 0.5 * 255.0)
                     .round()
-                    .clamp(0.0, 65535.0) as u16;
-                (state.throttle_ministick_y, adc16)
+                    .clamp(0.0, 255.0) as u16;
+                (state.throttle_ministick_y, adc8)
             }
-            _ => (0.0, 32768),
+            _ => (0.0, 0),
         }
     }
 
     pub fn ui(&mut self, ui: &mut Ui, poller: &LiveInputPoller, monitor: &x56_core::ButtonMonitor) {
+        if self.last_hw_scan.elapsed() >= std::time::Duration::from_secs(2) {
+            self.refresh_usb_devices();
+        }
+
         let viewport_w = ui.available_width();
         ui.set_max_width(viewport_w);
 
@@ -307,8 +376,8 @@ impl CurvesTab {
     }
 
     /// Top Hardware & Subsystem Telemetry Bar:
-    /// Selector STICK // RHINO [VID:0738 PID:2215] / DUAL THROTTLE [VID:0738 PID:2216],
-    /// badge ADC 16-BIT HALL SENSOR (65536 STEPS), JITTER 0.08ms, NODE /dev/hidraw0, EEPROM SYNCED.
+    /// Selector Stick / Throttle con VID:PID real (o [SIN USB]), badge ADC según eje,
+    /// NODE real (/dev/hidrawN u OFFLINE) y estado EEPROM SYNCED/MODIFIED.
     fn render_hardware_telemetry_bar(&mut self, ui: &mut Ui) {
         let outer_w = ui.available_width();
         theme::card_frame()
@@ -331,13 +400,24 @@ impl CurvesTab {
 
                     let is_stick = self.selected_device == DeviceKind::Stick;
                     let stick_name = x56_core::t!("curves-stick-rhino");
-                    let stick_lbl = if inner_w >= 920.0 {
-                        format!("{} {} [VID:0738 PID:2215]", icons::JOYSTICK, stick_name)
-                    } else if inner_w >= 580.0 {
-                        format!("{} {}", icons::JOYSTICK, stick_name)
-                    } else {
-                        format!("{} STICK", icons::JOYSTICK)
-                    };
+                    let stick_lbl =
+                        match (self.stick_usb.as_ref(), inner_w >= 920.0, inner_w >= 580.0) {
+                            (Some((_, vid, pid)), true, _) => {
+                                format!(
+                                    "{} {} [VID:{:04X} PID:{:04X}]",
+                                    icons::JOYSTICK,
+                                    stick_name,
+                                    vid,
+                                    pid
+                                )
+                            }
+                            (Some(_), false, true) => format!("{} {}", icons::JOYSTICK, stick_name),
+                            (Some(_), false, false) => format!("{} STICK", icons::JOYSTICK),
+                            (None, true, _) | (None, false, true) => {
+                                format!("{} {} [SIN USB]", icons::JOYSTICK, stick_name)
+                            }
+                            (None, false, false) => format!("{} STICK [SIN USB]", icons::JOYSTICK),
+                        };
                     if theme::tactical_button(ui, &stick_lbl, is_stick, false).clicked()
                         && !is_stick
                     {
@@ -348,12 +428,26 @@ impl CurvesTab {
 
                     let is_throttle = self.selected_device == DeviceKind::Throttle;
                     let thr_name = x56_core::t!("curves-throttle-rhino");
-                    let thr_lbl = if inner_w >= 920.0 {
-                        format!("{} {} [VID:0738 PID:2216]", icons::SLIDERS, thr_name)
-                    } else if inner_w >= 580.0 {
-                        format!("{} {}", icons::SLIDERS, thr_name)
-                    } else {
-                        format!("{} THROTTLE", icons::SLIDERS)
+                    let thr_lbl = match (
+                        self.throttle_usb.as_ref(),
+                        inner_w >= 920.0,
+                        inner_w >= 580.0,
+                    ) {
+                        (Some((_, vid, pid)), true, _) => {
+                            format!(
+                                "{} {} [VID:{:04X} PID:{:04X}]",
+                                icons::SLIDERS,
+                                thr_name,
+                                vid,
+                                pid
+                            )
+                        }
+                        (Some(_), false, true) => format!("{} {}", icons::SLIDERS, thr_name),
+                        (Some(_), false, false) => format!("{} THROTTLE", icons::SLIDERS),
+                        (None, true, _) | (None, false, true) => {
+                            format!("{} {} [SIN USB]", icons::SLIDERS, thr_name)
+                        }
+                        (None, false, false) => format!("{} THROTTLE [SIN USB]", icons::SLIDERS),
                     };
                     if theme::tactical_button(ui, &thr_lbl, is_throttle, false).clicked()
                         && !is_throttle
@@ -363,20 +457,16 @@ impl CurvesTab {
                         self.read_from_hardware();
                     }
 
-                    let adc_val = if inner_w >= 760.0 {
-                        "16-BIT HALL SENSOR (65536 STEPS)"
-                    } else if inner_w >= 520.0 {
-                        "16-BIT HALL (65536)"
-                    } else {
-                        "16-BIT"
-                    };
+                    let (adc_val, _) = self.axis_adc_spec();
                     theme::telemetry_badge(ui, "ADC:", adc_val, COLOR_PRIMARY_CONTAINER);
-                    theme::telemetry_badge(ui, "JITTER:", "0.08ms", COLOR_TERTIARY_CONTAINER);
 
-                    let node_str = match self.selected_device {
-                        DeviceKind::Stick => "/dev/hidraw0",
-                        DeviceKind::Throttle => "/dev/hidraw1",
+                    let active_usb = match self.selected_device {
+                        DeviceKind::Stick => self.stick_usb.as_ref(),
+                        DeviceKind::Throttle => self.throttle_usb.as_ref(),
                     };
+                    let node_str = active_usb
+                        .map(|(path, _, _)| path.as_str())
+                        .unwrap_or("OFFLINE");
                     theme::telemetry_badge(ui, "NODE:", node_str, COLOR_ON_SURFACE);
 
                     let (sync_label, sync_col) = match (self.eeprom_synced, inner_w >= 520.0) {
@@ -945,11 +1035,12 @@ impl CurvesTab {
             "COMPRESIÓN"
         };
 
+        let (_, adc_sub_label) = self.axis_adc_spec();
         let cards = [
             (
                 title_0,
                 format!("{:#06X} / {}", raw_adc, raw_adc),
-                "16-BIT HALL SENSOR".to_string(),
+                adc_sub_label.to_string(),
                 COLOR_ON_SURFACE,
             ),
             (
@@ -1527,7 +1618,7 @@ impl CurvesTab {
                         .monospace(),
                 );
                 ui.label(
-                    RichText::new(format!("{} LIVE 50/1000Hz", icons::RADIO))
+                    RichText::new(format!("{} LIVE 50Hz", icons::RADIO))
                         .color(COLOR_TERTIARY_CONTAINER)
                         .size(9.5)
                         .monospace(),
@@ -1611,7 +1702,7 @@ impl CurvesTab {
                     CurveType::Linear => "Lineal (1:1)",
                     CurveType::SCurve => "Curva-S",
                     CurveType::Exponential => "Exponencial",
-                    CurveType::Bezier => "Bézier",
+                    CurveType::Bezier => "Bézier (Vista previa)",
                 }
             };
 
@@ -1844,9 +1935,9 @@ impl CurvesTab {
                 ui.set_max_width(inner_w);
                 ui.set_width(inner_w);
                 let inv_lbl = if compact {
-                    "Invertir Eje".to_string()
+                    "Invertir Eje (Vista previa)".to_string()
                 } else {
-                    x56_core::t!("curves-invert")
+                    format!("{} (Vista previa)", x56_core::t!("curves-invert"))
                 };
                 ui.label(
                     RichText::new(&inv_lbl)
@@ -1919,14 +2010,6 @@ impl CurvesTab {
                         .strong()
                         .monospace(),
                 );
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(
-                        RichText::new("F-TENSION")
-                            .color(COLOR_OUTLINE)
-                            .size(9.5)
-                            .monospace(),
-                    );
-                });
             });
 
             ui.add_space(6.0);

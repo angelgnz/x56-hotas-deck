@@ -851,10 +851,24 @@ impl Shared {
     }
 }
 
+/// Resultado de solicitar la prueba manual (`uinput`) de una celda asignada.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TestTriggerStatus {
+    /// La celda se encoló para emitirse realmente por `/dev/uinput`.
+    Emitted,
+    /// El router `uinput` está pausado; no se emitieron teclas al sistema.
+    Paused,
+    /// El dispositivo virtual `/dev/uinput` no está disponible.
+    UinputUnavailable,
+    /// La celda no tiene teclas ni secuencia de macro asignada.
+    Unassigned,
+}
+
 /// Monitor en segundo plano (50 Hz) de los botones del X56 con inyección opcional de teclas.
 pub struct ButtonMonitor {
     shared: Arc<Shared>,
     rgb_tx: mpsc::Sender<RgbDispatchCommand>,
+    test_tx: mpsc::Sender<CommandCell>,
     handle: Option<JoinHandle<()>>,
     rgb_handle: Option<JoinHandle<()>>,
 }
@@ -891,8 +905,9 @@ impl ButtonMonitor {
             .ok();
 
         // Hilo de botones evdev a 50 Hz puro (cero bloqueo por USB HID)
+        let (test_tx, test_rx) = mpsc::channel();
         let worker_shared = Arc::clone(&shared);
-        let mut worker = Worker::new(worker_shared, keyboard, rgb_tx.clone());
+        let mut worker = Worker::new(worker_shared, keyboard, rgb_tx.clone(), test_rx);
         worker.tick();
         let handle = thread::Builder::new()
             .name("x56-button-monitor".into())
@@ -902,6 +917,7 @@ impl ButtonMonitor {
         Self {
             shared,
             rgb_tx,
+            test_tx,
             handle,
             rgb_handle,
         }
@@ -954,6 +970,24 @@ impl ButtonMonitor {
     /// Extrae (y vacía) la cola de comandos disparados desde la última llamada.
     pub fn drain_events(&self) -> Vec<TriggeredCommandEvent> {
         self.shared.lock().events.drain(..).collect()
+    }
+
+    /// Solicita probar una celda asignada emitiéndola por el teclado virtual `uinput`.
+    pub fn test_cell(&self, cell: &CommandCell) -> TestTriggerStatus {
+        if !cell.is_assigned() {
+            return TestTriggerStatus::Unassigned;
+        }
+        if !self.uinput_available() {
+            return TestTriggerStatus::UinputUnavailable;
+        }
+        if !self.is_active() {
+            return TestTriggerStatus::Paused;
+        }
+        if self.test_tx.send(cell.clone()).is_ok() {
+            TestTriggerStatus::Emitted
+        } else {
+            TestTriggerStatus::UinputUnavailable
+        }
     }
 }
 
@@ -1139,6 +1173,7 @@ struct Worker {
     candidate_mode: Option<ModeSlot>,
     candidate_mode_since: Instant,
     rgb_tx: mpsc::Sender<RgbDispatchCommand>,
+    test_rx: mpsc::Receiver<CommandCell>,
     last_scan: Instant,
     last_keyboard_try: Instant,
     pending_steps: VecDeque<PendingMacroStep>,
@@ -1149,6 +1184,7 @@ impl Worker {
         shared: Arc<Shared>,
         keyboard: Option<VirtualKeyboard>,
         rgb_tx: mpsc::Sender<RgbDispatchCommand>,
+        test_rx: mpsc::Receiver<CommandCell>,
     ) -> Self {
         let now = Instant::now();
         Self {
@@ -1163,6 +1199,7 @@ impl Worker {
             candidate_mode: None,
             candidate_mode_since: now,
             rgb_tx,
+            test_rx,
             // Fuerza un escaneo inmediato.
             last_scan: now.checked_sub(RESCAN_INTERVAL).unwrap_or(now),
             last_keyboard_try: now,
@@ -1315,6 +1352,24 @@ impl Worker {
             }
         }
         self.prev_pressed = pressed;
+
+        while let Ok(cell) = self.test_rx.try_recv() {
+            if !cell.is_assigned() {
+                continue;
+            }
+            let desc_label = self
+                .stick_desc
+                .iter()
+                .chain(self.throttle_desc.iter())
+                .find(|d| d.id == cell.button_id)
+                .map(|d| d.label.to_string());
+            let label = match desc_label {
+                Some(l) => format!("TEST // {l}"),
+                None if !cell.button_id.is_empty() => format!("TEST // {}", cell.button_id),
+                None => "TEST".to_string(),
+            };
+            triggers.push((cell.button_id.clone(), label, cell));
+        }
 
         // Emisión real fuera del lock (incluye una breve pausa de pulsación).
         for (id, label, cell) in triggers {
@@ -1916,5 +1971,105 @@ keys = ["Space"]
         assert!(legacy_cell.is_assigned());
         assert!(!legacy_cell.is_sequence());
         assert_eq!(legacy_cell.keys_display(), "Space");
+    }
+
+    #[test]
+    fn test_cell_returns_expected_statuses_without_panicking() {
+        let m = ButtonMonitor::new();
+        assert!(!m.is_active());
+
+        // Celda vacía o con pasos sin teclas -> Unassigned.
+        assert_eq!(
+            m.test_cell(&CommandCell::default()),
+            TestTriggerStatus::Unassigned
+        );
+        let empty_steps_cell = CommandCell {
+            button_id: "stick_trigger".into(),
+            name: "Vacío".into(),
+            keys: Vec::new(),
+            steps: vec![MacroStep::default()],
+        };
+        assert_eq!(
+            m.test_cell(&empty_steps_cell),
+            TestTriggerStatus::Unassigned
+        );
+
+        let assigned = CommandCell {
+            button_id: "stick_trigger".into(),
+            name: "Disparar".into(),
+            keys: vec!["Space".into()],
+            steps: Vec::new(),
+        };
+
+        // Comprueba la rama natural según disponibilidad real de /dev/uinput en el host.
+        if m.uinput_available() {
+            assert_eq!(m.test_cell(&assigned), TestTriggerStatus::Paused);
+        } else {
+            assert_eq!(m.test_cell(&assigned), TestTriggerStatus::UinputUnavailable);
+        }
+
+        // Comprueba ambas ramas determinísticamente sin activar emisión real ni tocar /dev/uinput.
+        m.shared.uinput.store(false, Ordering::SeqCst);
+        assert_eq!(m.test_cell(&assigned), TestTriggerStatus::UinputUnavailable);
+
+        m.shared.uinput.store(true, Ordering::SeqCst);
+        m.set_active(false);
+        assert_eq!(m.test_cell(&assigned), TestTriggerStatus::Paused);
+        assert!(m.drain_events().is_empty());
+    }
+
+    #[test]
+    fn worker_drains_test_rx_into_events_without_uinput_emission() {
+        let shared = Arc::new(Shared {
+            state: Mutex::new(MonitorState {
+                snapshot: LiveButtonsSnapshot::default(),
+                profile: ProgrammingProfile::default(),
+                fallback_stick_rgb: None,
+                fallback_throttle_rgb: None,
+                events: VecDeque::new(),
+            }),
+            active: AtomicBool::new(false),
+            uinput: AtomicBool::new(false),
+            stop: AtomicBool::new(false),
+        });
+        let (rgb_tx, _rgb_rx) = mpsc::channel();
+        let (test_tx, test_rx) = mpsc::channel();
+        let mut worker = Worker::new(Arc::clone(&shared), None, rgb_tx, test_rx);
+
+        test_tx
+            .send(CommandCell {
+                button_id: "stick_trigger".into(),
+                name: "Test Trigger".into(),
+                keys: vec!["Space".into()],
+                steps: Vec::new(),
+            })
+            .unwrap();
+        test_tx
+            .send(CommandCell {
+                button_id: "custom_btn".into(),
+                name: "Custom Sequence".into(),
+                keys: Vec::new(),
+                steps: vec![MacroStep {
+                    keys: vec!["Ctrl".into(), "G".into()],
+                    delay_ms: 0,
+                }],
+            })
+            .unwrap();
+
+        worker.tick();
+
+        let events: Vec<_> = shared.lock().events.drain(..).collect();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].button_id, "stick_trigger");
+        assert_eq!(events[0].button_label, "TEST // Gatillo (Trigger)");
+        assert_eq!(events[0].command_name, "Test Trigger");
+        assert_eq!(events[0].keys, vec!["Space".to_string()]);
+        assert!(!events[0].uinput_emitted);
+
+        assert_eq!(events[1].button_id, "custom_btn");
+        assert_eq!(events[1].button_label, "TEST // custom_btn");
+        assert_eq!(events[1].command_name, "Custom Sequence");
+        assert_eq!(events[1].keys, vec!["Ctrl+G".to_string()]);
+        assert!(!events[1].uinput_emitted);
     }
 }

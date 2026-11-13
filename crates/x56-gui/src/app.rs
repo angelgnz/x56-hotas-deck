@@ -60,14 +60,13 @@ pub struct X56App {
     pub button_monitor: ButtonMonitor,
 
     // Estado de detección de hardware
-    pub stick_detected: bool,
-    pub throttle_detected: bool,
+    pub stick_node: Option<String>,
+    pub throttle_node: Option<String>,
+    pub last_hw_scan: std::time::Instant,
 
     // Gestión de perfiles y estado de sesión
     pub active_profile_name: String,
     pub profile_path_buf: String,
-    pub show_profile_dialog: bool,
-    pub profile_dialog_mode: ProfileDialogMode,
     pub show_live_test_modal: bool,
     pub top_banner_message: Option<(String, bool)>,
     pub sidebar_collapsed: bool,
@@ -100,12 +99,11 @@ impl Default for X56App {
             doctor_tab: DoctorTab::default(),
             poller: LiveInputPoller::new(),
             button_monitor: ButtonMonitor::new(),
-            stick_detected: false,
-            throttle_detected: false,
+            stick_node: None,
+            throttle_node: None,
+            last_hw_scan: std::time::Instant::now() - std::time::Duration::from_secs(10),
             active_profile_name: "ELITE_DANGEROUS".into(),
             profile_path_buf: default_profile.into(),
-            show_profile_dialog: false,
-            profile_dialog_mode: ProfileDialogMode::Load,
             show_live_test_modal: false,
             top_banner_message: None,
             sidebar_collapsed: false,
@@ -200,14 +198,22 @@ impl X56App {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
     }
+    /// Reenumera dispositivos USB como máximo una vez cada 2 segundos y cachea los nodos hidraw.
     pub fn refresh_hardware_status(&mut self) {
+        if self.last_hw_scan.elapsed() < std::time::Duration::from_secs(2) {
+            return;
+        }
+        self.last_hw_scan = std::time::Instant::now();
         let devices = X56Device::enumerate();
-        self.stick_detected = devices
-            .iter()
-            .any(|d| d.kind == x56_core::DeviceKind::Stick);
-        self.throttle_detected = devices
-            .iter()
-            .any(|d| d.kind == x56_core::DeviceKind::Throttle);
+        let node = |kind: x56_core::DeviceKind| {
+            devices.iter().find(|d| d.kind == kind).and_then(|d| {
+                Path::new(d.path.to_string_lossy().as_ref())
+                    .file_name()
+                    .map(|f| f.to_string_lossy().into_owned())
+            })
+        };
+        self.stick_node = node(x56_core::DeviceKind::Stick);
+        self.throttle_node = node(x56_core::DeviceKind::Throttle);
     }
 
     /// Guarda el perfil completo actual en `self.profile_path_buf`, incluyendo `DeviceProfile.spring`
@@ -244,7 +250,6 @@ impl X56App {
                             ),
                             false,
                         ));
-                        self.show_profile_dialog = false;
                     }
                     Err(err) => {
                         self.top_banner_message =
@@ -309,7 +314,6 @@ impl X56App {
                             ),
                             false,
                         ));
-                        self.show_profile_dialog = false;
                     }
                     Err(err) => {
                         self.top_banner_message =
@@ -465,7 +469,7 @@ impl X56App {
                     .monospace(),
             );
 
-            // Pill telemétrico "/dev/hidraw0 & hidraw1 | 1000Hz POLLING" solo si hay suficiente espacio (>= 860px)
+            // Pill telemétrico "/dev/hidrawX & hidrawY | 50Hz POLLING" solo si hay suficiente espacio (>= 860px)
             if screen_w >= 860.0 {
                 ui.add_space(8.0);
                 Frame::new()
@@ -477,15 +481,34 @@ impl X56App {
                         ui.horizontal(|ui| {
                             let (dot_rect, _) =
                                 ui.allocate_exact_size(Vec2::new(8.0, 8.0), Sense::hover());
-                            ui.painter().circle_filled(
-                                dot_rect.center(),
-                                3.5,
-                                COLOR_TERTIARY_CONTAINER,
-                            );
-                            let poll_str = if screen_w >= 1150.0 {
-                                "/dev/hidraw0 & hidraw1 | 1000Hz POLLING"
+                            let any_hw = self.stick_node.is_some() || self.throttle_node.is_some();
+                            let dot_color = if any_hw {
+                                COLOR_TERTIARY_CONTAINER
                             } else {
-                                "/dev/hidraw0,1 | 1kHz"
+                                COLOR_WARNING_AMBER
+                            };
+                            ui.painter()
+                                .circle_filled(dot_rect.center(), 3.5, dot_color);
+                            let short = |n: &Option<String>| n.clone().unwrap_or_default();
+                            let long = screen_w >= 1150.0;
+                            let poll_str = match (&self.stick_node, &self.throttle_node) {
+                                (Some(_), Some(_)) if long => format!(
+                                    "/dev/{} & {} | 50Hz POLLING",
+                                    short(&self.stick_node),
+                                    short(&self.throttle_node)
+                                ),
+                                (Some(_), Some(_)) => format!(
+                                    "{},{} | 50Hz",
+                                    short(&self.stick_node),
+                                    short(&self.throttle_node)
+                                ),
+                                (Some(_), None) => {
+                                    format!("/dev/{} (STICK) | 50Hz", short(&self.stick_node))
+                                }
+                                (None, Some(_)) => {
+                                    format!("/dev/{} (THROTTLE) | 50Hz", short(&self.throttle_node))
+                                }
+                                (None, None) => "SIN HARDWARE USB | 50Hz".to_string(),
                             };
                             ui.label(
                                 RichText::new(poll_str)
@@ -519,11 +542,11 @@ impl X56App {
 
                 if ui
                     .add(prof_btn)
-                    .on_hover_text("Haz clic para abrir el diálogo detallado de perfiles")
+                    .on_hover_text("Abrir gestión de perfiles TOML y Diagnóstico")
                     .clicked()
                 {
-                    self.profile_dialog_mode = ProfileDialogMode::Load;
-                    self.show_profile_dialog = true;
+                    self.active_subsystem = ActiveSubsystem::Profiles;
+                    self.doctor_tab.refresh();
                 }
 
                 ui.add_space(6.0);
@@ -626,16 +649,20 @@ impl X56App {
             ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
                 // Indicador de modo
                 let mode_str = snap.active_mode.as_str();
-                let mode_btn = egui::Button::new(
-                    RichText::new(mode_str)
-                        .color(COLOR_ON_PRIMARY_CONTAINER)
-                        .size(9.0)
-                        .strong()
-                        .monospace(),
-                )
-                .fill(COLOR_PRIMARY_CONTAINER)
-                .corner_radius(CornerRadius::same(4));
-                ui.add_sized(Vec2::new(36.0, 20.0), mode_btn)
+                Frame::new()
+                    .fill(COLOR_PRIMARY_CONTAINER)
+                    .corner_radius(CornerRadius::same(4))
+                    .inner_margin(Margin::symmetric(6, 3))
+                    .show(ui, |ui| {
+                        ui.label(
+                            RichText::new(mode_str)
+                                .color(COLOR_ON_PRIMARY_CONTAINER)
+                                .size(9.0)
+                                .strong()
+                                .monospace(),
+                        );
+                    })
+                    .response
                     .on_hover_text(format!("Modo de hardware actual: {mode_str}"));
 
                 ui.add_space(6.0);
@@ -662,7 +689,7 @@ impl X56App {
     /// 2. Sidebar izquierda responsiva.
     ///
     /// Subsystem Navigation con los 4 subsistemas aprobados y tarjeta inferior
-    /// con UINPUT DAEMON: ONLINE, MODE SWITCH (M1/M2/S1) y LATENCY: 0.94 ms.
+    /// con UINPUT DAEMON: ONLINE, MODE SWITCH (M1/M2/S1).
     fn render_sidebar(&mut self, ui: &mut Ui) {
         if self.sidebar_collapsed {
             self.render_collapsed_sidebar(ui);
@@ -931,28 +958,6 @@ impl X56App {
 
                             ui.add_space(8.0);
 
-                            // LATENCY: 0.94 ms
-                            ui.horizontal(|ui| {
-                                ui.label(
-                                    RichText::new("LATENCY:")
-                                        .color(COLOR_OUTLINE)
-                                        .size(9.5)
-                                        .monospace(),
-                                );
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        ui.label(
-                                            RichText::new("0.94 ms")
-                                                .color(COLOR_PRIMARY_FIXED)
-                                                .size(10.5)
-                                                .strong()
-                                                .monospace(),
-                                        );
-                                    },
-                                );
-                            });
-
                             ui.add_space(8.0);
                             ui.separator();
                             ui.add_space(6.0);
@@ -1073,9 +1078,15 @@ impl X56App {
                             .monospace(),
                     );
                 } else {
-                    let tele_str = if screen_w >= 900.0 {
+                    let connected = self.stick_node.is_some() || self.throttle_node.is_some();
+                    let tele_str = if !connected {
                         format!(
-                            "{} TELEMETRÍA LISTA // USB HID INTERFACE 02",
+                            "{} MODO SIN CONEXIÓN // CONECTA X56 HOTAS",
+                            icons::CHEVRON_RIGHT
+                        )
+                    } else if screen_w >= 900.0 {
+                        format!(
+                            "{} TELEMETRÍA LISTA // USB HID INTERFAZ 2",
                             icons::CHEVRON_RIGHT
                         )
                     } else {
@@ -1129,33 +1140,27 @@ impl X56App {
                 {
                     self.curves_tab.reset_current_axis();
                     self.curves_tab.read_from_hardware();
-                    self.top_banner_message = Some((
-                        "Cambios revertidos a los valores del hardware.".into(),
-                        false,
-                    ));
+                    self.top_banner_message = self.curves_tab.status_message.clone();
                 }
 
                 ui.add_space(6.0);
 
-                // 2. RECALIBRAR CENTRO CERO
+                // 2. MUESTREAR CENTRO
                 let recal_lbl = if screen_w < 720.0 {
                     icons::CROSSHAIR.to_string()
                 } else if screen_w < 1100.0 {
-                    format!("{} CALIBRAR", icons::CROSSHAIR)
+                    format!("{} MUESTREAR", icons::CROSSHAIR)
                 } else {
-                    format!("{} RECALIBRAR CENTRO CERO", icons::CROSSHAIR)
+                    format!("{} MUESTREAR CENTRO", icons::CROSSHAIR)
                 };
 
                 if theme::tactical_button(ui, &recal_lbl, false, false)
-                    .on_hover_text("Muestrear y recalibrar centro magnético Hall")
+                    .on_hover_text("Muestrear centro magnético Hall en modo simulación (graba a EEPROM en la pestaña Calibración)")
                     .clicked()
                 {
                     self.calibrate_tab.execute_calibration(true);
                     self.curves_tab.read_from_hardware();
-                    self.top_banner_message = Some((
-                        "Centro magnético Hall muestreado y recalibrado.".into(),
-                        false,
-                    ));
+                    self.top_banner_message = self.calibrate_tab.status_message.clone();
                 }
 
                 ui.add_space(6.0);
@@ -1174,7 +1179,6 @@ impl X56App {
                     .clicked()
                 {
                     self.show_live_test_modal = !self.show_live_test_modal;
-                    self.programming_tab.show_test_window = self.show_live_test_modal;
                 }
             });
         });
@@ -1271,12 +1275,30 @@ impl X56App {
 
                         let reset_btn = format!("{} RESTAURAR VALORES DE FÁBRICA", icons::FACTORY);
                         if theme::tactical_button(ui, &reset_btn, false, false).clicked() {
-                            let _ = ProfileManager::reset_defaults(TargetDevice::All);
-                            self.curves_tab.read_from_hardware();
-                            self.top_banner_message = Some((
-                                "Valores de fábrica restablecidos en Stick y Throttle.".into(),
-                                false,
-                            ));
+                            let connected = self.stick_node.is_some() || self.throttle_node.is_some();
+                            match ProfileManager::reset_defaults(TargetDevice::All) {
+                                Ok(_) if connected => {
+                                    self.curves_tab.read_from_hardware();
+                                    self.top_banner_message = Some((
+                                        "Valores de fábrica restablecidos en Stick y Throttle."
+                                            .into(),
+                                        false,
+                                    ));
+                                }
+                                Ok(_) => {
+                                    self.top_banner_message = Some((
+                                        "Sin dispositivos USB conectados: no se restableció hardware."
+                                            .into(),
+                                        true,
+                                    ));
+                                }
+                                Err(err) => {
+                                    self.top_banner_message = Some((
+                                        format!("Error restableciendo valores de fábrica: {err}"),
+                                        true,
+                                    ));
+                                }
+                            }
                         }
 
                         ui.separator();
@@ -1294,79 +1316,6 @@ impl X56App {
 
                 theme::card_frame().show(ui, |ui| {
                     self.doctor_tab.ui(ui);
-                });
-            });
-    }
-
-    fn render_profile_modal(&mut self, ctx: &egui::Context) {
-        if !self.show_profile_dialog {
-            return;
-        }
-
-        let title = match self.profile_dialog_mode {
-            ProfileDialogMode::Save => "GUARDAR PERFIL TOML",
-            ProfileDialogMode::Load => "CARGAR PERFIL TOML",
-        };
-
-        egui::Window::new(title)
-            .collapsible(false)
-            .resizable(false)
-            .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
-            .show(ctx, |ui| {
-                ui.label(
-                    RichText::new("Nombre identificador del perfil:")
-                        .color(COLOR_ON_SURFACE_VARIANT)
-                        .size(11.0),
-                );
-                ui.text_edit_singleline(&mut self.active_profile_name);
-                ui.add_space(4.0);
-
-                ui.label(
-                    RichText::new("Ruta del archivo .toml:")
-                        .color(COLOR_ON_SURFACE_VARIANT)
-                        .size(11.0),
-                );
-                ui.horizontal(|ui| {
-                    ui.text_edit_singleline(&mut self.profile_path_buf);
-                    let exp_btn = format!("{} EXPLORAR...", icons::FOLDER);
-                    if theme::tactical_button(ui, &exp_btn, false, false)
-                        .on_hover_text("Abrir explorador de archivos nativo del sistema")
-                        .clicked()
-                    {
-                        self.spawn_file_dialog(self.profile_dialog_mode);
-                    }
-                });
-
-                ui.add_space(10.0);
-                ui.horizontal(|ui| {
-                    match self.profile_dialog_mode {
-                        ProfileDialogMode::Save => {
-                            let save_btn = format!("{} GUARDAR", icons::SAVE);
-                            if theme::tactical_button(ui, &save_btn, false, true).clicked() {
-                                self.save_current_profile();
-                            }
-                        }
-                        ProfileDialogMode::Load => {
-                            let load_btn = format!("{} CARGAR Y APLICAR", icons::FOLDER_OPEN);
-                            if theme::tactical_button(ui, &load_btn, false, true).clicked() {
-                                self.load_profile_from_disk();
-                            }
-                        }
-                    }
-
-                    let save_as = format!("{} GUARDAR COMO...", icons::SAVE);
-                    if theme::tactical_button(ui, &save_as, false, false)
-                        .on_hover_text("Guardar con nuevo nombre o ubicación en el explorador")
-                        .clicked()
-                    {
-                        self.profile_dialog_mode = ProfileDialogMode::Save;
-                        self.spawn_file_dialog(ProfileDialogMode::Save);
-                    }
-
-                    let cancel_btn = format!("{} CANCELAR", icons::X);
-                    if theme::tactical_button(ui, &cancel_btn, false, false).clicked() {
-                        self.show_profile_dialog = false;
-                    }
                 });
             });
     }
@@ -1480,7 +1429,6 @@ impl X56App {
             });
 
         self.show_live_test_modal = open;
-        self.programming_tab.show_test_window = open;
     }
 }
 
@@ -1488,6 +1436,9 @@ impl eframe::App for X56App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         // Procesar órdenes desde el system tray (mostrar ventana, salir)
         self.poll_tray_commands(ui.ctx());
+        self.refresh_hardware_status();
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_secs(2));
 
         // Procesar cualquier selección del explorador de archivos nativo
         self.poll_file_dialog();
@@ -1572,7 +1523,6 @@ impl eframe::App for X56App {
             });
 
         let ctx = ui.ctx().clone();
-        self.render_profile_modal(&ctx);
         self.render_live_test_modal(&ctx);
     }
 }

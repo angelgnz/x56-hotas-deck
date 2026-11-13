@@ -38,16 +38,16 @@ impl CurveType {
             Self::Linear => "Lineal 1:1",
             Self::SCurve => "S-Curve",
             Self::Exponential => "Exponencial",
-            Self::Bezier => "Bézier libre",
+            Self::Bezier => "Bézier libre (Vista previa)",
         }
     }
 
     pub fn polynomial_badge(&self) -> &'static str {
         match self {
-            Self::Linear => "POLYNOMIAL: LINEAR 1:1",
-            Self::SCurve => "POLYNOMIAL: CUBIC-HERMITE",
-            Self::Exponential => "POLYNOMIAL: MONOTONIC-EXPO",
-            Self::Bezier => "POLYNOMIAL: CUBIC-BÉZIER",
+            Self::Linear => "1:1 LINEAR",
+            Self::SCurve => "HARDWARE S-PROFILE (EXPO)",
+            Self::Exponential => "HARDWARE J-PROFILE (ASYM)",
+            Self::Bezier => "PREVIEW CUBIC-BÉZIER",
         }
     }
 }
