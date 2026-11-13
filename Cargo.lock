@@ -3951,7 +3951,7 @@ checksum = "ea6fc2961e4ef194dcbfe56bb845534d0dc8098940c7e5c012a258bfec6701bd"
 
 [[package]]
 name = "x56-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "env_logger",
@@ -3962,7 +3962,7 @@ dependencies = [
 
 [[package]]
 name = "x56-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "fluent-bundle",
  "libc",
@@ -3976,7 +3976,7 @@ dependencies = [
 
 [[package]]
 name = "x56-gui"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "eframe",
  "egui_plot",
@@ -3995,7 +3995,7 @@ dependencies = [
 
 [[package]]
 name = "x56-hid"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "hidapi",
  "log",
@@ -4004,7 +4004,7 @@ dependencies = [
 
 [[package]]
 name = "x56-proto"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "xcursor"
