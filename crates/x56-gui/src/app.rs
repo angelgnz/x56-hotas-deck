@@ -10,8 +10,8 @@ use eframe::egui::{self, CornerRadius, Frame, Margin, RichText, Sense, Stroke, U
 use x56_core::i18n::{self, Language};
 use x56_core::t;
 use x56_core::{
-    ButtonMonitor, CheckStatus, DeviceProfile, FullProfile, ModeSlot, ProfileManager, TargetDevice,
-    X56Device,
+    ButtonMonitor, CheckStatus, DeviceProfile, FullProfile, ModeSlot, ProfileManager,
+    SessionConfig, TargetDevice, X56Device,
 };
 
 use crate::curve_math::LiveInputPoller;
@@ -78,17 +78,22 @@ pub struct X56App {
     pub minimize_to_tray_on_close: bool,
     pub window_visible_state: bool,
     pub tray_handle: Option<crate::tray::TrayHandle>,
+    pub last_uinput_active: bool,
 }
 
 impl Default for X56App {
     fn default() -> Self {
-        let default_profile = if Path::new("examples/elite_dangerous_profile.toml").exists() {
-            "examples/elite_dangerous_profile.toml"
-        } else if Path::new("examples/combat_profile.toml").exists() {
-            "examples/combat_profile.toml"
-        } else {
-            "examples/default_profile.toml"
-        };
+        let session = SessionConfig::load();
+        if let Some(ref lang_code) = session.language {
+            if lang_code.eq_ignore_ascii_case("en-US") || lang_code.eq_ignore_ascii_case("en") {
+                i18n::set_language(Language::EnUs);
+            } else if lang_code.eq_ignore_ascii_case("es-ES")
+                || lang_code.eq_ignore_ascii_case("es")
+            {
+                i18n::set_language(Language::EsEs);
+            }
+        }
+        let initial_path = session.resolve_initial_profile_path();
 
         let mut app = Self {
             active_subsystem: ActiveSubsystem::Curves,
@@ -103,16 +108,18 @@ impl Default for X56App {
             throttle_node: None,
             last_hw_scan: std::time::Instant::now() - std::time::Duration::from_secs(10),
             active_profile_name: "ELITE_DANGEROUS".into(),
-            profile_path_buf: default_profile.into(),
+            profile_path_buf: initial_path.display().to_string(),
             show_live_test_modal: false,
             top_banner_message: None,
             sidebar_collapsed: false,
             file_dialog_rx: None,
-            minimize_to_tray_on_close: true,
+            minimize_to_tray_on_close: session.minimize_to_tray_on_close,
             window_visible_state: true,
             tray_handle: None,
+            last_uinput_active: session.uinput_active,
         };
         app.refresh_hardware_status();
+        app.button_monitor.set_active(session.uinput_active);
         if Path::new(&app.profile_path_buf).exists() {
             app.load_profile_from_disk();
         }
@@ -216,10 +223,33 @@ impl X56App {
         self.throttle_node = node(x56_core::DeviceKind::Throttle);
     }
 
+    /// Guarda la configuración de sesión de usuario (`~/.config/x56linux/session.toml`).
+    pub fn persist_session_config(&mut self) {
+        self.last_uinput_active = self.button_monitor.is_active();
+        let lang_str = match i18n::current_language() {
+            Language::EnUs => "en-US".to_string(),
+            Language::EsEs => "es-ES".to_string(),
+        };
+        let cfg = SessionConfig {
+            last_profile_path: Some(self.profile_path_buf.clone()),
+            uinput_active: self.last_uinput_active,
+            minimize_to_tray_on_close: self.minimize_to_tray_on_close,
+            language: Some(lang_str),
+        };
+        if let Err(err) = cfg.save() {
+            log::warn!("Could not persist session config: {err}");
+        }
+    }
+
     /// Guarda el perfil completo actual en `self.profile_path_buf`, incluyendo `DeviceProfile.spring`
     /// y la iluminación RGB configurada por cada modo (`M1`, `M2`, `S1`) y dispositivo.
     pub fn save_current_profile(&mut self) {
         let path = PathBuf::from(&self.profile_path_buf);
+        if let Some(parent) = path.parent() {
+            if !parent.as_os_str().is_empty() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+        }
         self.rgb_tab
             .ensure_all_modes_have_rgb(&mut self.programming_tab.profile);
         let stick_rgb_hex = self.rgb_tab.fallback_stick_hex.clone();
@@ -242,6 +272,11 @@ impl X56App {
                 prof.programming = Some(self.programming_tab.current_programming_profile());
                 match prof.save_to_file(&path) {
                     Ok(_) => {
+                        self.profile_path_buf = std::fs::canonicalize(&path)
+                            .unwrap_or_else(|_| path.clone())
+                            .display()
+                            .to_string();
+                        self.persist_session_config();
                         self.top_banner_message = Some((
                             format!(
                                 "Perfil '{}' guardado en {}",
@@ -320,6 +355,11 @@ impl X56App {
                     &self.programming_tab.profile,
                     active_hw_mode,
                 );
+                self.profile_path_buf = std::fs::canonicalize(&path)
+                    .unwrap_or_else(|_| path.clone())
+                    .display()
+                    .to_string();
+                self.persist_session_config();
             }
             Err(err) => {
                 self.top_banner_message =
@@ -964,6 +1004,7 @@ impl X56App {
 
                             // Opción de quedar corriendo en segundo plano al cerrar
                             ui.horizontal(|ui| {
+                                let prev_tray = self.minimize_to_tray_on_close;
                                 ui.checkbox(&mut self.minimize_to_tray_on_close, "");
                                 let lbl = RichText::new(t!("sidebar-run-in-background"))
                                     .color(if self.minimize_to_tray_on_close {
@@ -980,6 +1021,9 @@ impl X56App {
                                 {
                                     self.minimize_to_tray_on_close =
                                         !self.minimize_to_tray_on_close;
+                                }
+                                if self.minimize_to_tray_on_close != prev_tray {
+                                    self.persist_session_config();
                                 }
                             })
                             .response
@@ -1031,6 +1075,7 @@ impl X56App {
 
                                     if ui.add(btn).clicked() {
                                         i18n::set_language(lang);
+                                        self.persist_session_config();
                                     }
                                 }
                             });
@@ -1442,6 +1487,11 @@ impl eframe::App for X56App {
 
         // Procesar cualquier selección del explorador de archivos nativo
         self.poll_file_dialog();
+
+        // Persistir cambios en el estado activo de uinput (p. ej. desde la pestaña de programación)
+        if self.button_monitor.is_active() != self.last_uinput_active {
+            self.persist_session_config();
+        }
 
         // Si el usuario solicita cerrar la ventana y tiene activado el segundo plano,
         // cancelamos el cierre del proceso y ocultamos la ventana a la bandeja del sistema.
