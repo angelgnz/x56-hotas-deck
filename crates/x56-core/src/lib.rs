@@ -25,6 +25,7 @@ pub use doctor::{CheckStatus, Doctor, DoctorCheck, DoctorReport};
 pub use i18n::Language;
 pub use profile::{
     AxisProfileEntry, DeviceProfile, FullProfile, ProfileApplySummary, ProfileManager,
+    SessionConfig,
 };
 
 /// Error general de la capa de dominio `x56-core`.

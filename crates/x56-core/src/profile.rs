@@ -1,7 +1,7 @@
 //! Gestión y serialización de perfiles de configuración para Saitek / Logitech X56.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use x56_proto::{AxisConfig, CurveProfile, RgbColor};
@@ -396,6 +396,125 @@ impl ProfileManager {
     }
 }
 
+/// Configuración persistente de sesión de usuario (`~/.config/x56linux/session.toml`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SessionConfig {
+    /// Ruta absoluta o relativa del último perfil `.toml` cargado o guardado.
+    pub last_profile_path: Option<String>,
+    /// Indica si el router `uinput` debe activarse automáticamente al iniciar.
+    pub uinput_active: bool,
+    /// Indica si al cerrar la ventana se minimiza a la bandeja del sistema.
+    pub minimize_to_tray_on_close: bool,
+    /// Idioma de la interfaz (`"es-ES"` o `"en-US"`).
+    pub language: Option<String>,
+}
+
+impl Default for SessionConfig {
+    fn default() -> Self {
+        Self {
+            last_profile_path: None,
+            uinput_active: true,
+            minimize_to_tray_on_close: true,
+            language: None,
+        }
+    }
+}
+
+impl SessionConfig {
+    /// Directorio de configuración XDG del usuario (`~/.config/x56linux`).
+    pub fn config_dir() -> Option<PathBuf> {
+        if let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME") {
+            if !xdg.is_empty() {
+                return Some(PathBuf::from(xdg).join("x56linux"));
+            }
+        }
+        std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config").join("x56linux"))
+    }
+
+    /// Ruta del archivo de sesión persistente (`~/.config/x56linux/session.toml`).
+    pub fn session_file_path() -> Option<PathBuf> {
+        Self::config_dir().map(|d| d.join("session.toml"))
+    }
+
+    /// Ruta predeterminada del perfil de usuario (`~/.config/x56linux/default_profile.toml`).
+    pub fn default_user_profile_path() -> Option<PathBuf> {
+        Self::config_dir().map(|d| d.join("default_profile.toml"))
+    }
+
+    /// Carga una configuración de sesión desde una ruta explícita.
+    pub fn load_from_path(path: &Path) -> Option<Self> {
+        fs::read_to_string(path)
+            .ok()
+            .and_then(|s| toml::from_str(&s).ok())
+    }
+
+    /// Guarda la configuración de sesión en la ruta especificada, creando directorios padres.
+    pub fn save_to_path(&self, path: &Path) -> std::io::Result<()> {
+        if let Some(parent) = path.parent() {
+            if !parent.as_os_str().is_empty() {
+                fs::create_dir_all(parent)?;
+            }
+        }
+        let content = toml::to_string_pretty(self).map_err(std::io::Error::other)?;
+        fs::write(path, content)
+    }
+
+    /// Carga la configuración de sesión de usuario o devuelve los valores por defecto.
+    pub fn load() -> Self {
+        Self::session_file_path()
+            .and_then(|p| Self::load_from_path(&p))
+            .unwrap_or_default()
+    }
+
+    /// Persiste la configuración de sesión en `~/.config/x56linux/session.toml`.
+    pub fn save(&self) -> std::io::Result<()> {
+        if let Some(path) = Self::session_file_path() {
+            self.save_to_path(&path)
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Resuelve la ruta del perfil inicial que debe cargarse al abrir la aplicación.
+    pub fn resolve_initial_profile_path(&self) -> PathBuf {
+        if let Some(ref last) = self.last_profile_path {
+            if !last.trim().is_empty() && Path::new(last).exists() {
+                return PathBuf::from(last);
+            }
+        }
+
+        for candidate in [
+            "examples/elite_dangerous_profile.toml",
+            "examples/combat_profile.toml",
+            "examples/default_profile.toml",
+        ] {
+            if Path::new(candidate).exists() {
+                return PathBuf::from(candidate);
+            }
+        }
+
+        if let Some(user_def) = Self::default_user_profile_path() {
+            if user_def.exists() {
+                return user_def;
+            }
+            let system_example = Path::new("/usr/share/x56linux/examples/combat_profile.toml");
+            if system_example.exists() {
+                if let Some(parent) = user_def.parent() {
+                    if !parent.as_os_str().is_empty() {
+                        let _ = fs::create_dir_all(parent);
+                    }
+                }
+                let _ = fs::copy(system_example, &user_def);
+                return user_def;
+            }
+            return user_def;
+        }
+
+        PathBuf::from("examples/default_profile.toml")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -440,5 +559,45 @@ mod tests {
 
         let loaded = FullProfile::from_toml(&toml_str).unwrap();
         assert_eq!(prof, loaded);
+    }
+
+    #[test]
+    fn session_config_roundtrip_and_resolution() {
+        let unique = format!(
+            "x56linux_session_test_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        );
+        let temp_dir = std::env::temp_dir().join(unique);
+        let session_path = temp_dir.join("session.toml");
+        let profile_path = temp_dir.join("my_profile.toml");
+        fs::create_dir_all(&temp_dir).unwrap();
+        fs::write(&profile_path, "name = \"Test\"\n").unwrap();
+
+        let cfg = SessionConfig {
+            last_profile_path: Some(profile_path.display().to_string()),
+            uinput_active: false,
+            minimize_to_tray_on_close: false,
+            language: Some("en-US".into()),
+        };
+        cfg.save_to_path(&session_path).unwrap();
+
+        let loaded = SessionConfig::load_from_path(&session_path).unwrap();
+        assert_eq!(loaded, cfg);
+        assert_eq!(loaded.resolve_initial_profile_path(), profile_path);
+
+        let missing_cfg = SessionConfig {
+            last_profile_path: Some(temp_dir.join("missing.toml").display().to_string()),
+            ..SessionConfig::default()
+        };
+        assert_ne!(
+            missing_cfg.resolve_initial_profile_path(),
+            temp_dir.join("missing.toml")
+        );
+
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }
