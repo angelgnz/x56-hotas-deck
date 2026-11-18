@@ -112,6 +112,7 @@ jobs:
 
           mkdir -p "$GITHUB_WORKSPACE/dist-arch"
           cp /tmp/arch-build/*.pkg.tar.zst "$GITHUB_WORKSPACE/dist-arch/"
+          rm -f "$GITHUB_WORKSPACE/dist-arch"/*-debug-*.pkg.tar.zst
 
       - name: Upload Arch Linux package artifact
         uses: actions/upload-artifact@v4
@@ -154,3 +155,47 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: false
+
+      - name: Publish packages to angelgnz/packages repository
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          PACKAGES_DEPLOY_KEY: ${{ secrets.PACKAGES_DEPLOY_KEY }}
+          PACKAGES_GPG_PRIVATE_KEY: ${{ secrets.PACKAGES_GPG_PRIVATE_KEY }}
+          PACKAGES_GPG_KEY_ID: ${{ secrets.PACKAGES_GPG_KEY_ID }}
+        run: |
+          if [ -z "$PACKAGES_DEPLOY_KEY" ] || [ -z "$PACKAGES_GPG_PRIVATE_KEY" ] || [ -z "$PACKAGES_GPG_KEY_ID" ]; then
+            echo "Skipping central package repository publish (missing secrets)"
+            exit 0
+          fi
+
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev apt-utils rpm createrepo-c zstd gnupg python3
+
+          TMP_DIR="$(mktemp -d)"
+          trap 'rm -rf "$TMP_DIR"' EXIT
+          chmod 700 "$TMP_DIR"
+
+          export GNUPGHOME="$TMP_DIR/gnupg"
+          mkdir -p "$GNUPGHOME"
+          chmod 700 "$GNUPGHOME"
+          printf '%s\n' "$PACKAGES_GPG_PRIVATE_KEY" | gpg --batch --import
+
+          mkdir -p "$TMP_DIR/ssh"
+          chmod 700 "$TMP_DIR/ssh"
+          printf '%s\n' "$PACKAGES_DEPLOY_KEY" > "$TMP_DIR/ssh/id_ed25519"
+          chmod 600 "$TMP_DIR/ssh/id_ed25519"
+          export GIT_SSH_COMMAND="ssh -i $TMP_DIR/ssh/id_ed25519 -o UserKnownHostsFile=$TMP_DIR/ssh/known_hosts -o StrictHostKeyChecking=accept-new"
+
+          git clone --depth 1 --branch main git@github.com:angelgnz/packages.git "$TMP_DIR/packages-repo"
+          bash packaging/repo/publish-repo.sh release-assets "$TMP_DIR/packages-repo" "$PACKAGES_GPG_KEY_ID"
+
+          cd "$TMP_DIR/packages-repo"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to publish to angelgnz/packages"
+          else
+            git commit -m "chore(repo): publish x56-hotas-deck ${GITHUB_REF_NAME}"
+            git push origin main
+          fi

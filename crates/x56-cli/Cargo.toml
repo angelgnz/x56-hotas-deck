@@ -44,7 +44,7 @@ assets = [
 ]
 
 [package.metadata.generate-rpm]
-package = "x56-hotas-deck"
+name = "x56-hotas-deck"
 summary = "X56 HOTAS Deck - Configurador y driver de usuario para Saitek / Logitech G X56 HOTAS"
 description = """\
 X56 HOTAS Deck - Configurador y controlador en espacio de usuario para Saitek / Logitech G X56 HOTAS.

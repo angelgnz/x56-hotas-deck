@@ -1,0 +1,909 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>angelgnz Packages — Signed Linux Package Repository</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-void: #0a0d12;
+      --bg-panel: #121820;
+      --bg-code: #080b10;
+      --border: #1e293b;
+      --border-strong: #2c3c54;
+      --text-primary: #eef2f6;
+      --text-muted: #94a3b8;
+      --accent-cyan: #00e5ff;
+      --accent-magenta: #d500f9;
+      --accent-green: #00e676;
+      --accent-red: #ff5252;
+      --scrollbar-thumb: #334155;
+      --scrollbar-track: #0a0d12;
+      scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(900px 420px at 12% -5%, rgba(0, 229, 255, 0.08), transparent 60%),
+        radial-gradient(800px 380px at 88% 0%, rgba(213, 0, 249, 0.08), transparent 60%),
+        var(--bg-void);
+      color: var(--text-primary);
+      line-height: 1.55;
+    }
+
+    a {
+      color: var(--accent-cyan);
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .container {
+      max-width: 1020px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 4rem;
+    }
+
+    header.hero {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1.25rem;
+      padding: 1.5rem 1.75rem;
+      border-radius: 14px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      margin-bottom: 1.75rem;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.25rem 0.65rem;
+      border-radius: 999px;
+      border: 1px solid rgba(0, 229, 255, 0.35);
+      background: rgba(0, 229, 255, 0.08);
+      color: var(--accent-cyan);
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 0.65rem;
+    }
+
+    h1 {
+      margin: 0 0 0.45rem;
+      font-size: clamp(1.55rem, 3vw, 2.1rem);
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      margin: 0;
+      color: var(--text-muted);
+      max-width: 660px;
+    }
+
+    .lang-switch {
+      display: inline-flex;
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.25rem;
+      gap: 0.25rem;
+    }
+
+    .lang-btn {
+      cursor: pointer;
+      border: 0;
+      border-radius: 7px;
+      padding: 0.4rem 0.8rem;
+      min-inline-size: 44px;
+      min-block-size: 32px;
+      background: transparent;
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 0.85rem;
+    }
+
+    .lang-btn[aria-pressed="true"] {
+      background: rgba(0, 229, 255, 0.14);
+      color: var(--accent-cyan);
+      box-shadow: inset 0 0 0 1px rgba(0, 229, 255, 0.35);
+    }
+
+    .lang-btn:focus-visible,
+    .pkg-tab:focus-visible,
+    .copy-button:focus-visible {
+      outline: 2px solid var(--accent-cyan);
+      outline-offset: 2px;
+    }
+
+    .meta-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 0.85rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .meta-card {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0.9rem 1.1rem;
+    }
+
+    .meta-label {
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      margin-bottom: 0.25rem;
+    }
+
+    .meta-value {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.84rem;
+      word-break: break-all;
+      color: var(--text-primary);
+    }
+
+    .pkg-switcher {
+      margin-bottom: 1.25rem;
+    }
+
+    .pkg-tablist {
+      display: flex;
+      overflow-x: auto;
+      gap: 0.65rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.15rem;
+      scrollbar-width: none;
+    }
+    .pkg-tablist::-webkit-scrollbar {
+      display: none;
+    }
+
+    .pkg-tab {
+      position: relative;
+      flex: none;
+      cursor: pointer;
+      display: inline-flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.15rem;
+      min-inline-size: 160px;
+      min-block-size: 48px;
+      padding: 0.75rem 1.15rem 0.9rem;
+      border: 1px solid var(--border);
+      border-bottom: 0;
+      border-radius: 12px 12px 0 0;
+      background: var(--bg-code);
+      color: var(--text-muted);
+      text-align: left;
+      transition: color 0.15s, border-color 0.15s, background-color 0.15s;
+    }
+
+    .pkg-tab:hover {
+      color: var(--text-primary);
+      border-color: var(--border-strong);
+    }
+
+    .pkg-tab[aria-selected="true"] {
+      background: var(--bg-panel);
+      border-color: var(--border-strong);
+      color: var(--accent-cyan);
+    }
+
+    .pkg-tab[aria-selected="true"]::after {
+      content: "";
+      position: absolute;
+      inset: auto 0 0;
+      border-block-end: 3px solid var(--accent-cyan);
+    }
+
+    .pkg-tab-name {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.98rem;
+      font-weight: 700;
+      color: inherit;
+    }
+
+    .pkg-tab-tag {
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    .panel-inner {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1.15rem;
+    }
+
+    .card {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.25rem 1.35rem;
+    }
+
+    .card-header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.65rem;
+    }
+
+    .card-title {
+      margin: 0;
+      font-size: 1.12rem;
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+    }
+
+    .pill {
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 0.18rem 0.55rem;
+      border-radius: 999px;
+      border: 1px solid var(--border-strong);
+      color: var(--text-muted);
+    }
+
+    .pill.cyan {
+      border-color: rgba(0, 229, 255, 0.35);
+      color: var(--accent-cyan);
+    }
+
+    .pill.magenta {
+      border-color: rgba(213, 0, 249, 0.38);
+      color: #ea80fc;
+    }
+
+    .pill.green {
+      border-color: rgba(0, 230, 118, 0.35);
+      color: var(--accent-green);
+    }
+
+    .card-desc {
+      margin: 0 0 0.85rem;
+      color: var(--text-muted);
+      font-size: 0.94rem;
+    }
+
+    .copyable {
+      position: relative;
+      display: block;
+    }
+
+    pre {
+      margin: 0;
+      padding: 0.95rem 3.25rem 0.95rem 1rem;
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow-x: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.85rem;
+      line-height: 1.5;
+      color: #dbeafe;
+    }
+
+    .copy {
+      position: absolute;
+      inset-block-start: 0.55rem;
+      inset-inline-end: 0.55rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .copy-button {
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-inline-size: 32px;
+      min-block-size: 32px;
+      padding: 0.35rem;
+      border-radius: 8px;
+      border: 1px solid var(--border-strong);
+      background: rgba(18, 24, 32, 0.92);
+      color: var(--text-muted);
+      transition: color 0.15s, border-color 0.15s, opacity 0.15s;
+    }
+
+    .copy-button:hover {
+      color: var(--accent-cyan);
+      border-color: rgba(0, 229, 255, 0.45);
+    }
+
+    .copy-button[data-copied] {
+      color: var(--accent-green);
+      border-color: rgba(0, 230, 118, 0.5);
+    }
+
+    .copy-button[data-failed] {
+      color: var(--accent-red);
+      border-color: rgba(255, 82, 82, 0.5);
+    }
+
+    .copy-button .icon-check {
+      display: none;
+    }
+
+    .copy-button[data-copied] .icon-copy {
+      display: none;
+    }
+
+    .copy-button[data-copied] .icon-check {
+      display: block;
+    }
+
+    .tip {
+      opacity: 0;
+      pointer-events: none;
+      padding: 0.2rem 0.5rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: #0f172a;
+      border: 1px solid var(--border-strong);
+      color: var(--text-primary);
+      transition: opacity 0.15s;
+      white-space: nowrap;
+      order: -1;
+    }
+
+    .copy-button[data-copied] + .tip {
+      opacity: 1;
+      color: var(--accent-green);
+      border-color: rgba(0, 230, 118, 0.45);
+    }
+
+    .copy-button[data-failed] + .tip {
+      opacity: 1;
+      color: var(--accent-red);
+      border-color: rgba(255, 82, 82, 0.45);
+    }
+
+    @media (hover: hover) {
+      .copyable .copy-button {
+        opacity: 0.35;
+      }
+      .copyable:hover .copy-button,
+      .copyable:focus-within .copy-button,
+      .copyable .copy-button:focus-visible,
+      .copyable .copy-button[data-copied],
+      .copyable .copy-button[data-failed] {
+        opacity: 1;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .pkg-tab,
+      .copy-button,
+      .tip {
+        transition: opacity 0.01ms;
+      }
+    }
+
+    footer {
+      margin-top: 2rem;
+      padding-top: 1.25rem;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 0.75rem;
+      color: var(--text-muted);
+      font-size: 0.88rem;
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <header class="hero">
+      <div>
+        <div class="badge" data-i18n="heroBadge">GPG-Signed Linux Repository</div>
+        <h1>angelgnz Packages</h1>
+        <p class="subtitle" data-i18n="heroSubtitle">
+          Central GPG-signed package repository for nxctl and x56-hotas-deck across Ubuntu/Debian, Fedora, Fedora Atomic/Silverblue, openSUSE, Arch Linux, NixOS, and portable builds.
+        </p>
+      </div>
+      <div class="lang-switch" role="group" aria-label="Language">
+        <button type="button" class="lang-btn" data-set-lang="en" aria-pressed="true">EN</button>
+        <button type="button" class="lang-btn" data-set-lang="es" aria-pressed="false">ES</button>
+      </div>
+    </header>
+
+    <section class="meta-strip">
+      <div class="meta-card">
+        <div class="meta-label" data-i18n="metaBaseUrl">Repository Base URL</div>
+        <div class="meta-value">https://angelgnz.github.io/packages</div>
+      </div>
+      <div class="meta-card">
+        <div class="meta-label" data-i18n="metaGpgKey">Public GPG Key</div>
+        <div class="meta-value"><a href="https://angelgnz.github.io/packages/gpg.key">gpg.key</a> · <a href="https://angelgnz.github.io/packages/gpg.gpg">gpg.gpg</a></div>
+      </div>
+      <div class="meta-card">
+        <div class="meta-label" data-i18n="metaFingerprint">GPG Fingerprint</div>
+        <div class="meta-value">44B0056D18E88F598404490A1ACBF949D4EB5BDD</div>
+      </div>
+    </section>
+
+    <div class="pkg-switcher">
+      <div class="pkg-tablist" role="tablist" focusgroup="tablist nomemory" aria-label="Linux packages" data-i18n-aria-label="pkgTablistLabel">
+        <button type="button" role="tab" class="pkg-tab" id="tab-nxctl" aria-selected="true" focusgroupstart>
+          <span class="pkg-tab-name">nxctl</span>
+          <span class="pkg-tab-tag" data-i18n="nxctlTag">NZXT Liquid Coolers &amp; Smart Devices</span>
+        </button>
+        <button type="button" role="tab" class="pkg-tab" id="tab-x56" aria-selected="false" tabindex="-1">
+          <span class="pkg-tab-name">x56-hotas-deck</span>
+          <span class="pkg-tab-tag" data-i18n="x56Tag">Saitek / Logitech G X56 Rhino HOTAS</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Package Panel 1: nxctl -->
+    <div role="tabpanel" id="panel-nxctl" aria-labelledby="tab-nxctl">
+      <div class="panel-inner">
+        <article class="card">
+          <div class="card-header">
+            <h2 class="card-title">Ubuntu / Debian / Mint / Pop!_OS</h2>
+            <span class="pill cyan">APT</span>
+          </div>
+          <p class="card-desc" data-i18n="aptDesc">Add the signed APT repository and install with automatic future updates:</p>
+          <div class="copyable">
+            <pre tabindex="0"><code id="cmd-nxctl-apt">curl -fsSL https://angelgnz.github.io/packages/gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/angelgnz-packages.gpg
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/angelgnz-packages.gpg] https://angelgnz.github.io/packages/apt stable main" | sudo tee /etc/apt/sources.list.d/angelgnz-packages.list
+sudo apt update && sudo apt install nxctl</code></pre>
+            <span class="copy">
+              <button type="button" class="copy-button" command="--copy" commandfor="cmd-nxctl-apt" aria-label="Copy APT install commands for nxctl">
+                <svg class="icon-copy" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                <svg class="icon-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              </button>
+              <span class="tip" role="status"></span>
+            </span>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-header">
+            <h2 class="card-title">Fedora Workstation</h2>
+            <span class="pill magenta">DNF</span>
+          </div>
+          <p class="card-desc" data-i18n="dnfDesc">Enable the RPM repository with GPG verification:</p>
+          <div class="copyable">
+            <pre tabindex="0"><code id="cmd-nxctl-dnf">sudo curl -fsSL https://angelgnz.github.io/packages/rpm/angelgnz-packages.repo -o /etc/yum.repos.d/angelgnz-packages.repo
+sudo dnf install nxctl</code></pre>
+            <span class="copy">
+              <button type="button" class="copy-button" command="--copy" commandfor="cmd-nxctl-dnf" aria-label="Copy Fedora DNF install commands for nxctl">
+                <svg class="icon-copy" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                <svg class="icon-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              </button>
+              <span class="tip" role="status"></span>
+            </span>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-header">
+            <h2 class="card-title">Fedora Atomic / Silverblue / Kinoite / Bazzite</h2>
+            <span class="pill magenta">rpm-ostree</span>
+          </div>
+          <p class="card-desc" data-i18n="ostreeDesc">Add the repository under /etc/yum.repos.d and layer the signed RPM package cleanly:</p>
+          <div class="copyable">
+            <pre tabindex="0"><code id="cmd-nxctl-ostree">sudo curl -fsSL https://angelgnz.github.io/packages/rpm/angelgnz-packages.repo -o /etc/yum.repos.d/angelgnz-packages.repo
+rpm-ostree install nxctl
+sudo rpm-ostree apply-live --allow-replacement
+sudo udevadm control --reload-rules && sudo udevadm trigger -s hwmon
+systemctl --user enable --now nxctld</code></pre>
+            <span class="copy">
+              <button type="button" class="copy-button" command="--copy" commandfor="cmd-nxctl-ostree" aria-label="Copy Fedora Atomic rpm-ostree install commands for nxctl">
+                <svg class="icon-copy" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                <svg class="icon-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              </button>
+              <span class="tip" role="status"></span>
+            </span>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-header">
+            <h2 class="card-title">openSUSE Tumbleweed / Leap &amp; Aeon / MicroOS</h2>
+            <span class="pill green">Zypper</span>
+          </div>
+          <p class="card-desc" data-i18n="zypperDesc">Import the GPG key and add the signed repository:</p>
+          <div class="copyable">
+            <pre tabindex="0"><code id="cmd-nxctl-zypper">sudo rpm --import https://angelgnz.github.io/packages/gpg.key
+sudo zypper ar -f https://angelgnz.github.io/packages/rpm angelgnz-packages
+sudo zypper refresh && sudo zypper in nxctl
+# On Aeon / MicroOS (immutable):
+# sudo transactional-update pkg install nxctl</code></pre>
+            <span class="copy">
+              <button type="button" class="copy-button" command="--copy" commandfor="cmd-nxctl-zypper" aria-label="Copy openSUSE Zypper install commands for nxctl">
+                <svg class="icon-copy" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                <svg class="icon-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              </button>
+              <span class="tip" role="status"></span>
+            </span>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-header">
+            <h2 class="card-title">Arch Linux / EndeavourOS / CachyOS</h2>
+            <span class="pill cyan">Pacman</span>
+          </div>
+          <p class="card-desc" data-i18n="archDesc">Trust the signing key, add the [angelgnz] repository block to /etc/pacman.conf, and install:</p>
+          <div class="copyable">
+            <pre tabindex="0"><code id="cmd-nxctl-arch">curl -fsSL https://angelgnz.github.io/packages/gpg.key | sudo pacman-key --add -
+sudo pacman-key --lsign-key 44B0056D18E88F598404490A1ACBF949D4EB5BDD
+printf '\n[angelgnz]\nSigLevel = Required DatabaseOptional\nServer = https://angelgnz.github.io/packages/arch/$arch\n' | sudo tee -a /etc/pacman.conf
+sudo pacman -Syu nxctl</code></pre>
+            <span class="copy">
+              <button type="button" class="copy-button" command="--copy" commandfor="cmd-nxctl-arch" aria-label="Copy Arch Linux Pacman install commands for nxctl">
+                <svg class="icon-copy" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                <svg class="icon-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              </button>
+              <span class="tip" role="status"></span>
+            </span>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-header">
+            <h2 class="card-title">NixOS &amp; Nix Flakes</h2>
+            <span class="pill cyan">Flake</span>
+          </div>
+          <p class="card-desc" data-i18n="nixDesc">Run directly with Nix or enable the declarative NixOS module (services.nxctl.enable = true):</p>
+          <div class="copyable">
+            <pre tabindex="0"><code id="cmd-nxctl-nix">nix run github:angelgnz/nxctl</code></pre>
+            <span class="copy">
+              <button type="button" class="copy-button" command="--copy" commandfor="cmd-nxctl-nix" aria-label="Copy Nix run command for nxctl">
+                <svg class="icon-copy" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                <svg class="icon-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              </button>
+              <span class="tip" role="status"></span>
+            </span>
+          </div>
+        </article>
+      </div>
+    </div>
+
+    <!-- Package Panel 2: x56-hotas-deck -->
+    <div role="tabpanel" id="panel-x56" aria-labelledby="tab-x56" hidden="until-found">
+      <div class="panel-inner">
+        <article class="card">
+          <div class="card-header">
+            <h2 class="card-title">Ubuntu / Debian / Mint / Pop!_OS</h2>
+            <span class="pill cyan">APT</span>
+          </div>
+          <p class="card-desc" data-i18n="aptDesc">Add the signed APT repository and install with automatic future updates:</p>
+          <div class="copyable">
+            <pre tabindex="0"><code id="cmd-x56-apt">curl -fsSL https://angelgnz.github.io/packages/gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/angelgnz-packages.gpg
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/angelgnz-packages.gpg] https://angelgnz.github.io/packages/apt stable main" | sudo tee /etc/apt/sources.list.d/angelgnz-packages.list
+sudo apt update && sudo apt install x56-hotas-deck</code></pre>
+            <span class="copy">
+              <button type="button" class="copy-button" command="--copy" commandfor="cmd-x56-apt" aria-label="Copy APT install commands for x56-hotas-deck">
+                <svg class="icon-copy" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                <svg class="icon-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              </button>
+              <span class="tip" role="status"></span>
+            </span>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-header">
+            <h2 class="card-title">Fedora Workstation</h2>
+            <span class="pill magenta">DNF</span>
+          </div>
+          <p class="card-desc" data-i18n="dnfDesc">Enable the RPM repository with GPG verification:</p>
+          <div class="copyable">
+            <pre tabindex="0"><code id="cmd-x56-dnf">sudo curl -fsSL https://angelgnz.github.io/packages/rpm/angelgnz-packages.repo -o /etc/yum.repos.d/angelgnz-packages.repo
+sudo dnf install x56-hotas-deck</code></pre>
+            <span class="copy">
+              <button type="button" class="copy-button" command="--copy" commandfor="cmd-x56-dnf" aria-label="Copy Fedora DNF install commands for x56-hotas-deck">
+                <svg class="icon-copy" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                <svg class="icon-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              </button>
+              <span class="tip" role="status"></span>
+            </span>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-header">
+            <h2 class="card-title">Fedora Atomic / Silverblue / Kinoite / Bazzite</h2>
+            <span class="pill magenta">rpm-ostree</span>
+          </div>
+          <p class="card-desc" data-i18n="ostreeDesc">Add the repository under /etc/yum.repos.d and layer the signed RPM package cleanly:</p>
+          <div class="copyable">
+            <pre tabindex="0"><code id="cmd-x56-ostree">sudo curl -fsSL https://angelgnz.github.io/packages/rpm/angelgnz-packages.repo -o /etc/yum.repos.d/angelgnz-packages.repo
+rpm-ostree install x56-hotas-deck
+sudo rpm-ostree apply-live --allow-replacement
+sudo udevadm control --reload-rules && sudo udevadm trigger</code></pre>
+            <span class="copy">
+              <button type="button" class="copy-button" command="--copy" commandfor="cmd-x56-ostree" aria-label="Copy Fedora Atomic rpm-ostree install commands for x56-hotas-deck">
+                <svg class="icon-copy" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                <svg class="icon-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              </button>
+              <span class="tip" role="status"></span>
+            </span>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-header">
+            <h2 class="card-title">openSUSE Tumbleweed / Leap &amp; Aeon / MicroOS</h2>
+            <span class="pill green">Zypper</span>
+          </div>
+          <p class="card-desc" data-i18n="zypperDesc">Import the GPG key and add the signed repository:</p>
+          <div class="copyable">
+            <pre tabindex="0"><code id="cmd-x56-zypper">sudo rpm --import https://angelgnz.github.io/packages/gpg.key
+sudo zypper ar -f https://angelgnz.github.io/packages/rpm angelgnz-packages
+sudo zypper refresh && sudo zypper in x56-hotas-deck
+# On Aeon / MicroOS (immutable):
+# sudo transactional-update pkg install x56-hotas-deck</code></pre>
+            <span class="copy">
+              <button type="button" class="copy-button" command="--copy" commandfor="cmd-x56-zypper" aria-label="Copy openSUSE Zypper install commands for x56-hotas-deck">
+                <svg class="icon-copy" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                <svg class="icon-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              </button>
+              <span class="tip" role="status"></span>
+            </span>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-header">
+            <h2 class="card-title">Arch Linux / EndeavourOS / CachyOS</h2>
+            <span class="pill cyan">Pacman</span>
+          </div>
+          <p class="card-desc" data-i18n="archDesc">Trust the signing key, add the [angelgnz] repository block to /etc/pacman.conf, and install:</p>
+          <div class="copyable">
+            <pre tabindex="0"><code id="cmd-x56-arch">curl -fsSL https://angelgnz.github.io/packages/gpg.key | sudo pacman-key --add -
+sudo pacman-key --lsign-key 44B0056D18E88F598404490A1ACBF949D4EB5BDD
+printf '\n[angelgnz]\nSigLevel = Required DatabaseOptional\nServer = https://angelgnz.github.io/packages/arch/$arch\n' | sudo tee -a /etc/pacman.conf
+sudo pacman -Syu x56-hotas-deck</code></pre>
+            <span class="copy">
+              <button type="button" class="copy-button" command="--copy" commandfor="cmd-x56-arch" aria-label="Copy Arch Linux Pacman install commands for x56-hotas-deck">
+                <svg class="icon-copy" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                <svg class="icon-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              </button>
+              <span class="tip" role="status"></span>
+            </span>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-header">
+            <h2 class="card-title">Universal Linux (x86_64 Tarball)</h2>
+            <span class="pill green">Tarball</span>
+          </div>
+          <p class="card-desc" data-i18n="tarballDesc">Download and install the standalone binaries, udev rules, and desktop entry on any Linux distribution:</p>
+          <div class="copyable">
+            <pre tabindex="0"><code id="cmd-x56-tarball">TAG=$(curl -fsSL https://api.github.com/repos/angelgnz/x56-hotas-deck/releases/latest | grep -o '"tag_name": "[^"]*"' | cut -d'"' -f4)
+curl -fsSL "https://github.com/angelgnz/x56-hotas-deck/releases/download/${TAG}/x56-hotas-deck-${TAG}-x86_64.tar.gz" | tar -xz
+cd "x56-hotas-deck-${TAG}-x86_64" && sudo ./install.sh</code></pre>
+            <span class="copy">
+              <button type="button" class="copy-button" command="--copy" commandfor="cmd-x56-tarball" aria-label="Copy universal tarball install commands for x56-hotas-deck">
+                <svg class="icon-copy" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                <svg class="icon-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              </button>
+              <span class="tip" role="status"></span>
+            </span>
+          </div>
+        </article>
+      </div>
+    </div>
+
+    <footer>
+      <span>
+        <span data-i18n="footerSources">Sources &amp; releases:</span>
+        <a href="https://github.com/angelgnz/nxctl">nxctl</a> ·
+        <a href="https://github.com/angelgnz/x56-hotas-deck">x56-hotas-deck</a>
+      </span>
+      <span>
+        <a href="https://github.com/angelgnz/packages">github.com/angelgnz/packages</a>
+      </span>
+    </footer>
+  </main>
+
+  <script>
+    const translations = {
+      en: {
+        heroBadge: "GPG-Signed Linux Repository",
+        heroSubtitle: "Central GPG-signed package repository for nxctl and x56-hotas-deck across Ubuntu/Debian, Fedora, Fedora Atomic/Silverblue, openSUSE, Arch Linux, NixOS, and portable builds.",
+        metaBaseUrl: "Repository Base URL",
+        metaGpgKey: "Public GPG Key",
+        metaFingerprint: "GPG Fingerprint",
+        pkgTablistLabel: "Linux packages",
+        nxctlTag: "NZXT Liquid Coolers & Smart Devices",
+        x56Tag: "Saitek / Logitech G X56 Rhino HOTAS",
+        aptDesc: "Add the signed APT repository and install with automatic future updates:",
+        dnfDesc: "Enable the RPM repository with GPG verification:",
+        ostreeDesc: "Add the repository under /etc/yum.repos.d and layer the signed RPM package cleanly:",
+        zypperDesc: "Import the GPG key and add the signed repository:",
+        archDesc: "Trust the signing key, add the [angelgnz] repository block to /etc/pacman.conf, and install:",
+        nixDesc: "Run directly with Nix or enable the declarative NixOS module (services.nxctl.enable = true):",
+        tarballDesc: "Download and install the standalone binaries, udev rules, and desktop entry on any Linux distribution:",
+        footerSources: "Sources & releases:",
+        copied: "Copied",
+        copyFailed: "Copy failed"
+      },
+      es: {
+        heroBadge: "Repositorio Linux firmado con GPG",
+        heroSubtitle: "Repositorio central de paquetes firmados con GPG para nxctl y x56-hotas-deck en Ubuntu/Debian, Fedora, Fedora Atomic/Silverblue, openSUSE, Arch Linux, NixOS y compilaciones portables.",
+        metaBaseUrl: "URL base del repositorio",
+        metaGpgKey: "Llave pública GPG",
+        metaFingerprint: "Huella GPG",
+        pkgTablistLabel: "Paquetes Linux",
+        nxctlTag: "Enfriadores líquidos y controladores NZXT",
+        x56Tag: "Saitek / Logitech G X56 Rhino HOTAS",
+        aptDesc: "Añade el repositorio APT firmado e instala con actualizaciones automáticas:",
+        dnfDesc: "Habilita el repositorio RPM con verificación GPG:",
+        ostreeDesc: "Añade el repositorio en /etc/yum.repos.d e instala el paquete RPM firmado en capa:",
+        zypperDesc: "Importa la llave GPG y añade el repositorio firmado:",
+        archDesc: "Confía en la llave GPG, añade el bloque [angelgnz] en /etc/pacman.conf e instala:",
+        nixDesc: "Ejecuta directamente con Nix o activa el módulo declarativo de NixOS (services.nxctl.enable = true):",
+        tarballDesc: "Descarga e instala los binarios autónomos, reglas udev y acceso directo en cualquier distribución Linux:",
+        footerSources: "Código fuente y releases:",
+        copied: "Copiado",
+        copyFailed: "Error al copiar"
+      }
+    };
+
+    let currentLang = (navigator.language || "en").toLowerCase().startsWith("es") ? "es" : "en";
+
+    function applyLang(lang) {
+      currentLang = translations[lang] ? lang : "en";
+      document.documentElement.lang = currentLang;
+      const dict = translations[currentLang];
+      document.querySelectorAll("[data-i18n]").forEach((el) => {
+        const key = el.getAttribute("data-i18n");
+        if (dict[key]) el.textContent = dict[key];
+      });
+      document.querySelectorAll("[data-i18n-aria-label]").forEach((el) => {
+        const key = el.getAttribute("data-i18n-aria-label");
+        if (dict[key]) el.setAttribute("aria-label", dict[key]);
+      });
+      document.querySelectorAll(".lang-btn").forEach((btn) => {
+        btn.setAttribute("aria-pressed", String(btn.getAttribute("data-set-lang") === currentLang));
+      });
+    }
+
+    document.querySelectorAll(".lang-btn").forEach((btn) => {
+      btn.addEventListener("click", () => applyLang(btn.getAttribute("data-set-lang")));
+    });
+    applyLang(currentLang);
+
+    // Accessible package tabs (selection-follows-focus + hidden="until-found" + beforematch)
+    const tabs = Array.from(document.querySelectorAll('.pkg-tablist [role="tab"]'));
+    const panels = tabs.map((tab) => document.querySelector(`[role="tabpanel"][aria-labelledby="${tab.id}"]`));
+
+    function selectTab(targetTab, moveFocus = false) {
+      if (!targetTab) return;
+      tabs.forEach((tab, idx) => {
+        const active = tab === targetTab;
+        tab.setAttribute("aria-selected", String(active));
+        tab.tabIndex = active ? 0 : -1;
+        tab.toggleAttribute("focusgroupstart", active);
+        const panel = panels[idx];
+        if (panel) {
+          if (active) {
+            panel.removeAttribute("hidden");
+          } else {
+            panel.hidden = "until-found";
+          }
+        }
+      });
+      try {
+        targetTab.scrollIntoView({ block: "nearest", inline: "nearest", container: "nearest" });
+      } catch {
+        targetTab.scrollIntoView({ block: "nearest", inline: "nearest" });
+      }
+      if (moveFocus) {
+        targetTab.focus();
+      }
+    }
+
+    tabs.forEach((tab, idx) => {
+      tab.addEventListener("click", () => selectTab(tab, false));
+      tab.addEventListener("keydown", (event) => {
+        let nextIdx = null;
+        if (event.key === "ArrowRight") nextIdx = (idx + 1) % tabs.length;
+        else if (event.key === "ArrowLeft") nextIdx = (idx - 1 + tabs.length) % tabs.length;
+        else if (event.key === "Home") nextIdx = 0;
+        else if (event.key === "End") nextIdx = tabs.length - 1;
+        if (nextIdx !== null) {
+          event.preventDefault();
+          selectTab(tabs[nextIdx], true);
+        }
+      });
+    });
+
+    panels.forEach((panel, idx) => {
+      if (!panel) return;
+      panel.addEventListener("beforematch", () => {
+        selectTab(tabs[idx], false);
+      });
+    });
+
+    if (window.location.hash === "#x56-hotas-deck" || window.location.hash === "#x56") {
+      selectTab(document.getElementById("tab-x56"), false);
+    }
+
+    const timers = new WeakMap();
+    let lastMessage = "";
+
+    function report(button, ok) {
+      const tip = button.nextElementSibling;
+      clearTimeout(timers.get(button));
+      button.removeAttribute("data-copied");
+      button.removeAttribute("data-failed");
+      const dict = translations[currentLang];
+      let message = ok ? dict.copied : dict.copyFailed;
+      if (message === lastMessage) message += "\u00A0";
+      lastMessage = message;
+      tip.textContent = "";
+      void button.offsetWidth;
+      button.setAttribute(ok ? "data-copied" : "data-failed", "");
+      requestAnimationFrame(() => {
+        tip.textContent = message;
+      });
+      timers.set(button, setTimeout(() => {
+        button.removeAttribute("data-copied");
+        button.removeAttribute("data-failed");
+        tip.textContent = "";
+      }, 2000));
+    }
+
+    async function copy(button, target) {
+      const text = target.innerText.trim();
+      if (!text) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        report(button, true);
+      } catch {
+        report(button, false);
+      }
+    }
+
+    if ("CommandEvent" in window) {
+      document.addEventListener("command", (event) => {
+        if (event.command.startsWith("--copy") && event.target) {
+          copy(event.source, event.target);
+        }
+      }, true);
+    } else {
+      document.addEventListener("click", (event) => {
+        const button = event.target.closest('button[command^="--copy"]');
+        if (!button) return;
+        const target = document.getElementById(button.getAttribute("commandfor"));
+        if (target) copy(button, target);
+      });
+    }
+  </script>
+</body>
+</html>
