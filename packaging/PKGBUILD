@@ -1,26 +1,29 @@
 # Maintainer: Angel Gonzalez <https://github.com/angelgnz>
 # Contributor: Community
-pkgname=x56-hotas-deck-git
+pkgname=x56-hotas-deck
 _pkgname=x56-hotas-deck
-pkgver=0.1.0.r0.g894d1db
+pkgver=0.2.1
 pkgrel=1
 pkgdesc="X56 HOTAS Deck - Configurador y controlador en espacio de usuario para HOTAS Saitek / Logitech G X56 (CLI y GUI Avionics Vector)"
 arch=('x86_64')
 url="https://github.com/angelgnz/x56-hotas-deck"
 license=('GPL-3.0-or-later')
+options=('!debug')
 depends=('systemd-libs' 'libxkbcommon' 'hicolor-icon-theme')
 makedepends=('cargo' 'pkgconf' 'git' 'systemd')
-provides=('x56-hotas-deck' 'x56linux')
-conflicts=('x56-hotas-deck' 'x56linux')
+provides=('x56-hotas-deck' 'x56-hotas-deck-git' 'x56linux')
+conflicts=('x56-hotas-deck-git' 'x56linux')
 source=("${_pkgname}::git+https://github.com/angelgnz/x56-hotas-deck.git#branch=master")
 sha256sums=('SKIP')
 
 pkgver() {
   cd "$srcdir/$_pkgname"
-  if git describe --long --tags >/dev/null 2>&1; then
+  if git describe --exact-match --tags >/dev/null 2>&1; then
+    git describe --exact-match --tags | sed 's/^v//'
+  elif git describe --long --tags >/dev/null 2>&1; then
     git describe --long --tags | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
   else
-    printf "0.1.0.r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+    printf "0.2.1.r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
   fi
 }
 
