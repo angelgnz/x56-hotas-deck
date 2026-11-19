@@ -128,14 +128,25 @@ impl Default for X56App {
 }
 
 impl X56App {
-    pub fn new(egui_ctx: &egui::Context) -> Self {
+    pub fn new(
+        egui_ctx: &egui::Context,
+        instance_listener: Option<std::os::unix::net::UnixListener>,
+    ) -> Self {
         let mut app = Self::default();
-        app.init_tray(egui_ctx);
+        app.init_tray(egui_ctx, instance_listener);
         app
     }
 
-    pub fn init_tray(&mut self, egui_ctx: &egui::Context) {
-        let tray_handle = crate::tray::start_tray(egui_ctx.clone(), &self.active_profile_name);
+    pub fn init_tray(
+        &mut self,
+        egui_ctx: &egui::Context,
+        instance_listener: Option<std::os::unix::net::UnixListener>,
+    ) {
+        let tray_handle = crate::tray::start_tray(
+            egui_ctx.clone(),
+            &self.active_profile_name,
+            instance_listener,
+        );
         self.tray_handle = Some(tray_handle);
     }
 
@@ -182,11 +193,13 @@ impl X56App {
             } else {
                 self.window_visible_state = true;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
                 ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
             }
         } else if show_win {
             self.window_visible_state = true;
             ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
             ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
         } else if hide_win {
             self.window_visible_state = false;

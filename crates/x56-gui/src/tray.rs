@@ -3,13 +3,77 @@
 //! Permite que x56-gui continúe ejecutándose en segundo plano (minimizada en el tray)
 //! al cerrar la ventana, manteniendo el daemon uinput y el mapeo activo.
 
+use std::io::{BufRead, BufReader, Write};
+use std::os::unix::net::{UnixListener, UnixStream};
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use eframe::egui;
 use ksni::blocking::TrayMethods;
 use ksni::{menu::*, Category, Icon, MenuItem, Status, ToolTip, Tray};
+
+pub enum SingleInstanceGuard {
+    Primary {
+        listener: UnixListener,
+        path: PathBuf,
+    },
+    Secondary,
+}
+
+pub struct SocketCleanup(pub PathBuf);
+
+impl Drop for SocketCleanup {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
+pub fn default_instance_socket_path() -> PathBuf {
+    if let Some(dir) = std::env::var_os("XDG_RUNTIME_DIR").filter(|v| !v.is_empty()) {
+        PathBuf::from(dir).join("x56-gui.sock")
+    } else {
+        // SAFETY: `geteuid()` is always safe to call and has no preconditions.
+        let uid = unsafe { libc::geteuid() };
+        std::env::temp_dir().join(format!("x56-gui-{uid}.sock"))
+    }
+}
+
+fn send_show_command(mut stream: UnixStream) -> bool {
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
+    stream.write_all(b"SHOW\n").is_ok() && stream.flush().is_ok()
+}
+
+pub fn acquire_single_instance(path: &Path) -> std::io::Result<SingleInstanceGuard> {
+    if let Ok(stream) = UnixStream::connect(path) {
+        if send_show_command(stream) {
+            return Ok(SingleInstanceGuard::Secondary);
+        }
+    }
+
+    let _ = std::fs::remove_file(path);
+    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    match UnixListener::bind(path) {
+        Ok(listener) => Ok(SingleInstanceGuard::Primary {
+            listener,
+            path: path.to_path_buf(),
+        }),
+        Err(err) if err.kind() == std::io::ErrorKind::AddrInUse => {
+            if let Ok(stream) = UnixStream::connect(path) {
+                if send_show_command(stream) {
+                    return Ok(SingleInstanceGuard::Secondary);
+                }
+            }
+            Err(err)
+        }
+        Err(err) => Err(err),
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrayCommand {
@@ -151,40 +215,40 @@ fn spawn_x11_xembed_tray(tx: Sender<TrayCommand>, egui_ctx: egui::Context) -> Op
 
     std::env::var_os("DISPLAY")?;
 
+    let (conn, screen_num) = match x11rb::connect(None) {
+        Ok(c) => c,
+        Err(err) => {
+            log::debug!("X11 no disponible para XEmbed tray: {err}");
+            return None;
+        }
+    };
+
+    let atom_tray = match conn.intern_atom(false, b"_NET_SYSTEM_TRAY_S0") {
+        Ok(c) => match c.reply() {
+            Ok(r) => r.atom,
+            Err(_) => return None,
+        },
+        Err(_) => return None,
+    };
+
+    let owner = match conn.get_selection_owner(atom_tray) {
+        Ok(c) => match c.reply() {
+            Ok(r) => r.owner,
+            Err(_) => return None,
+        },
+        Err(_) => return None,
+    };
+
+    if owner == x11rb::NONE {
+        log::debug!("No se detectó dock XEmbed (_NET_SYSTEM_TRAY_S0 sin propietario)");
+        return None;
+    }
+
     let (shutdown_tx, shutdown_rx) = channel::<()>();
 
     std::thread::Builder::new()
         .name("x11-tray-dock".into())
         .spawn(move || {
-            let (conn, screen_num) = match x11rb::connect(None) {
-                Ok(c) => c,
-                Err(err) => {
-                    log::debug!("X11 no disponible para XEmbed tray: {err}");
-                    return;
-                }
-            };
-
-            let atom_tray = match conn.intern_atom(false, b"_NET_SYSTEM_TRAY_S0") {
-                Ok(c) => match c.reply() {
-                    Ok(r) => r.atom,
-                    Err(_) => return,
-                },
-                Err(_) => return,
-            };
-
-            let owner = match conn.get_selection_owner(atom_tray) {
-                Ok(c) => match c.reply() {
-                    Ok(r) => r.owner,
-                    Err(_) => return,
-                },
-                Err(_) => return,
-            };
-
-            if owner == x11rb::NONE {
-                log::debug!("No se detectó dock XEmbed (_NET_SYSTEM_TRAY_S0 sin propietario)");
-                return;
-            }
-
             let atom_opcode = match conn.intern_atom(false, b"_NET_SYSTEM_TRAY_OPCODE") {
                 Ok(c) => match c.reply() {
                     Ok(r) => r.atom,
@@ -627,11 +691,37 @@ pub fn load_window_icon() -> Option<egui::IconData> {
     })
 }
 
-pub fn start_tray(egui_ctx: egui::Context, initial_profile: &str) -> TrayHandle {
+pub fn start_tray(
+    egui_ctx: egui::Context,
+    initial_profile: &str,
+    instance_listener: Option<UnixListener>,
+) -> TrayHandle {
     let (tx, rx) = channel();
     let active_profile = Arc::new(Mutex::new(initial_profile.to_string()));
     let uinput_online = Arc::new(Mutex::new(true));
     let window_visible = Arc::new(AtomicBool::new(true));
+
+    if let Some(listener) = instance_listener {
+        let ipc_tx = tx.clone();
+        let ipc_ctx = egui_ctx.clone();
+        if let Err(err) = std::thread::Builder::new()
+            .name("single-instance-ipc".into())
+            .spawn(move || {
+                for stream in listener.incoming().flatten() {
+                    let mut reader = BufReader::new(stream);
+                    let mut line = String::new();
+                    if reader.read_line(&mut line).is_ok() && line.trim() == "SHOW" {
+                        if ipc_tx.send(TrayCommand::ShowWindow).is_err() {
+                            break;
+                        }
+                        ipc_ctx.request_repaint();
+                    }
+                }
+            })
+        {
+            log::warn!("No se pudo iniciar el hilo de instancia única: {err}");
+        }
+    }
 
     let mut pixmaps = Vec::new();
     if let Some(i32) = load_png_as_icon(include_bytes!("../assets/tray_icon_32.png")) {
@@ -643,24 +733,28 @@ pub fn start_tray(egui_ctx: egui::Context, initial_profile: &str) -> TrayHandle 
 
     let x11_shutdown = spawn_x11_xembed_tray(tx.clone(), egui_ctx.clone());
 
-    let tray = X56Tray {
-        tx,
-        egui_ctx,
-        active_profile: active_profile.clone(),
-        uinput_online: uinput_online.clone(),
-        window_visible: window_visible.clone(),
-        pixmaps,
-    };
+    let handle = if x11_shutdown.is_none() {
+        let tray = X56Tray {
+            tx,
+            egui_ctx,
+            active_profile: active_profile.clone(),
+            uinput_online: uinput_online.clone(),
+            window_visible: window_visible.clone(),
+            pixmaps,
+        };
 
-    let handle = match tray.assume_sni_available(true).spawn() {
-        Ok(h) => {
-            log::info!("Bandeja del sistema (StatusNotifierItem tray) inicializada con éxito");
-            Some(h)
+        match tray.assume_sni_available(true).spawn() {
+            Ok(h) => {
+                log::info!("Bandeja del sistema (StatusNotifierItem tray) inicializada con éxito");
+                Some(h)
+            }
+            Err(err) => {
+                log::warn!("No se pudo inicializar la bandeja del sistema (tray): {err}");
+                None
+            }
         }
-        Err(err) => {
-            log::warn!("No se pudo inicializar la bandeja del sistema (tray): {err}");
-            None
-        }
+    } else {
+        None
     };
 
     TrayHandle {
@@ -670,5 +764,47 @@ pub fn start_tray(egui_ctx: egui::Context, initial_profile: &str) -> TrayHandle 
         window_visible,
         _handle: handle,
         _x11_shutdown: x11_shutdown,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn single_instance_acquires_primary_forwards_secondary_and_recovers_stale_socket() {
+        let sock_dir = std::env::temp_dir().join(format!(
+            "x56_gui_single_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let sock_path = sock_dir.join("x56-gui.sock");
+
+        let primary = acquire_single_instance(&sock_path).expect("initial single instance acquire");
+        let listener = match primary {
+            SingleInstanceGuard::Primary { listener, .. } => listener,
+            SingleInstanceGuard::Secondary => panic!("expected primary instance"),
+        };
+
+        let secondary = acquire_single_instance(&sock_path).expect("secondary instance forward");
+        assert!(matches!(secondary, SingleInstanceGuard::Secondary));
+
+        let (stream, _) = listener.accept().expect("accept forwarded command");
+        let mut reader = BufReader::new(stream);
+        let mut line = String::new();
+        reader.read_line(&mut line).expect("read command line");
+        assert_eq!(line.trim(), "SHOW");
+
+        // Drop listener to simulate a dead process leaving a stale socket file behind.
+        drop(listener);
+        assert!(sock_path.exists());
+
+        let recovered = acquire_single_instance(&sock_path).expect("stale socket recovery");
+        assert!(matches!(recovered, SingleInstanceGuard::Primary { .. }));
+        drop(recovered);
+        let _ = std::fs::remove_dir_all(&sock_dir);
     }
 }

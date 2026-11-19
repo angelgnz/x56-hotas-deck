@@ -52,7 +52,7 @@ cp -f "${debs[@]}" "${REPO_DIR}/apt/pool/main/x/x56-hotas-deck/"
   cat > "$APT_CONF" <<'EOF'
 APT::FTPArchive::Release {
   Origin "angelgnz";
-  Label "angelgnz Packages";
+  Label "angelgnz // pkg";
   Suite "stable";
   Codename "stable";
   Architectures "amd64";
@@ -94,7 +94,7 @@ install -m644 "${REPO_DIR}/gpg.key" "${REPO_DIR}/rpm/repodata/repomd.xml.key"
 
 cat > "${REPO_DIR}/rpm/angelgnz-packages.repo" <<'EOF'
 [angelgnz-packages]
-name=angelgnz Packages
+name=angelgnz // pkg
 baseurl=https://angelgnz.github.io/packages/rpm
 enabled=1
 gpgcheck=1

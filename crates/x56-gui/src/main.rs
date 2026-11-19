@@ -38,6 +38,22 @@ fn init_logging() {
 fn main() -> eframe::Result<()> {
     init_logging();
 
+    let socket_path = tray::default_instance_socket_path();
+    let (mut instance_listener, _socket_cleanup) = match tray::acquire_single_instance(&socket_path)
+    {
+        Ok(tray::SingleInstanceGuard::Secondary) => {
+            log::debug!("Instancia secundaria detectada; enfocando ventana existente");
+            return Ok(());
+        }
+        Ok(tray::SingleInstanceGuard::Primary { listener, path }) => {
+            (Some(listener), Some(tray::SocketCleanup(path)))
+        }
+        Err(err) => {
+            log::warn!("No se pudo inicializar el socket de instancia única: {err}");
+            (None, None)
+        }
+    };
+
     let mut viewport = egui::ViewportBuilder::default()
         .with_inner_size([1200.0, 800.0])
         .with_min_inner_size([720.0, 520.0])
@@ -55,9 +71,12 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "x56_gui",
         options,
-        Box::new(|cc| {
+        Box::new(move |cc| {
             theme::configure_theme(&cc.egui_ctx);
-            Ok(Box::new(X56App::new(&cc.egui_ctx)))
+            Ok(Box::new(X56App::new(
+                &cc.egui_ctx,
+                instance_listener.take(),
+            )))
         }),
     )
 }
