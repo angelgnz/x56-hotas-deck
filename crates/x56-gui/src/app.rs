@@ -22,11 +22,10 @@ use crate::tabs::doctor::DoctorTab;
 use crate::tabs::programming::ProgrammingTab;
 use crate::tabs::rgb::RgbTab;
 use crate::theme::{
-    self, PhysicalSpring, COLOR_ERROR, COLOR_ON_PRIMARY_CONTAINER, COLOR_ON_SURFACE,
-    COLOR_ON_SURFACE_VARIANT, COLOR_OUTLINE, COLOR_OUTLINE_VARIANT, COLOR_PRIMARY,
-    COLOR_PRIMARY_CONTAINER, COLOR_PRIMARY_FIXED, COLOR_SURFACE, COLOR_SURFACE_CONTAINER,
-    COLOR_SURFACE_HIGH, COLOR_SURFACE_LOW, COLOR_SURFACE_LOWEST, COLOR_TERTIARY_CONTAINER,
-    COLOR_TERTIARY_FIXED_DIM, COLOR_WARNING_AMBER,
+    self, PhysicalSpring, COLOR_ACCENT, COLOR_BORDER_HAIRLINE, COLOR_NEGATIVE, COLOR_POSITIVE,
+    COLOR_SURFACE, COLOR_SURFACE_CONTAINER, COLOR_SURFACE_HIGH, COLOR_TEXT_MUTED,
+    COLOR_TEXT_PRIMARY, COLOR_TEXT_SECONDARY, COLOR_TOP_HIGHLIGHT, COLOR_WARNING, FONT_BODY,
+    FONT_HEADING, FONT_META, RADIUS_CONTROL, SPACE_LG, SPACE_MD, SPACE_SM, SPACE_XS,
 };
 
 /// Los 4 subsistemas principales del sistema de diseño Avionics Vector.
@@ -107,7 +106,7 @@ impl Default for X56App {
             stick_node: None,
             throttle_node: None,
             last_hw_scan: std::time::Instant::now() - std::time::Duration::from_secs(10),
-            active_profile_name: "ELITE_DANGEROUS".into(),
+            active_profile_name: "Default".into(),
             profile_path_buf: initial_path.display().to_string(),
             show_live_test_modal: false,
             top_banner_message: None,
@@ -290,24 +289,26 @@ impl X56App {
                             .display()
                             .to_string();
                         self.persist_session_config();
+                        let path_str = path.display().to_string();
                         self.top_banner_message = Some((
-                            format!(
-                                "Perfil '{}' guardado en {}",
-                                self.active_profile_name,
-                                path.display()
+                            t!(
+                                "profile-saved-path",
+                                "name" => &self.active_profile_name,
+                                "path" => &path_str
                             ),
                             false,
                         ));
                     }
                     Err(err) => {
+                        let err_str = err.to_string();
                         self.top_banner_message =
-                            Some((format!("Error guardando perfil TOML: {err}"), true));
+                            Some((t!("profile-save-err", "err" => &err_str), true));
                     }
                 }
             }
             Err(err) => {
-                self.top_banner_message =
-                    Some((format!("Error volcando configuración: {err}"), true));
+                let err_str = err.to_string();
+                self.top_banner_message = Some((t!("profile-dump-err", "err" => &err_str), true));
             }
         }
     }
@@ -317,7 +318,7 @@ impl X56App {
         let path = PathBuf::from(&self.profile_path_buf);
         match FullProfile::load_from_file(&path) {
             Ok(prof) => {
-                self.active_profile_name = prof.name.to_uppercase().replace(' ', "_");
+                self.active_profile_name = prof.name.clone();
                 self.sync_tray_state();
 
                 if let Some(ref stick_prof) = prof.stick {
@@ -336,20 +337,24 @@ impl X56App {
                             .as_ref()
                             .map(|p| p.total_assigned_count())
                             .unwrap_or(0);
+                        let stick_s = summary.stick_axes_updated.to_string();
+                        let thr_s = summary.throttle_axes_updated.to_string();
+                        let btn_s = prog_cnt.to_string();
                         self.top_banner_message = Some((
-                            format!(
-                                "Perfil '{}' activo ({} ejes stick, {} ejes acelerador, {} botones)",
-                                self.active_profile_name,
-                                summary.stick_axes_updated,
-                                summary.throttle_axes_updated,
-                                prog_cnt
+                            t!(
+                                "profile-loaded-summary",
+                                "name" => &self.active_profile_name,
+                                "stick" => &stick_s,
+                                "throttle" => &thr_s,
+                                "buttons" => &btn_s
                             ),
                             false,
                         ));
                     }
                     Err(err) => {
+                        let err_str = err.to_string();
                         self.top_banner_message =
-                            Some((format!("Error aplicando perfil: {err}"), true));
+                            Some((t!("profile-apply-err", "err" => &err_str), true));
                     }
                 }
 
@@ -375,8 +380,8 @@ impl X56App {
                 self.persist_session_config();
             }
             Err(err) => {
-                self.top_banner_message =
-                    Some((format!("Error cargando archivo TOML: {err}"), true));
+                let err_str = err.to_string();
+                self.top_banner_message = Some((t!("profile-load-err", "err" => &err_str), true));
             }
         }
     }
@@ -471,161 +476,101 @@ impl X56App {
         }
     }
 
-    /// 1. HeaderBar superior fija (48px de alto).
-    ///
-    /// Título "X-56 RHINO // RUST-EVDEV" con icono de vuelo,
-    /// pill telemétrico "/dev/hidraw0 & hidraw1 | 1000Hz POLLING",
-    /// badge "ACTIVE PROFILE: SPACE_SIM_STARCITIZEN" y avatar.
+    /// 1. Top Header Bar (56px).
     fn render_header_bar(&mut self, ui: &mut Ui) {
         let screen_w = ui
             .ctx()
             .input(|i| i.raw.screen_rect)
             .map(|r| r.width())
-            .unwrap_or(1200.0);
+            .unwrap_or(1280.0);
 
         ui.horizontal_centered(|ui| {
-            // Botón de alternar / colapsar barra lateral para pantallas compactas
             let toggle_label = if self.sidebar_collapsed {
                 icons::MENU
             } else {
                 icons::PANEL_LEFT_CLOSE
             };
             let toggle_tooltip = if self.sidebar_collapsed {
-                "Expandir navegación lateral"
+                t!("sidebar-expand-tooltip")
             } else {
-                "Colapsar navegación lateral para maximizar espacio de trabajo"
+                t!("sidebar-collapse-tooltip")
             };
-            if ui
-                .button(RichText::new(toggle_label).size(13.0).monospace().strong())
+            if theme::ghost_button(ui, toggle_label)
                 .on_hover_text(toggle_tooltip)
                 .clicked()
             {
                 self.sidebar_collapsed = !self.sidebar_collapsed;
             }
 
-            ui.add_space(4.0);
-
-            // Título principal adaptativo con icono de vuelo
-            let app_title = if screen_w < 680.0 {
-                format!("{} X-56", icons::PLANE)
-            } else if screen_w < 950.0 {
-                format!("{} X-56 RHINO", icons::PLANE)
-            } else {
-                format!("{} X-56 RHINO // RUST-EVDEV", icons::PLANE)
-            };
+            ui.add_space(SPACE_SM);
 
             ui.label(
-                RichText::new(app_title)
-                    .color(COLOR_PRIMARY)
-                    .size(13.0)
-                    .strong()
-                    .monospace(),
+                RichText::new(t!("app-title"))
+                    .color(COLOR_TEXT_PRIMARY)
+                    .size(FONT_HEADING),
             );
 
-            // Pill telemétrico "/dev/hidrawX & hidrawY | 50Hz POLLING" solo si hay suficiente espacio (>= 860px)
             if screen_w >= 860.0 {
-                ui.add_space(8.0);
-                Frame::new()
-                    .fill(COLOR_SURFACE_LOW)
-                    .stroke(Stroke::new(1.0, COLOR_OUTLINE_VARIANT))
-                    .corner_radius(CornerRadius::same(4))
-                    .inner_margin(Margin::symmetric(8, 4))
-                    .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            let (dot_rect, _) =
-                                ui.allocate_exact_size(Vec2::new(8.0, 8.0), Sense::hover());
-                            let any_hw = self.stick_node.is_some() || self.throttle_node.is_some();
-                            let dot_color = if any_hw {
-                                COLOR_TERTIARY_CONTAINER
-                            } else {
-                                COLOR_WARNING_AMBER
-                            };
-                            ui.painter()
-                                .circle_filled(dot_rect.center(), 3.5, dot_color);
-                            let short = |n: &Option<String>| n.clone().unwrap_or_default();
-                            let long = screen_w >= 1150.0;
-                            let poll_str = match (&self.stick_node, &self.throttle_node) {
-                                (Some(_), Some(_)) if long => format!(
-                                    "/dev/{} & {} | 50Hz POLLING",
-                                    short(&self.stick_node),
-                                    short(&self.throttle_node)
-                                ),
-                                (Some(_), Some(_)) => format!(
-                                    "{},{} | 50Hz",
-                                    short(&self.stick_node),
-                                    short(&self.throttle_node)
-                                ),
-                                (Some(_), None) => {
-                                    format!("/dev/{} (STICK) | 50Hz", short(&self.stick_node))
-                                }
-                                (None, Some(_)) => {
-                                    format!("/dev/{} (THROTTLE) | 50Hz", short(&self.throttle_node))
-                                }
-                                (None, None) => "SIN HARDWARE USB | 50Hz".to_string(),
-                            };
-                            ui.label(
-                                RichText::new(poll_str)
-                                    .color(COLOR_ON_SURFACE_VARIANT)
-                                    .size(10.5)
-                                    .strong()
-                                    .monospace(),
-                            );
-                        });
-                    });
+                ui.add_space(SPACE_MD);
+                let any_hw = self.stick_node.is_some() || self.throttle_node.is_some();
+                let dot_color = if any_hw {
+                    COLOR_POSITIVE
+                } else {
+                    COLOR_WARNING
+                };
+                theme::status_dot(ui, dot_color, 8.0);
+                ui.add_space(SPACE_XS);
+
+                let poll_str = match (&self.stick_node, &self.throttle_node) {
+                    (Some(s), Some(t)) => format!("{s} & {t} · 50 Hz"),
+                    (Some(s), None) => format!("{s} · 50 Hz"),
+                    (None, Some(t)) => format!("{t} · 50 Hz"),
+                    (None, None) => t!("header-no-usb"),
+                };
+                ui.label(
+                    RichText::new(poll_str)
+                        .color(COLOR_TEXT_SECONDARY)
+                        .size(FONT_META)
+                        .monospace(),
+                );
             }
 
-            // Derecha: Badge ACTIVE PROFILE en la esquina superior derecha y botones rápidos
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                // Badge ACTIVE PROFILE
-                let prof_badge_text = if screen_w < 900.0 {
-                    format!("P: {}", self.active_profile_name)
+                let prof_label = if screen_w < 900.0 {
+                    self.active_profile_name.clone()
                 } else {
                     format!("{}: {}", t!("header-profile"), self.active_profile_name)
                 };
-                let prof_btn = egui::Button::new(
-                    RichText::new(prof_badge_text)
-                        .color(COLOR_PRIMARY_CONTAINER)
-                        .size(10.0)
-                        .strong()
-                        .monospace(),
-                )
-                .fill(COLOR_SURFACE_LOW)
-                .stroke(Stroke::new(1.0, COLOR_PRIMARY_CONTAINER))
-                .corner_radius(CornerRadius::same(4));
-
-                if ui
-                    .add(prof_btn)
-                    .on_hover_text("Abrir gestión de perfiles TOML y Diagnóstico")
+                if theme::secondary_button(ui, &prof_label)
+                    .on_hover_text(t!("header-profile-tooltip"))
                     .clicked()
                 {
                     self.active_subsystem = ActiveSubsystem::Profiles;
                     self.doctor_tab.refresh();
                 }
 
-                ui.add_space(6.0);
+                ui.add_space(SPACE_XS);
 
-                // Botón rápido de Guardar con explorador nativo
                 let save_lbl = if screen_w < 780.0 {
                     icons::SAVE.to_string()
                 } else {
                     format!("{} {}", icons::SAVE, t!("header-save-profile"))
                 };
-                if theme::tactical_button(ui, &save_lbl, false, false)
+                if theme::secondary_button(ui, &save_lbl)
                     .on_hover_text(t!("header-save-profile-tooltip"))
                     .clicked()
                 {
                     self.spawn_file_dialog(ProfileDialogMode::Save);
                 }
 
-                ui.add_space(4.0);
+                ui.add_space(SPACE_XS);
 
-                // Botón rápido de Cargar con explorador nativo
                 let load_lbl = if screen_w < 780.0 {
                     icons::FOLDER_OPEN.to_string()
                 } else {
                     format!("{} {}", icons::FOLDER_OPEN, t!("header-load-profile"))
                 };
-                if theme::tactical_button(ui, &load_lbl, false, false)
+                if theme::secondary_button(ui, &load_lbl)
                     .on_hover_text(t!("header-load-profile-tooltip"))
                     .clicked()
                 {
@@ -635,7 +580,7 @@ impl X56App {
         });
     }
 
-    /// Sidebar colapsada en modo icono (52px de ancho) para pantallas compactas.
+    /// Collapsed icon-only sidebar (56px wide, 8px horizontal padding -> 40px inner width).
     fn render_collapsed_sidebar(&mut self, ui: &mut Ui) {
         let snap = self.button_monitor.snapshot();
         if self.programming_tab.follow_hardware_mode {
@@ -643,92 +588,90 @@ impl X56App {
         }
 
         ui.vertical_centered(|ui| {
-            ui.add_space(4.0);
+            ui.add_space(SPACE_XS);
             let nav_items = [
                 (
                     ActiveSubsystem::Curves,
                     icons::SLIDERS_HORIZONTAL,
-                    "Ejes y Curvas\nHALL 16-BIT & TRANSFER CURVES",
+                    t!("nav-curves"),
                 ),
                 (
                     ActiveSubsystem::Mapping,
                     icons::GAMEPAD,
-                    "Botones y Mapeo\nUINPUT MATRIX // M1-M2-S1",
+                    t!("nav-programming"),
                 ),
                 (
                     ActiveSubsystem::RgbCalibrate,
                     icons::LIGHTBULB,
-                    "Iluminación RGB & Calibración\nLED PWM & HALL ZERO",
+                    t!("nav-rgb"),
                 ),
-                (
-                    ActiveSubsystem::Profiles,
-                    icons::BOXES,
-                    "Perfiles & Exportación\nTOML PROFILES & DOCTOR",
-                ),
+                (ActiveSubsystem::Profiles, icons::BOXES, t!("nav-doctor")),
             ];
 
             for (sub, icon, tooltip) in nav_items {
                 let is_active = self.active_subsystem == sub;
-                let bg = if is_active {
-                    COLOR_SURFACE_HIGH
-                } else {
-                    COLOR_SURFACE_CONTAINER
-                };
-                let border = if is_active {
-                    Stroke::new(1.5, COLOR_PRIMARY_CONTAINER)
-                } else {
-                    Stroke::new(1.0, COLOR_OUTLINE_VARIANT)
-                };
+                let (rect, resp) = ui.allocate_exact_size(Vec2::new(40.0, 36.0), Sense::click());
+                let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
 
-                let btn = egui::Button::new(RichText::new(icon).size(16.0))
-                    .fill(bg)
-                    .stroke(border)
-                    .corner_radius(CornerRadius::same(6));
+                if ui.is_rect_visible(rect) {
+                    let painter = ui.painter();
+                    let fill = if is_active {
+                        COLOR_SURFACE_HIGH
+                    } else if resp.hovered() {
+                        COLOR_SURFACE_CONTAINER
+                    } else {
+                        egui::Color32::TRANSPARENT
+                    };
+                    painter.rect_filled(rect, CornerRadius::same(RADIUS_CONTROL), fill);
+                    if is_active {
+                        painter.hline(
+                            (rect.min.x + RADIUS_CONTROL as f32)
+                                ..=(rect.max.x - RADIUS_CONTROL as f32),
+                            rect.min.y + 1.0,
+                            Stroke::new(1.0, COLOR_TOP_HIGHLIGHT),
+                        );
+                        let accent_bar = egui::Rect::from_min_size(
+                            egui::Pos2::new(rect.min.x, rect.min.y + 6.0),
+                            Vec2::new(2.0, rect.height() - 12.0),
+                        );
+                        painter.rect_filled(accent_bar, CornerRadius::same(1), COLOR_ACCENT);
+                    }
+                    let icon_col = if is_active || resp.hovered() {
+                        COLOR_TEXT_PRIMARY
+                    } else {
+                        COLOR_TEXT_MUTED
+                    };
+                    painter.text(
+                        rect.center(),
+                        egui::Align2::CENTER_CENTER,
+                        icon,
+                        egui::FontId::proportional(FONT_BODY),
+                        icon_col,
+                    );
+                }
 
-                if ui
-                    .add_sized(Vec2::new(38.0, 38.0), btn)
-                    .on_hover_text(tooltip)
-                    .clicked()
-                {
+                if resp.on_hover_text(tooltip).clicked() {
                     self.active_subsystem = sub;
                     if sub == ActiveSubsystem::Profiles {
                         self.doctor_tab.refresh();
                     }
                 }
 
-                ui.add_space(6.0);
+                ui.add_space(SPACE_XS);
             }
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
-                // Indicador de modo
                 let mode_str = snap.active_mode.as_str();
-                Frame::new()
-                    .fill(COLOR_PRIMARY_CONTAINER)
-                    .corner_radius(CornerRadius::same(4))
-                    .inner_margin(Margin::symmetric(6, 3))
-                    .show(ui, |ui| {
-                        ui.label(
-                            RichText::new(mode_str)
-                                .color(COLOR_ON_PRIMARY_CONTAINER)
-                                .size(9.0)
-                                .strong()
-                                .monospace(),
-                        );
-                    })
-                    .response
-                    .on_hover_text(format!("Modo de hardware actual: {mode_str}"));
+                theme::mode_detent(ui, mode_str, true)
+                    .on_hover_text(t!("sidebar-mode-status", "mode" => mode_str));
 
-                ui.add_space(6.0);
+                ui.add_space(SPACE_SM);
 
-                // Punto uinput dinámico con tooltip
                 let uinput_ready = self.button_monitor.uinput_available();
                 let (uinput_color, uinput_tooltip) = if uinput_ready {
-                    (
-                        COLOR_TERTIARY_CONTAINER,
-                        t!("sidebar-uinput-online-tooltip"),
-                    )
+                    (COLOR_POSITIVE, t!("sidebar-uinput-online-tooltip"))
                 } else {
-                    (COLOR_ERROR, t!("sidebar-uinput-offline-tooltip"))
+                    (COLOR_NEGATIVE, t!("sidebar-uinput-offline-tooltip"))
                 };
                 let (dot_r, dot_resp) =
                     ui.allocate_exact_size(Vec2::new(10.0, 10.0), Sense::hover());
@@ -739,10 +682,7 @@ impl X56App {
         });
     }
 
-    /// 2. Sidebar izquierda responsiva.
-    ///
-    /// Subsystem Navigation con los 4 subsistemas aprobados y tarjeta inferior
-    /// con UINPUT DAEMON: ONLINE, MODE SWITCH (M1/M2/S1).
+    /// 2. Left Sidebar (240px expanded / 56px collapsed).
     fn render_sidebar(&mut self, ui: &mut Ui) {
         if self.sidebar_collapsed {
             self.render_collapsed_sidebar(ui);
@@ -755,423 +695,358 @@ impl X56App {
         }
 
         ui.vertical(|ui| {
+            ui.add_space(SPACE_XS);
             ui.label(
-                RichText::new("SUBSYSTEM NAVIGATION")
-                    .color(COLOR_OUTLINE)
-                    .size(10.0)
-                    .strong()
-                    .monospace(),
+                RichText::new(t!("sidebar-nav-heading"))
+                    .color(COLOR_TEXT_MUTED)
+                    .size(FONT_META),
             );
-            ui.add_space(8.0);
+            ui.add_space(SPACE_SM);
 
             let nav_items = [
                 (
                     ActiveSubsystem::Curves,
-                    format!("{}  {}", icons::SLIDERS_HORIZONTAL, t!("nav-curves")),
-                    "HALL 16-BIT & TRANSFER CURVES",
+                    icons::SLIDERS_HORIZONTAL,
+                    t!("nav-curves"),
                 ),
                 (
                     ActiveSubsystem::Mapping,
-                    format!("{}  {}", icons::GAMEPAD, t!("nav-programming")),
-                    "UINPUT MATRIX // M1-M2-S1",
+                    icons::GAMEPAD,
+                    t!("nav-programming"),
                 ),
                 (
                     ActiveSubsystem::RgbCalibrate,
-                    format!("{}  {}", icons::LIGHTBULB, t!("nav-rgb")),
-                    "LED PWM & HALL CENTER ZERO",
+                    icons::LIGHTBULB,
+                    t!("nav-rgb"),
                 ),
-                (
-                    ActiveSubsystem::Profiles,
-                    format!("{}  {}", icons::BOXES, t!("nav-doctor")),
-                    "TOML PROFILES & SYSTEM DOCTOR",
-                ),
+                (ActiveSubsystem::Profiles, icons::BOXES, t!("nav-doctor")),
             ];
 
-            for (sub, ref title, subtitle) in nav_items {
+            for (sub, icon, title) in nav_items {
                 let is_active = self.active_subsystem == sub;
-                let bg = if is_active {
-                    COLOR_SURFACE_HIGH
-                } else {
-                    COLOR_SURFACE_CONTAINER
-                };
-                let border = if is_active {
-                    Stroke::new(1.5, COLOR_PRIMARY_CONTAINER)
-                } else {
-                    Stroke::new(1.0, COLOR_OUTLINE_VARIANT)
-                };
-                let title_col = if is_active {
-                    COLOR_PRIMARY_CONTAINER
-                } else {
-                    COLOR_ON_SURFACE
-                };
+                let (rect, resp) =
+                    ui.allocate_exact_size(Vec2::new(ui.available_width(), 36.0), Sense::click());
+                let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
 
-                let resp = Frame::new()
-                    .fill(bg)
-                    .stroke(border)
-                    .corner_radius(CornerRadius::same(6))
-                    .inner_margin(Margin::symmetric(10, 8))
-                    .show(ui, |ui| {
-                        ui.set_min_width(ui.available_width());
-                        ui.horizontal(|ui| {
-                            // Barra vertical de acento si está activo
-                            let (bar_rect, _) =
-                                ui.allocate_exact_size(Vec2::new(3.0, 28.0), Sense::hover());
-                            if is_active {
-                                ui.painter()
-                                    .rect_filled(bar_rect, 1.5, COLOR_PRIMARY_CONTAINER);
-                            } else {
-                                ui.painter()
-                                    .rect_filled(bar_rect, 1.5, COLOR_OUTLINE_VARIANT);
-                            }
+                if ui.is_rect_visible(rect) {
+                    let painter = ui.painter();
+                    let fill = if is_active {
+                        COLOR_SURFACE_HIGH
+                    } else if resp.hovered() {
+                        COLOR_SURFACE_CONTAINER
+                    } else {
+                        egui::Color32::TRANSPARENT
+                    };
+                    painter.rect_filled(rect, CornerRadius::same(RADIUS_CONTROL), fill);
 
-                            ui.vertical(|ui| {
-                                ui.label(RichText::new(title).color(title_col).size(11.5).strong());
-                                ui.label(
-                                    RichText::new(subtitle)
-                                        .color(COLOR_OUTLINE)
-                                        .size(9.0)
-                                        .monospace(),
-                                );
-                            });
-                        });
-                    })
-                    .response;
+                    if is_active {
+                        painter.hline(
+                            (rect.min.x + RADIUS_CONTROL as f32)
+                                ..=(rect.max.x - RADIUS_CONTROL as f32),
+                            rect.min.y + 1.0,
+                            Stroke::new(1.0, COLOR_TOP_HIGHLIGHT),
+                        );
+                        let accent_bar = egui::Rect::from_min_size(
+                            egui::Pos2::new(rect.min.x, rect.min.y + 6.0),
+                            Vec2::new(2.0, rect.height() - 12.0),
+                        );
+                        painter.rect_filled(accent_bar, CornerRadius::same(1), COLOR_ACCENT);
+                    }
 
-                if resp.interact(Sense::click()).clicked() {
+                    let icon_col = if is_active || resp.hovered() {
+                        COLOR_TEXT_PRIMARY
+                    } else {
+                        COLOR_TEXT_MUTED
+                    };
+                    let text_col = if is_active {
+                        COLOR_TEXT_PRIMARY
+                    } else {
+                        COLOR_TEXT_SECONDARY
+                    };
+
+                    let icon_center =
+                        egui::Pos2::new(rect.min.x + SPACE_MD + 10.0, rect.center().y);
+                    painter.text(
+                        icon_center,
+                        egui::Align2::CENTER_CENTER,
+                        icon,
+                        egui::FontId::proportional(FONT_BODY),
+                        icon_col,
+                    );
+
+                    let label_pos =
+                        egui::Pos2::new(rect.min.x + SPACE_MD + 20.0 + SPACE_SM, rect.center().y);
+                    painter.text(
+                        label_pos,
+                        egui::Align2::LEFT_CENTER,
+                        &title,
+                        egui::FontId::proportional(FONT_BODY),
+                        text_col,
+                    );
+                }
+
+                if resp.clicked() {
                     self.active_subsystem = sub;
                     if sub == ActiveSubsystem::Profiles {
                         self.doctor_tab.refresh();
                     }
                 }
 
-                ui.add_space(6.0);
+                ui.add_space(SPACE_XS);
             }
 
-            // Empujar la tarjeta de estado de daemon al fondo de la Sidebar
             ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
-                Frame::new()
-                    .fill(COLOR_SURFACE_LOWEST)
-                    .stroke(Stroke::new(1.0, COLOR_OUTLINE_VARIANT))
-                    .corner_radius(CornerRadius::same(8))
-                    .inner_margin(Margin::same(12))
-                    .show(ui, |ui| {
-                        ui.set_min_width(ui.available_width());
-                        ui.vertical(|ui| {
-                            // UINPUT DAEMON (estado real de /dev/uinput)
-                            let uinput_ready = self.button_monitor.uinput_available();
-                            let (uinput_color, uinput_label, uinput_tooltip) = if uinput_ready {
-                                (
-                                    COLOR_TERTIARY_CONTAINER,
-                                    t!("sidebar-uinput-online"),
-                                    t!("sidebar-uinput-online-tooltip"),
-                                )
-                            } else {
-                                (
-                                    COLOR_ERROR,
-                                    t!("sidebar-uinput-offline"),
-                                    t!("sidebar-uinput-offline-tooltip"),
-                                )
-                            };
+                theme::subcard_frame().show(ui, |ui| {
+                    ui.set_min_width(ui.available_width());
+                    ui.vertical(|ui| {
+                        // uinput router status
+                        let uinput_ready = self.button_monitor.uinput_available();
+                        let (uinput_color, uinput_label, uinput_tooltip) = if uinput_ready {
+                            (
+                                COLOR_POSITIVE,
+                                t!("sidebar-uinput-online"),
+                                t!("sidebar-uinput-online-tooltip"),
+                            )
+                        } else {
+                            (
+                                COLOR_NEGATIVE,
+                                t!("sidebar-uinput-offline"),
+                                t!("sidebar-uinput-offline-tooltip"),
+                            )
+                        };
 
-                            ui.horizontal(|ui| {
-                                let (dot_r, _) =
-                                    ui.allocate_exact_size(Vec2::new(9.0, 9.0), Sense::hover());
-                                ui.painter()
-                                    .circle_filled(dot_r.center(), 4.0, uinput_color);
-                                ui.label(
-                                    RichText::new(uinput_label)
-                                        .color(uinput_color)
-                                        .size(10.5)
-                                        .strong()
-                                        .monospace(),
+                        ui.horizontal(|ui| {
+                            let (icon_slot, _) =
+                                ui.allocate_exact_size(Vec2::new(20.0, 16.0), Sense::hover());
+                            ui.painter()
+                                .circle_filled(icon_slot.center(), 4.0, uinput_color);
+                            ui.label(
+                                RichText::new(uinput_label)
+                                    .color(COLOR_TEXT_SECONDARY)
+                                    .size(FONT_META),
+                            );
+                        })
+                        .response
+                        .on_hover_text(uinput_tooltip);
+
+                        ui.add_space(SPACE_XS);
+
+                        // Clickable udev / Proton row
+                        let udev_check = self
+                            .doctor_tab
+                            .report
+                            .checks
+                            .iter()
+                            .find(|c| c.category == "udev");
+                        let (proton_color, proton_icon, proton_label) = match udev_check {
+                            Some(c) if c.status == CheckStatus::Ok && uinput_ready => (
+                                COLOR_POSITIVE,
+                                icons::SHIELD_CHECK,
+                                t!("sidebar-proton-udev-ok"),
+                            ),
+                            Some(c) if c.status == CheckStatus::Fail => (
+                                COLOR_NEGATIVE,
+                                icons::ALERT_TRIANGLE,
+                                t!("sidebar-proton-udev-fail"),
+                            ),
+                            None => (
+                                COLOR_NEGATIVE,
+                                icons::ALERT_TRIANGLE,
+                                t!("sidebar-proton-udev-fail"),
+                            ),
+                            Some(_) => (
+                                COLOR_WARNING,
+                                icons::ALERT_TRIANGLE,
+                                t!("sidebar-proton-udev-warn"),
+                            ),
+                        };
+                        let uinput_status = if uinput_ready {
+                            t!("sidebar-uinput-online")
+                        } else {
+                            t!("sidebar-uinput-offline")
+                        };
+                        let detail = match udev_check {
+                            Some(check) => match &check.remedy {
+                                Some(remedy) => {
+                                    format!("{} ({}) [{}]", check.message, remedy, uinput_status)
+                                }
+                                None => format!("{} [{}]", check.message, uinput_status),
+                            },
+                            None => format!("{} [{}]", t!("sidebar-udev-not-run"), uinput_status),
+                        };
+
+                        let (udev_rect, udev_resp) = ui.allocate_exact_size(
+                            Vec2::new(ui.available_width(), 24.0),
+                            Sense::click(),
+                        );
+                        let udev_resp = udev_resp.on_hover_cursor(egui::CursorIcon::PointingHand);
+                        if ui.is_rect_visible(udev_rect) {
+                            let painter = ui.painter();
+                            if udev_resp.hovered() {
+                                painter.rect_filled(
+                                    udev_rect,
+                                    CornerRadius::same(RADIUS_CONTROL),
+                                    COLOR_SURFACE_HIGH,
                                 );
-                            })
-                            .response
-                            .on_hover_text(uinput_tooltip);
-
-                            ui.add_space(4.0);
-
-                            // PROTON / UDEV (70-x56.rules)
-                            let udev_check = self
-                                .doctor_tab
-                                .report
-                                .checks
-                                .iter()
-                                .find(|c| c.category == "udev");
-                            let (proton_color, proton_icon, proton_label) = match udev_check {
-                                Some(c) if c.status == CheckStatus::Ok && uinput_ready => (
-                                    COLOR_TERTIARY_CONTAINER,
-                                    icons::SHIELD_CHECK,
-                                    t!("sidebar-proton-udev-ok"),
-                                ),
-                                Some(c) if c.status == CheckStatus::Fail => (
-                                    COLOR_ERROR,
-                                    icons::ALERT_TRIANGLE,
-                                    t!("sidebar-proton-udev-fail"),
-                                ),
-                                None => (
-                                    COLOR_ERROR,
-                                    icons::ALERT_TRIANGLE,
-                                    t!("sidebar-proton-udev-fail"),
-                                ),
-                                Some(_) => (
-                                    COLOR_WARNING_AMBER,
-                                    icons::ALERT_TRIANGLE,
-                                    t!("sidebar-proton-udev-warn"),
-                                ),
-                            };
-                            let uinput_status = if uinput_ready {
-                                "/dev/uinput: OK"
-                            } else {
-                                "/dev/uinput: unavailable"
-                            };
-                            let detail = match udev_check {
-                                Some(check) => match &check.remedy {
-                                    Some(remedy) => {
-                                        format!(
-                                            "{} ({}) [{}]",
-                                            check.message, remedy, uinput_status
-                                        )
-                                    }
-                                    None => format!("{} [{}]", check.message, uinput_status),
-                                },
-                                None => format!("udev check not run [{}]", uinput_status),
-                            };
-                            let proton_resp = ui
-                                .horizontal(|ui| {
-                                    ui.label(
-                                        RichText::new(proton_icon).color(proton_color).size(11.0),
-                                    );
-                                    ui.label(
-                                        RichText::new(proton_label)
-                                            .color(proton_color)
-                                            .size(10.0)
-                                            .strong()
-                                            .monospace(),
-                                    );
-                                })
-                                .response
-                                .interact(Sense::click())
-                                .on_hover_text(t!(
-                                    "sidebar-proton-udev-tooltip",
-                                    "detail" => detail.as_str()
-                                ));
-                            if proton_resp.clicked() {
-                                self.active_subsystem = ActiveSubsystem::Profiles;
-                                self.doctor_tab.refresh();
                             }
+                            let icon_center =
+                                egui::Pos2::new(udev_rect.min.x + 10.0, udev_rect.center().y);
+                            painter.text(
+                                icon_center,
+                                egui::Align2::CENTER_CENTER,
+                                proton_icon,
+                                egui::FontId::proportional(FONT_META),
+                                proton_color,
+                            );
+                            let label_pos = egui::Pos2::new(
+                                udev_rect.min.x + 20.0 + SPACE_SM,
+                                udev_rect.center().y,
+                            );
+                            painter.text(
+                                label_pos,
+                                egui::Align2::LEFT_CENTER,
+                                &proton_label,
+                                egui::FontId::proportional(FONT_META),
+                                if udev_resp.hovered() {
+                                    COLOR_TEXT_PRIMARY
+                                } else {
+                                    COLOR_TEXT_SECONDARY
+                                },
+                            );
+                        }
+                        if udev_resp
+                            .on_hover_text(t!(
+                                "sidebar-proton-udev-tooltip",
+                                "detail" => detail.as_str()
+                            ))
+                            .clicked()
+                        {
+                            self.active_subsystem = ActiveSubsystem::Profiles;
+                            self.doctor_tab.refresh();
+                        }
 
-                            ui.add_space(8.0);
-                            ui.separator();
-                            ui.add_space(6.0);
+                        ui.add_space(SPACE_SM);
+                        ui.separator();
+                        ui.add_space(SPACE_SM);
 
-                            // MODE SWITCH con pills M1 (activo cian) / M2 / S1 sincronizados
-                            ui.horizontal(|ui| {
-                                ui.label(
-                                    RichText::new("MODE SWITCH:")
-                                        .color(COLOR_OUTLINE)
-                                        .size(9.5)
-                                        .strong()
-                                        .monospace(),
-                                );
-
-                                for mode in ModeSlot::ALL {
-                                    let is_mode_active = self.programming_tab.selected_mode == mode;
-                                    let (pill_bg, pill_fg, pill_border) = if is_mode_active {
-                                        (
-                                            COLOR_PRIMARY_CONTAINER,
-                                            COLOR_ON_PRIMARY_CONTAINER,
-                                            COLOR_PRIMARY,
-                                        )
-                                    } else {
-                                        (
-                                            COLOR_SURFACE_CONTAINER,
-                                            COLOR_ON_SURFACE_VARIANT,
-                                            COLOR_OUTLINE_VARIANT,
-                                        )
-                                    };
-
-                                    let btn = egui::Button::new(
-                                        RichText::new(mode.as_str())
-                                            .color(pill_fg)
-                                            .size(10.0)
-                                            .strong()
-                                            .monospace(),
-                                    )
-                                    .fill(pill_bg)
-                                    .stroke(Stroke::new(1.0, pill_border))
-                                    .corner_radius(CornerRadius::same(4));
-
-                                    if ui.add(btn).clicked() {
-                                        self.programming_tab.follow_hardware_mode = false;
-                                        self.programming_tab.selected_mode = mode;
-                                    }
+                        // Rotary mode detent selector (M1 / M2 / S1)
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                RichText::new(t!("sidebar-mode-switch"))
+                                    .color(COLOR_TEXT_MUTED)
+                                    .size(FONT_META),
+                            );
+                            for mode in ModeSlot::ALL {
+                                let is_mode_active = self.programming_tab.selected_mode == mode;
+                                if theme::mode_detent(ui, mode.as_str(), is_mode_active).clicked() {
+                                    self.programming_tab.follow_hardware_mode = false;
+                                    self.programming_tab.selected_mode = mode;
                                 }
-                            });
+                            }
+                        });
 
-                            ui.add_space(8.0);
+                        ui.add_space(SPACE_SM);
+                        ui.separator();
+                        ui.add_space(SPACE_SM);
 
-                            ui.add_space(8.0);
-                            ui.separator();
-                            ui.add_space(6.0);
+                        // Run in background on close (neutral text)
+                        ui.horizontal(|ui| {
+                            let prev_tray = self.minimize_to_tray_on_close;
+                            ui.checkbox(&mut self.minimize_to_tray_on_close, "");
+                            let lbl = RichText::new(t!("sidebar-run-in-background"))
+                                .color(COLOR_TEXT_SECONDARY)
+                                .size(FONT_META);
+                            if ui
+                                .add(egui::Label::new(lbl).sense(Sense::click()))
+                                .clicked()
+                            {
+                                self.minimize_to_tray_on_close = !self.minimize_to_tray_on_close;
+                            }
+                            if self.minimize_to_tray_on_close != prev_tray {
+                                self.persist_session_config();
+                            }
+                        })
+                        .response
+                        .on_hover_text(t!("sidebar-run-in-background-desc"));
 
-                            // Opción de quedar corriendo en segundo plano al cerrar
-                            ui.horizontal(|ui| {
-                                let prev_tray = self.minimize_to_tray_on_close;
-                                ui.checkbox(&mut self.minimize_to_tray_on_close, "");
-                                let lbl = RichText::new(t!("sidebar-run-in-background"))
-                                    .color(if self.minimize_to_tray_on_close {
-                                        COLOR_PRIMARY_CONTAINER
-                                    } else {
-                                        COLOR_OUTLINE
-                                    })
-                                    .size(9.0)
-                                    .strong()
-                                    .monospace();
-                                if ui
-                                    .add(egui::Label::new(lbl).sense(Sense::click()))
-                                    .clicked()
-                                {
-                                    self.minimize_to_tray_on_close =
-                                        !self.minimize_to_tray_on_close;
-                                }
-                                if self.minimize_to_tray_on_close != prev_tray {
+                        ui.add_space(SPACE_SM);
+                        ui.separator();
+                        ui.add_space(SPACE_SM);
+
+                        // Language segmented toggle (EN / ES)
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                RichText::new(t!("sidebar-language"))
+                                    .color(COLOR_TEXT_MUTED)
+                                    .size(FONT_META),
+                            );
+                            let cur_lang = i18n::current_language();
+                            for (lang, label) in [(Language::EnUs, "EN"), (Language::EsEs, "ES")] {
+                                if theme::segmented_button(ui, label, cur_lang == lang).clicked() {
+                                    i18n::set_language(lang);
                                     self.persist_session_config();
                                 }
-                            })
-                            .response
-                            .on_hover_text(t!("sidebar-run-in-background-desc"));
-
-                            ui.add_space(8.0);
-                            ui.separator();
-                            ui.add_space(6.0);
-
-                            // Selector de Idioma (Project Fluent)
-                            ui.horizontal(|ui| {
-                                ui.label(
-                                    RichText::new(format!("{}:", t!("sidebar-language")))
-                                        .color(COLOR_OUTLINE)
-                                        .size(9.5)
-                                        .strong()
-                                        .monospace(),
-                                );
-
-                                let cur_lang = i18n::current_language();
-                                for (lang, label) in
-                                    [(Language::EnUs, "EN"), (Language::EsEs, "ES")]
-                                {
-                                    let is_active = cur_lang == lang;
-                                    let (pill_bg, pill_fg, pill_border) = if is_active {
-                                        (
-                                            COLOR_PRIMARY_CONTAINER,
-                                            COLOR_ON_PRIMARY_CONTAINER,
-                                            COLOR_PRIMARY,
-                                        )
-                                    } else {
-                                        (
-                                            COLOR_SURFACE_CONTAINER,
-                                            COLOR_ON_SURFACE_VARIANT,
-                                            COLOR_OUTLINE_VARIANT,
-                                        )
-                                    };
-
-                                    let btn = egui::Button::new(
-                                        RichText::new(label)
-                                            .color(pill_fg)
-                                            .size(10.0)
-                                            .strong()
-                                            .monospace(),
-                                    )
-                                    .fill(pill_bg)
-                                    .stroke(Stroke::new(1.0, pill_border))
-                                    .corner_radius(CornerRadius::same(4));
-
-                                    if ui.add(btn).clicked() {
-                                        i18n::set_language(lang);
-                                        self.persist_session_config();
-                                    }
-                                }
-                            });
+                            }
                         });
                     });
+                });
             });
         });
     }
 
-    /// 3. Dock inferior de acciones tácticas.
-    ///
-    /// "MODAL TEST EN VIVO", "RECALIBRAR CENTRO CERO", "REVERTIR CAMBIOS", "APLICAR A UINPUT // GUARDAR".
+    /// 3. Bottom Action Dock (48px).
     fn render_bottom_dock(&mut self, ui: &mut Ui) {
         let screen_w = ui
             .ctx()
             .input(|i| i.raw.screen_rect)
             .map(|r| r.width())
-            .unwrap_or(1200.0);
+            .unwrap_or(1280.0);
 
         ui.horizontal_centered(|ui| {
-            // Estado / Mensaje informativo a la izquierda (oculto en pantallas muy estrechas si hay colisión)
             if screen_w >= 650.0 {
                 if let Some((ref msg, is_err)) = self.top_banner_message {
                     let col = if is_err {
-                        COLOR_ERROR
+                        COLOR_NEGATIVE
                     } else {
-                        COLOR_TERTIARY_CONTAINER
+                        COLOR_POSITIVE
                     };
-                    ui.label(
-                        RichText::new(format!("{} {msg}", icons::CHEVRON_RIGHT))
-                            .color(col)
-                            .size(11.0)
-                            .monospace(),
-                    );
+                    ui.label(RichText::new(msg).color(col).size(FONT_META));
                 } else if let Some((ref msg, is_err)) = self.curves_tab.status_message {
                     let col = if is_err {
-                        COLOR_ERROR
+                        COLOR_NEGATIVE
                     } else {
-                        COLOR_TERTIARY_FIXED_DIM
+                        COLOR_POSITIVE
                     };
-                    ui.label(
-                        RichText::new(format!("{} {msg}", icons::CHEVRON_RIGHT))
-                            .color(col)
-                            .size(11.0)
-                            .monospace(),
-                    );
+                    ui.label(RichText::new(msg).color(col).size(FONT_META));
                 } else {
                     let connected = self.stick_node.is_some() || self.throttle_node.is_some();
                     let tele_str = if !connected {
-                        format!(
-                            "{} MODO SIN CONEXIÓN // CONECTA X56 HOTAS",
-                            icons::CHEVRON_RIGHT
-                        )
+                        t!("dock-offline")
                     } else if screen_w >= 900.0 {
-                        format!(
-                            "{} TELEMETRÍA LISTA // USB HID INTERFAZ 2",
-                            icons::CHEVRON_RIGHT
-                        )
+                        t!("dock-ready")
                     } else {
-                        format!("{} USB HID OK", icons::CHEVRON_RIGHT)
+                        t!("dock-ready-short")
                     };
                     ui.label(
                         RichText::new(tele_str)
-                            .color(COLOR_ON_SURFACE_VARIANT)
-                            .size(10.5)
-                            .monospace(),
+                            .color(COLOR_TEXT_SECONDARY)
+                            .size(FONT_META),
                     );
                 }
             }
 
-            // Botones de acción táctica a la derecha adaptativos
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                // 4. APLICAR A UINPUT // GUARDAR (acento primario)
+                // Single primary off-white CTA
                 let apply_lbl = if screen_w < 720.0 {
                     icons::SAVE.to_string()
                 } else if screen_w < 1100.0 {
-                    format!("{} APLICAR", icons::SAVE)
+                    format!("{} {}", icons::SAVE, t!("dock-apply-short"))
                 } else {
-                    format!("{} APLICAR A UINPUT // GUARDAR", icons::SAVE)
+                    format!("{} {}", icons::SAVE, t!("dock-apply"))
                 };
 
-                if theme::tactical_button(ui, &apply_lbl, false, true)
-                    .on_hover_text("Aplicar configuración actual a uinput y guardar perfil")
+                if theme::primary_button(ui, &apply_lbl)
+                    .on_hover_text(t!("dock-apply-tooltip"))
                     .clicked()
                 {
                     self.curves_tab.apply_to_hardware();
@@ -1181,19 +1056,18 @@ impl X56App {
                     self.save_current_profile();
                 }
 
-                ui.add_space(6.0);
+                ui.add_space(SPACE_SM);
 
-                // 3. REVERTIR CAMBIOS
                 let revert_lbl = if screen_w < 720.0 {
                     icons::ROTATE_CCW.to_string()
                 } else if screen_w < 1100.0 {
-                    format!("{} REVERTIR", icons::ROTATE_CCW)
+                    format!("{} {}", icons::ROTATE_CCW, t!("dock-revert-short"))
                 } else {
-                    format!("{} REVERTIR CAMBIOS", icons::ROTATE_CCW)
+                    format!("{} {}", icons::ROTATE_CCW, t!("dock-revert"))
                 };
 
-                if theme::tactical_button(ui, &revert_lbl, false, false)
-                    .on_hover_text("Revertir cambios a los valores del hardware")
+                if theme::secondary_button(ui, &revert_lbl)
+                    .on_hover_text(t!("dock-revert-tooltip"))
                     .clicked()
                 {
                     self.curves_tab.reset_current_axis();
@@ -1201,19 +1075,18 @@ impl X56App {
                     self.top_banner_message = self.curves_tab.status_message.clone();
                 }
 
-                ui.add_space(6.0);
+                ui.add_space(SPACE_SM);
 
-                // 2. MUESTREAR CENTRO
                 let recal_lbl = if screen_w < 720.0 {
                     icons::CROSSHAIR.to_string()
                 } else if screen_w < 1100.0 {
-                    format!("{} MUESTREAR", icons::CROSSHAIR)
+                    format!("{} {}", icons::CROSSHAIR, t!("dock-sample-short"))
                 } else {
-                    format!("{} MUESTREAR CENTRO", icons::CROSSHAIR)
+                    format!("{} {}", icons::CROSSHAIR, t!("dock-sample"))
                 };
 
-                if theme::tactical_button(ui, &recal_lbl, false, false)
-                    .on_hover_text("Muestrear centro magnético Hall en modo simulación (graba a EEPROM en la pestaña Calibración)")
+                if theme::secondary_button(ui, &recal_lbl)
+                    .on_hover_text(t!("dock-sample-tooltip"))
                     .clicked()
                 {
                     self.calibrate_tab.execute_calibration(true);
@@ -1221,28 +1094,29 @@ impl X56App {
                     self.top_banner_message = self.calibrate_tab.status_message.clone();
                 }
 
-                ui.add_space(6.0);
+                ui.add_space(SPACE_SM);
 
-                // 1. MODAL TEST EN VIVO
                 let test_lbl = if screen_w < 720.0 {
                     icons::PLAY.to_string()
                 } else if screen_w < 1100.0 {
-                    format!("{} TEST", icons::PLAY)
+                    format!("{} {}", icons::PLAY, t!("dock-test-short"))
                 } else {
-                    format!("{} MODAL TEST EN VIVO", icons::PLAY)
+                    format!("{} {}", icons::PLAY, t!("dock-test"))
                 };
 
-                if theme::tactical_button(ui, &test_lbl, self.show_live_test_modal, false)
-                    .on_hover_text("Abrir ventana modal de telemetría y pruebas en vivo")
-                    .clicked()
-                {
+                let test_resp = if self.show_live_test_modal {
+                    theme::segmented_button(ui, &test_lbl, true)
+                } else {
+                    theme::ghost_button(ui, &test_lbl)
+                };
+                if test_resp.on_hover_text(t!("dock-test-tooltip")).clicked() {
                     self.show_live_test_modal = !self.show_live_test_modal;
                 }
             });
         });
     }
 
-    /// Subsistema 3: Agrupa Iluminación RGB y Calibrador Hall en diseño Avionics Vector.
+    /// Subsystem 3: RGB Lighting and Hall Center Calibration.
     fn render_rgb_calibrate_subsystem(&mut self, ui: &mut Ui) {
         let mut save_requested = false;
         egui::ScrollArea::vertical()
@@ -1256,7 +1130,7 @@ impl X56App {
                         save_requested = true;
                     }
                 });
-                ui.add_space(12.0);
+                ui.add_space(SPACE_MD);
                 theme::card_frame().show(ui, |ui| {
                     self.calibrate_tab.ui(ui);
                 });
@@ -1266,113 +1140,112 @@ impl X56App {
         }
     }
 
-    /// Subsistema 4: Gestión de Perfiles TOML, exportación y Diagnóstico Doctor.
+    /// Subsystem 4: TOML Profiles & System Diagnostics.
     fn render_profiles_subsystem(&mut self, ui: &mut Ui) {
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 theme::card_frame().show(ui, |ui| {
-                    ui.label(
-                        RichText::new(format!(
-                            "{} GESTIÓN DE PERFILES TOML & EXPORTACIÓN",
-                            icons::FILE_TEXT
-                        ))
-                        .color(COLOR_PRIMARY)
-                        .size(13.0)
-                        .strong()
-                        .monospace(),
-                    );
-                    ui.add_space(8.0);
+                    ui.set_min_width(ui.available_width());
+                    theme::section_heading(ui, &t!("profile-section-title"));
+                    ui.add_space(SPACE_MD);
 
+                    // Row 1: Profile name
                     ui.horizontal(|ui| {
                         ui.label(
-                            RichText::new("NOMBRE DEL PERFIL:")
-                                .color(COLOR_OUTLINE)
-                                .size(11.0)
-                                .monospace(),
+                            RichText::new(t!("profile-name-label"))
+                                .color(COLOR_TEXT_SECONDARY)
+                                .size(FONT_META),
                         );
-                        ui.text_edit_singleline(&mut self.active_profile_name);
-
-                        ui.separator();
-
-                        ui.label(
-                            RichText::new("ARCHIVO TOML:")
-                                .color(COLOR_OUTLINE)
-                                .size(11.0)
-                                .monospace(),
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.active_profile_name)
+                                .desired_width(ui.available_width().min(380.0)),
                         );
-                        ui.text_edit_singleline(&mut self.profile_path_buf);
-                        let exp_btn = format!("{} EXPLORAR...", icons::FOLDER);
-                        if theme::tactical_button(ui, &exp_btn, false, false).clicked() {
-                            self.spawn_file_dialog(ProfileDialogMode::Load);
-                        }
                     });
 
-                    ui.add_space(8.0);
+                    ui.add_space(SPACE_SM);
+
+                    // Row 2: TOML file path (full remaining width) + Browse button
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            RichText::new(t!("profile-path-label"))
+                                .color(COLOR_TEXT_SECONDARY)
+                                .size(FONT_META),
+                        );
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let exp_btn = format!("{} {}", icons::FOLDER, t!("profile-browse"));
+                            if theme::secondary_button(ui, &exp_btn).clicked() {
+                                self.spawn_file_dialog(ProfileDialogMode::Load);
+                            }
+                            ui.add(
+                                egui::TextEdit::singleline(&mut self.profile_path_buf)
+                                    .desired_width(ui.available_width()),
+                            );
+                        });
+                    });
+
+                    ui.add_space(SPACE_MD);
 
                     ui.horizontal_wrapped(|ui| {
-                        let load_btn = format!("{} CARGAR Y APLICAR PERFIL", icons::FOLDER_OPEN);
-                        if theme::tactical_button(ui, &load_btn, false, true).clicked() {
+                        let load_btn =
+                            format!("{} {}", icons::FOLDER_OPEN, t!("profile-load-apply"));
+                        if theme::secondary_button(ui, &load_btn).clicked() {
                             self.load_profile_from_disk();
                         }
 
-                        let exp_toml = format!("{} EXPORTAR / GUARDAR TOML", icons::SAVE);
-                        if theme::tactical_button(ui, &exp_toml, false, false).clicked() {
+                        let exp_toml = format!("{} {}", icons::SAVE, t!("profile-save"));
+                        if theme::secondary_button(ui, &exp_toml).clicked() {
                             self.save_current_profile();
                         }
 
-                        let save_as = format!("{} GUARDAR COMO...", icons::SAVE);
-                        if theme::tactical_button(ui, &save_as, false, false)
-                            .on_hover_text(
-                                "Guardar perfil en nueva ubicación con el explorador de archivos",
-                            )
+                        let save_as = format!("{} {}", icons::SAVE, t!("profile-save-as"));
+                        if theme::secondary_button(ui, &save_as)
+                            .on_hover_text(t!("profile-save-as-tooltip"))
                             .clicked()
                         {
                             self.spawn_file_dialog(ProfileDialogMode::Save);
                         }
 
-                        let reset_btn = format!("{} RESTAURAR VALORES DE FÁBRICA", icons::FACTORY);
-                        if theme::tactical_button(ui, &reset_btn, false, false).clicked() {
-                            let connected = self.stick_node.is_some() || self.throttle_node.is_some();
+                        let reset_btn =
+                            format!("{} {}", icons::FACTORY, t!("profile-factory-reset"));
+                        if theme::secondary_button(ui, &reset_btn).clicked() {
+                            let connected =
+                                self.stick_node.is_some() || self.throttle_node.is_some();
                             match ProfileManager::reset_defaults(TargetDevice::All) {
                                 Ok(_) if connected => {
                                     self.curves_tab.read_from_hardware();
-                                    self.top_banner_message = Some((
-                                        "Valores de fábrica restablecidos en Stick y Throttle."
-                                            .into(),
-                                        false,
-                                    ));
+                                    self.top_banner_message =
+                                        Some((t!("profile-factory-reset-ok"), false));
                                 }
                                 Ok(_) => {
-                                    self.top_banner_message = Some((
-                                        "Sin dispositivos USB conectados: no se restableció hardware."
-                                            .into(),
-                                        true,
-                                    ));
+                                    self.top_banner_message =
+                                        Some((t!("profile-factory-reset-no-usb"), true));
                                 }
                                 Err(err) => {
+                                    let err_str = err.to_string();
                                     self.top_banner_message = Some((
-                                        format!("Error restableciendo valores de fábrica: {err}"),
+                                        t!("profile-factory-reset-err", "err" => &err_str),
                                         true,
                                     ));
                                 }
                             }
                         }
 
-                        ui.separator();
+                        ui.add_space(SPACE_SM);
 
-                        theme::telemetry_badge(
+                        theme::meta_kv(
                             ui,
-                            "SPRING SAVED:",
-                            self.curves_tab.installed_spring.label(),
+                            &t!("profile-spring-saved"),
+                            &self.curves_tab.installed_spring.localized_label(),
                             self.curves_tab.installed_spring.color(),
                         );
                     });
                 });
 
-                ui.add_space(12.0);
+                ui.add_space(SPACE_MD);
 
                 theme::card_frame().show(ui, |ui| {
+                    ui.set_min_width(ui.available_width());
                     self.doctor_tab.ui(ui);
                 });
             });
@@ -1387,103 +1260,142 @@ impl X56App {
         let snap = self.button_monitor.snapshot();
         let mut open = self.show_live_test_modal;
 
-        let win_title = format!(
-            "{} MODAL TEST EN VIVO // TELEMETRÍA HOTAS & UINPUT",
-            icons::ACTIVITY
-        );
-        egui::Window::new(win_title)
+        egui::Window::new(t!("live-test-title"))
             .open(&mut open)
             .collapsible(false)
             .resizable(true)
-            .default_width(520.0)
+            .default_width(620.0)
             .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    theme::telemetry_badge(
+                    theme::meta_kv(
                         ui,
-                        "ACTIVE MODE:",
+                        &t!("live-test-mode"),
                         snap.active_mode.as_str(),
-                        COLOR_PRIMARY_CONTAINER,
+                        COLOR_ACCENT,
                     );
-                    theme::telemetry_badge(
-                        ui,
-                        "SLD:",
-                        if snap.slider_sld_on { "ON" } else { "OFF" },
-                        COLOR_TERTIARY_CONTAINER,
-                    );
-                    theme::telemetry_badge(
-                        ui,
-                        "PRESSED BTNS:",
-                        &snap.pressed_buttons.len().to_string(),
-                        COLOR_WARNING_AMBER,
-                    );
+                    ui.add_space(SPACE_MD);
+                    let sld_val = if snap.slider_sld_on {
+                        t!("live-test-on")
+                    } else {
+                        t!("live-test-off")
+                    };
+                    let sld_col = if snap.slider_sld_on {
+                        COLOR_POSITIVE
+                    } else {
+                        COLOR_TEXT_SECONDARY
+                    };
+                    theme::meta_kv(ui, &t!("live-test-sld"), &sld_val, sld_col);
+                    ui.add_space(SPACE_MD);
+                    let pressed_count = snap.pressed_buttons.len().to_string();
+                    let pressed_col = if snap.pressed_buttons.is_empty() {
+                        COLOR_TEXT_SECONDARY
+                    } else {
+                        COLOR_TEXT_PRIMARY
+                    };
+                    theme::meta_kv(ui, &t!("live-test-pressed"), &pressed_count, pressed_col);
                 });
 
-                ui.add_space(8.0);
-                theme::sunken_frame().show(ui, |ui| {
+                ui.add_space(SPACE_SM);
+                theme::canvas_frame().show(ui, |ui| {
+                    ui.set_min_width(ui.available_width());
                     let (mag, deg) = live_axes.gimbal_vector();
+                    let sx = format!("{:+.3}", live_axes.stick_x);
+                    let sy = format!("{:+.3}", live_axes.stick_y);
+                    let sz = format!("{:+.3}", live_axes.stick_z);
+                    let svec = format!("{mag:.3}");
+                    let sdeg = format!("{deg:03.0}");
                     ui.label(
-                        RichText::new(format!(
-                            "STICK GIMBAL  -> X: {:+.3} | Y: {:+.3} | Z (TWIST): {:+.3} | VECT: {:.3} ({:02.0}°)",
-                            live_axes.stick_x, live_axes.stick_y, live_axes.stick_z, mag, deg
+                        RichText::new(t!(
+                            "live-test-stick-row",
+                            "x" => &sx,
+                            "y" => &sy,
+                            "z" => &sz,
+                            "vec" => &svec,
+                            "deg" => &sdeg
                         ))
-                        .color(COLOR_TERTIARY_CONTAINER)
-                        .size(11.0)
+                        .color(COLOR_TEXT_PRIMARY)
+                        .size(FONT_META)
                         .monospace(),
                     );
+
+                    let mx = format!("{:+.3}", live_axes.ministick_x);
+                    let my = format!("{:+.3}", live_axes.ministick_y);
+                    let pov = live_axes.pov_direction_label();
                     ui.label(
-                        RichText::new(format!(
-                            "MINISTICK/POV -> SLEW X: {:+.2} | SLEW Y: {:+.2} | POV1: {}",
-                            live_axes.ministick_x,
-                            live_axes.ministick_y,
-                            live_axes.pov_direction_label()
+                        RichText::new(t!(
+                            "live-test-mini-row",
+                            "x" => &mx,
+                            "y" => &my,
+                            "pov" => pov
                         ))
-                        .color(COLOR_PRIMARY_FIXED)
-                        .size(11.0)
+                        .color(COLOR_TEXT_SECONDARY)
+                        .size(FONT_META)
                         .monospace(),
                     );
+
+                    let tl = format!("{:5.1}", live_axes.throttle_left * 100.0);
+                    let tr = format!("{:5.1}", live_axes.throttle_right * 100.0);
+                    let r1 = format!("{:+.2}", live_axes.rotary_1);
+                    let r2 = format!("{:+.2}", live_axes.rotary_2);
+                    let r3 = format!("{:+.2}", live_axes.rotary_3);
+                    let r4 = format!("{:+.2}", live_axes.rotary_4);
                     ui.label(
-                        RichText::new(format!(
-                            "DUAL THROTTLE -> LEFT: {:.1}% | RIGHT: {:.1}% | R1:{:+.2} R2:{:+.2} R3:{:+.2} R4:{:+.2}",
-                            live_axes.throttle_left * 100.0,
-                            live_axes.throttle_right * 100.0,
-                            live_axes.rotary_1,
-                            live_axes.rotary_2,
-                            live_axes.rotary_3,
-                            live_axes.rotary_4
+                        RichText::new(t!(
+                            "live-test-throttle-row",
+                            "l" => &tl,
+                            "r" => &tr,
+                            "r1" => &r1,
+                            "r2" => &r2,
+                            "r3" => &r3,
+                            "r4" => &r4
                         ))
-                        .color(COLOR_ON_SURFACE)
-                        .size(11.0)
+                        .color(COLOR_TEXT_PRIMARY)
+                        .size(FONT_META)
                         .monospace(),
                     );
+
                     let (t_mag, t_deg) = live_axes.throttle_gimbal_vector();
                     let t_push = snap.pressed_buttons.contains("thr_ministick_push");
+                    let tx = format!("{:+.3}", live_axes.throttle_ministick_x);
+                    let ty = format!("{:+.3}", live_axes.throttle_ministick_y);
+                    let tvec = format!("{t_mag:.3}");
+                    let tdeg = format!("{t_deg:03.0}");
+                    let push_state = if t_push {
+                        t!("live-test-state-pressed")
+                    } else {
+                        t!("live-test-state-idle")
+                    };
                     ui.label(
-                        RichText::new(format!(
-                            "THR MINI-GIMB -> SLEW X: {:+.3} | SLEW Y: {:+.3} | VECT: {:.3} ({:02.0}°) | PUSH: {}",
-                            live_axes.throttle_ministick_x,
-                            live_axes.throttle_ministick_y,
-                            t_mag,
-                            t_deg,
-                            if t_push { "[PULSADO]" } else { "[REPOSO]" }
+                        RichText::new(t!(
+                            "live-test-thr-mini-row",
+                            "x" => &tx,
+                            "y" => &ty,
+                            "vec" => &tvec,
+                            "deg" => &tdeg,
+                            "push" => &push_state
                         ))
                         .color(if t_push {
-                            COLOR_TERTIARY_CONTAINER
+                            COLOR_TEXT_PRIMARY
                         } else {
-                            COLOR_PRIMARY_CONTAINER
+                            COLOR_TEXT_SECONDARY
                         })
-                        .size(11.0)
+                        .size(FONT_META)
                         .monospace(),
                     );
                 });
 
-                ui.add_space(6.0);
+                ui.add_space(SPACE_SM);
                 ui.label(
-                    RichText::new("Campo de prueba de inyección de teclado (/dev/uinput):")
-                        .color(COLOR_ON_SURFACE_VARIANT)
-                        .size(11.0),
+                    RichText::new(t!("live-test-keyboard-label"))
+                        .color(COLOR_TEXT_SECONDARY)
+                        .size(FONT_META),
                 );
-                ui.text_edit_singleline(&mut self.programming_tab.test_input_text);
+                ui.add_space(SPACE_XS);
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.programming_tab.test_input_text)
+                        .desired_width(f32::INFINITY),
+                );
             });
 
         self.show_live_test_modal = open;
@@ -1492,22 +1404,14 @@ impl X56App {
 
 impl eframe::App for X56App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        // Procesar órdenes desde el system tray (mostrar ventana, salir)
         self.poll_tray_commands(ui.ctx());
         self.refresh_hardware_status();
-        ui.ctx()
-            .request_repaint_after(std::time::Duration::from_secs(2));
-
-        // Procesar cualquier selección del explorador de archivos nativo
         self.poll_file_dialog();
 
-        // Persistir cambios en el estado activo de uinput (p. ej. desde la pestaña de programación)
         if self.button_monitor.is_active() != self.last_uinput_active {
             self.persist_session_config();
         }
 
-        // Si el usuario solicita cerrar la ventana y tiene activado el segundo plano,
-        // cancelamos el cierre del proceso y ocultamos la ventana a la bandeja del sistema.
         if ui.input(|i| i.viewport().close_requested()) && self.minimize_to_tray_on_close {
             self.window_visible_state = false;
             if let Some(ref tray) = self.tray_handle {
@@ -1520,58 +1424,88 @@ impl eframe::App for X56App {
                 .send_viewport_cmd(egui::ViewportCommand::Visible(false));
         }
 
-        // Tasa de refresco dinámica: 30 FPS cuando está visible, 4 FPS cuando está en tray/segundo plano
+        // Smart repaint cadence: 30 FPS for live telemetry tabs/modal, 2 Hz for static tabs, 0.5 Hz in tray
         if self.window_visible_state {
-            ui.ctx()
-                .request_repaint_after(std::time::Duration::from_millis(33));
+            if matches!(
+                self.active_subsystem,
+                ActiveSubsystem::Curves | ActiveSubsystem::Mapping
+            ) || self.show_live_test_modal
+            {
+                ui.ctx()
+                    .request_repaint_after(std::time::Duration::from_millis(33));
+            } else {
+                ui.ctx()
+                    .request_repaint_after(std::time::Duration::from_millis(500));
+            }
         } else {
             ui.ctx()
-                .request_repaint_after(std::time::Duration::from_millis(250));
+                .request_repaint_after(std::time::Duration::from_secs(2));
         }
 
-        // 1. HeaderBar superior fija (48px de alto)
-        egui::Panel::top("avionics_header_bar")
-            .exact_size(48.0)
+        // 1. Top Header Bar (56px, 1px bottom hairline)
+        let header_resp = egui::Panel::top("avionics_header_bar")
+            .exact_size(56.0)
             .frame(theme::header_frame())
             .show(ui, |ui| {
                 self.render_header_bar(ui);
             });
+        ui.painter().hline(
+            header_resp.response.rect.x_range(),
+            header_resp.response.rect.bottom(),
+            Stroke::new(1.0, COLOR_BORDER_HAIRLINE),
+        );
 
-        // 2. Dock inferior de acciones tácticas
-        egui::Panel::bottom("avionics_bottom_dock")
+        // 2. Bottom Action Dock (48px, 1px top hairline)
+        let dock_resp = egui::Panel::bottom("avionics_bottom_dock")
+            .exact_size(48.0)
             .frame(theme::dock_frame())
             .show(ui, |ui| {
                 self.render_bottom_dock(ui);
             });
+        ui.painter().hline(
+            dock_resp.response.rect.x_range(),
+            dock_resp.response.rect.top(),
+            Stroke::new(1.0, COLOR_BORDER_HAIRLINE),
+        );
 
-        // 3. Sidebar izquierda responsiva / colapsable
+        // 3. Left Sidebar (240px expanded / 56px collapsed, 1px right hairline)
         let screen_w = ui
             .ctx()
             .input(|i| i.raw.screen_rect)
             .map(|r| r.width())
-            .unwrap_or(1200.0);
+            .unwrap_or(1280.0);
         let sidebar_w = if self.sidebar_collapsed {
-            54.0
+            56.0
         } else if screen_w < 1100.0 {
             200.0
         } else {
             240.0
         };
+        let sidebar_frame = if self.sidebar_collapsed {
+            theme::sidebar_frame().inner_margin(Margin::symmetric(SPACE_SM as i8, SPACE_LG as i8))
+        } else {
+            theme::sidebar_frame()
+        };
 
-        egui::Panel::left("avionics_sidebar")
+        let sidebar_resp = egui::Panel::left("avionics_sidebar")
             .exact_size(sidebar_w)
             .resizable(false)
-            .frame(theme::sidebar_frame())
+            .frame(sidebar_frame)
             .show(ui, |ui| {
                 self.render_sidebar(ui);
             });
+        ui.painter().vline(
+            sidebar_resp.response.rect.right(),
+            sidebar_resp.response.rect.y_range(),
+            Stroke::new(1.0, COLOR_BORDER_HAIRLINE),
+        );
 
-        // 4. CentralPanel que delega al subsistema activo
+        // 4. CentralPanel
         egui::CentralPanel::default()
             .frame(
                 Frame::new()
                     .fill(COLOR_SURFACE)
-                    .inner_margin(Margin::same(14)),
+                    .inner_margin(Margin::same(SPACE_LG as i8)),
             )
             .show(ui, |ui| match self.active_subsystem {
                 ActiveSubsystem::Curves => {

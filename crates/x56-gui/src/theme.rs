@@ -1,62 +1,121 @@
-//! Sistema de diseño táctico Avionics Vector para x56-gui.
+//! Calibrated Graphite + Instrument Cyan design system for `x56-gui`.
 //!
-//! Basado en pantallas MFD de aviónica militar y directrices ergonómicas de GNOME/Libadwaita.
-//! Define la paleta de colores, geometría, configuración visual de egui y widgets reutilizables.
+//! Defines the neutral Graphite surface ramp, hairlines, three text roles,
+//! single Instrument Cyan accent, off-white primary CTA, typography/spacing/radius
+//! tokens, font loading, `egui::Visuals`, frames, and shared ergonomic widgets.
 
-use eframe::egui::{self, Color32, CornerRadius, Frame, Margin, RichText, Stroke, Ui};
-
-// ============================================================================
-// PALETA DE COLORES - AVIONICS VECTOR
-// ============================================================================
-
-// Superficies y contenedores
-pub const COLOR_SURFACE_LOWEST: Color32 = Color32::from_rgb(0x09, 0x0e, 0x16); // #090e16 - Fondo canvas más profundo
-pub const COLOR_SURFACE_LOW: Color32 = Color32::from_rgb(0x17, 0x1c, 0x24); // #171c24 - Sidebar y paneles docked
-pub const COLOR_SURFACE: Color32 = Color32::from_rgb(0x0f, 0x14, 0x1c); // #0f141c - Base de aplicación
-pub const COLOR_SURFACE_CONTAINER: Color32 = Color32::from_rgb(0x1b, 0x20, 0x28); // #1b2028 - Tarjetas interactivas
-pub const COLOR_SURFACE_HIGH: Color32 = Color32::from_rgb(0x25, 0x2a, 0x33); // #252a33 - Elementos elevados / chips
-pub const COLOR_SURFACE_HIGHEST: Color32 = Color32::from_rgb(0x30, 0x35, 0x3e); // #30353e - Sliders / inputs activos
-pub const COLOR_SURFACE_BRIGHT: Color32 = Color32::from_rgb(0x34, 0x39, 0x42); // #343942 - Hover brillante
-
-// Acentos Primarios (Cian Aviónica)
-pub const COLOR_PRIMARY: Color32 = Color32::from_rgb(0xdb, 0xfc, 0xff); // #dbfcff - Texto brillante cian
-pub const COLOR_PRIMARY_CONTAINER: Color32 = Color32::from_rgb(0x00, 0xf0, 0xff); // #00f0ff - Cian puro activo
-pub const COLOR_ON_PRIMARY_CONTAINER: Color32 = Color32::from_rgb(0x00, 0x69, 0x70); // #006970 - Texto sobre cian
-pub const COLOR_PRIMARY_FIXED: Color32 = Color32::from_rgb(0x7d, 0xf4, 0xff); // #7df4ff - Resaltados
-
-// Acentos Secundarios (Azul Eléctrico Logitech G)
-pub const COLOR_SECONDARY: Color32 = Color32::from_rgb(0xb3, 0xc5, 0xff); // #b3c5ff - Azul suave
-pub const COLOR_SECONDARY_CONTAINER: Color32 = Color32::from_rgb(0x02, 0x66, 0xff); // #0266ff - Botones primarios
-pub const COLOR_ON_SECONDARY_CONTAINER: Color32 = Color32::from_rgb(0xf9, 0xf7, 0xff); // #f9f7ff - Texto sobre azul
-
-// Terciarios / Fósforo HUD (Verde Neón Precisión)
-pub const COLOR_TERTIARY: Color32 = Color32::from_rgb(0xdb, 0xff, 0xde); // #dbffde - Resplandor verde
-pub const COLOR_TERTIARY_CONTAINER: Color32 = Color32::from_rgb(0x34, 0xf8, 0x85); // #34f885 - Punto fósforo en vivo
-pub const COLOR_ON_TERTIARY_CONTAINER: Color32 = Color32::from_rgb(0x00, 0x6e, 0x35); // #006e35
-pub const COLOR_TERTIARY_FIXED_DIM: Color32 = Color32::from_rgb(0x00, 0xe4, 0x75); // #00e475 - Estado sincronizado
-
-// Alertas y Errores
-pub const COLOR_ERROR: Color32 = Color32::from_rgb(0xff, 0xb4, 0xab); // #ffb4ab - Zona muerta / Clamps
-pub const COLOR_ERROR_CONTAINER: Color32 = Color32::from_rgb(0x93, 0x00, 0x0a); // #93000a
-pub const COLOR_WARNING_AMBER: Color32 = Color32::from_rgb(0xff, 0xbd, 0x2e); // #ffbd2e - Precaución / C-Stick
-
-// Contornos y Líneas Estructurales
-pub const COLOR_OUTLINE: Color32 = Color32::from_rgb(0x84, 0x94, 0x95); // #849495 - Bordes suaves
-pub const COLOR_OUTLINE_VARIANT: Color32 = Color32::from_rgb(0x3b, 0x49, 0x4b); // #3b494b - Separadores finos
-pub const COLOR_GRID_HUD: Color32 = Color32::from_rgba_premultiplied(0, 240, 255, 30); // Rejilla HUD sutil
-
-// Tipografía y Textos
-pub const COLOR_ON_SURFACE: Color32 = Color32::from_rgb(0xde, 0xe2, 0xee); // #dee2ee - Texto principal
-pub const COLOR_ON_SURFACE_VARIANT: Color32 = Color32::from_rgb(0xb9, 0xca, 0xcb); // #b9cacb - Texto secundario / mono
-
-// Muelles Físicos (X-56 Springs)
-pub const COLOR_SPRING_RED: Color32 = Color32::from_rgb(0xff, 0x5f, 0x56); // 52mm Extra Fuerte
-pub const COLOR_SPRING_GREEN: Color32 = Color32::from_rgb(0x34, 0xf8, 0x85); // 47mm Medio (Instalado)
-pub const COLOR_SPRING_YELLOW: Color32 = Color32::from_rgb(0xff, 0xbd, 0x2e); // 42mm Ligero
-pub const COLOR_SPRING_BLUE: Color32 = Color32::from_rgb(0x02, 0x66, 0xff); // 36mm Ultra Ligero
+use eframe::egui::{
+    self, Color32, CornerRadius, FontFamily, FontId, Frame, Margin, RichText, Stroke, Ui, Vec2,
+};
 
 // ============================================================================
-// MODELO DE MUELLES FÍSICOS
+// SURFACES (GRAPHITE NEUTRAL RAMP)
+// ============================================================================
+
+/// Deepest surface: sidebar, sunken plot/schematic canvases, keycap wells (`#0f0f10`).
+pub const COLOR_SURFACE_LOWEST: Color32 = Color32::from_rgb(0x0f, 0x0f, 0x10);
+/// Base application surface: CentralPanel, header bar, bottom dock (`#141415`).
+pub const COLOR_SURFACE: Color32 = Color32::from_rgb(0x14, 0x14, 0x15);
+/// Primary card, modal, and menu surface (`#19191b`).
+pub const COLOR_SURFACE_LOW: Color32 = Color32::from_rgb(0x19, 0x19, 0x1b);
+/// Nested sub-cards and grouped blocks (`#1e1e21`).
+pub const COLOR_SURFACE_CONTAINER: Color32 = Color32::from_rgb(0x1e, 0x1e, 0x21);
+/// Raised resting controls: active nav row, inputs, secondary buttons (`#232325`).
+pub const COLOR_SURFACE_HIGH: Color32 = Color32::from_rgb(0x23, 0x23, 0x25);
+/// Hover state for raised controls and slider tracks (`#2c2c30`).
+pub const COLOR_SURFACE_HIGHEST: Color32 = Color32::from_rgb(0x2c, 0x2c, 0x30);
+/// Pressed state for raised controls (`#343439`).
+pub const COLOR_SURFACE_BRIGHT: Color32 = Color32::from_rgb(0x34, 0x34, 0x39);
+
+// ============================================================================
+// BORDERS, HAIRLINES & GRID
+// ============================================================================
+
+/// Subtle divider (~5% primary text opacity).
+pub const COLOR_BORDER_SUBTLE: Color32 = Color32::from_rgba_unmultiplied_const(237, 237, 237, 13);
+/// Standard structural hairline (~8% primary text opacity).
+pub const COLOR_BORDER_HAIRLINE: Color32 = Color32::from_rgba_unmultiplied_const(237, 237, 237, 20);
+/// Emphasized hover/focus hairline (~15% primary text opacity).
+pub const COLOR_BORDER_STRONG: Color32 = Color32::from_rgba_unmultiplied_const(237, 237, 237, 38);
+/// Top inset highlight for raised surfaces (~9% white).
+pub const COLOR_TOP_HIGHLIGHT: Color32 = Color32::from_rgba_unmultiplied_const(255, 255, 255, 22);
+/// Quiet neutral plot/schematic grid line (~5.5% primary text opacity).
+pub const COLOR_GRID_HUD: Color32 = Color32::from_rgba_unmultiplied_const(237, 237, 237, 14);
+
+// ============================================================================
+// NEUTRAL TEXT ROLES (3 ROLES ONLY)
+// ============================================================================
+
+/// Primary text (`#ededed`).
+pub const COLOR_TEXT_PRIMARY: Color32 = Color32::from_rgb(0xed, 0xed, 0xed);
+/// Secondary text and captions (`#a1a1a6`).
+pub const COLOR_TEXT_SECONDARY: Color32 = Color32::from_rgb(0xa1, 0xa1, 0xa6);
+/// Muted metadata and icon rest role (`#85858b`).
+pub const COLOR_TEXT_MUTED: Color32 = Color32::from_rgb(0x85, 0x85, 0x8b);
+
+// ============================================================================
+// SINGLE ACCENT & PRIMARY CTA
+// ============================================================================
+
+/// Calibrated Instrument Cyan accent (`#38bdf8`).
+pub const COLOR_ACCENT: Color32 = Color32::from_rgb(0x38, 0xbd, 0xf8);
+/// Soft Instrument Cyan tint for active selection backgrounds.
+pub const COLOR_ACCENT_SOFT: Color32 = Color32::from_rgba_unmultiplied_const(56, 189, 248, 28);
+/// Instrument Cyan border for active selections and focused controls.
+pub const COLOR_ACCENT_BORDER: Color32 = Color32::from_rgba_unmultiplied_const(56, 189, 248, 120);
+/// Dark text over solid Instrument Cyan fills (`#0a1016`).
+pub const COLOR_ON_ACCENT: Color32 = Color32::from_rgb(0x0a, 0x10, 0x16);
+
+/// Primary CTA resting fill (`#ededed`).
+pub const COLOR_CTA_BG: Color32 = Color32::from_rgb(0xed, 0xed, 0xed);
+/// Primary CTA hover fill (`#ffffff`).
+pub const COLOR_CTA_BG_HOVER: Color32 = Color32::from_rgb(0xff, 0xff, 0xff);
+/// Primary CTA label color (`#141415`).
+pub const COLOR_CTA_TEXT: Color32 = Color32::from_rgb(0x14, 0x14, 0x15);
+
+// ============================================================================
+// TONED SEMANTIC COLORS
+// ============================================================================
+
+/// Positive / synced / online state (`#4cc38a`).
+pub const COLOR_POSITIVE: Color32 = Color32::from_rgb(0x4c, 0xc3, 0x8a);
+/// Warning / modified / simulation state (`#e5a93c`).
+pub const COLOR_WARNING: Color32 = Color32::from_rgb(0xe5, 0xa9, 0x3c);
+/// Negative / error / disconnected state (`#e5484d`).
+pub const COLOR_NEGATIVE: Color32 = Color32::from_rgb(0xe5, 0x48, 0x4d);
+
+// ============================================================================
+// PHYSICAL SPRINGS (FOR 8PX SWATCH DOTS ONLY)
+// ============================================================================
+
+pub const COLOR_SPRING_RED: Color32 = Color32::from_rgb(0xe0, 0x5a, 0x52);
+pub const COLOR_SPRING_GREEN: Color32 = Color32::from_rgb(0x4c, 0xc3, 0x8a);
+pub const COLOR_SPRING_YELLOW: Color32 = Color32::from_rgb(0xe5, 0xa9, 0x3c);
+pub const COLOR_SPRING_BLUE: Color32 = Color32::from_rgb(0x4f, 0x8f, 0xf7);
+
+// ============================================================================
+// TYPOGRAPHY, SPACING & RADIUS TOKENS
+// ============================================================================
+
+pub const FONT_META: f32 = 12.0;
+pub const FONT_SMALL: f32 = 13.0;
+pub const FONT_BODY: f32 = 14.0;
+pub const FONT_HEADING: f32 = 16.0;
+pub const FONT_FIGURE: f32 = 22.0;
+
+pub const SPACE_XS: f32 = 4.0;
+pub const SPACE_SM: f32 = 8.0;
+pub const SPACE_MD: f32 = 12.0;
+pub const SPACE_LG: f32 = 16.0;
+pub const SPACE_XL: f32 = 20.0;
+pub const SPACE_2XL: f32 = 24.0;
+
+pub const RADIUS_KEYCAP: u8 = 4;
+pub const RADIUS_CONTROL: u8 = 8;
+pub const RADIUS_CARD: u8 = 12;
+
+// ============================================================================
+// PHYSICAL SPRING MODEL
 // ============================================================================
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -88,21 +147,21 @@ impl PhysicalSpring {
         }
     }
 
-    pub fn label(&self) -> &'static str {
+    pub fn localized_label(&self) -> String {
         match self {
-            Self::Red52mm => "ROJO",
-            Self::Green47mm => "VERDE",
-            Self::Yellow42mm => "AMARILLO",
-            Self::Blue36mm => "AZUL",
+            Self::Red52mm => x56_core::t!("curves-spring-red-label"),
+            Self::Green47mm => x56_core::t!("curves-spring-green-label"),
+            Self::Yellow42mm => x56_core::t!("curves-spring-yellow-label"),
+            Self::Blue36mm => x56_core::t!("curves-spring-blue-label"),
         }
     }
 
-    pub fn desc(&self) -> &'static str {
+    pub fn localized_desc(&self) -> String {
         match self {
-            Self::Red52mm => "Extra Fuerte (52mm)",
-            Self::Green47mm => "Medio (Instalado - 47mm)",
-            Self::Yellow42mm => "Ligero (42mm)",
-            Self::Blue36mm => "Ultra Ligero (36mm)",
+            Self::Red52mm => x56_core::t!("curves-spring-red-desc"),
+            Self::Green47mm => x56_core::t!("curves-spring-green-desc"),
+            Self::Yellow42mm => x56_core::t!("curves-spring-yellow-desc"),
+            Self::Blue36mm => x56_core::t!("curves-spring-blue-desc"),
         }
     }
 
@@ -117,22 +176,54 @@ impl PhysicalSpring {
 }
 
 // ============================================================================
-// CONFIGURACIÓN DE VISUALS Y ESTILO GLOBAL
+// GLOBAL THEME CONFIGURATION & FONT LOADING
 // ============================================================================
 
-/// Aplica el tema visual Avionics Vector al contexto de egui.
+fn load_first_existing_font(paths: &[&str]) -> Option<Vec<u8>> {
+    paths.iter().find_map(|path| std::fs::read(path).ok())
+}
+
+/// Applies the Graphite + Instrument Cyan theme and system fonts to the egui context.
 pub fn configure_theme(ctx: &egui::Context) {
-    // Configuración de fuentes vectoriales e iconos Lucide
     let mut fonts = egui::FontDefinitions::default();
+
     fonts.font_data.insert(
         "lucide".to_owned(),
         std::sync::Arc::new(egui::FontData::from_static(lucide_icons::LUCIDE_FONT_BYTES)),
     );
-    // En Proportional: Ubuntu-Light -> lucide -> Hack (para símbolos matemáticos/geométricos)
-    let prop = fonts
-        .families
-        .entry(egui::FontFamily::Proportional)
-        .or_default();
+
+    let prop_name = load_first_existing_font(&[
+        "/usr/share/fonts/noto/NotoSans-Regular.ttf",
+        "/usr/share/fonts/TTF/FiraSans-Regular.ttf",
+        "/usr/share/fonts/cantarell/Cantarell-VF.otf",
+        "/usr/share/fonts/TTF/DejaVuSans.ttf",
+    ])
+    .map(|bytes| {
+        fonts.font_data.insert(
+            "ui_sans".to_owned(),
+            std::sync::Arc::new(egui::FontData::from_owned(bytes)),
+        );
+        "ui_sans".to_owned()
+    });
+
+    let mono_name = load_first_existing_font(&[
+        "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
+        "/usr/share/fonts/liberation/LiberationMono-Regular.ttf",
+    ])
+    .map(|bytes| {
+        fonts.font_data.insert(
+            "ui_mono".to_owned(),
+            std::sync::Arc::new(egui::FontData::from_owned(bytes)),
+        );
+        "ui_mono".to_owned()
+    });
+
+    let prop = fonts.families.entry(FontFamily::Proportional).or_default();
+    if let Some(ref sans) = prop_name {
+        if !prop.contains(sans) {
+            prop.insert(0, sans.clone());
+        }
+    }
     if !prop.contains(&"lucide".to_owned()) {
         prop.push("lucide".to_owned());
     }
@@ -140,224 +231,432 @@ pub fn configure_theme(ctx: &egui::Context) {
         prop.push("Hack".to_owned());
     }
 
-    // En Monospace: Hack -> lucide -> Ubuntu-Light
-    let mono = fonts
-        .families
-        .entry(egui::FontFamily::Monospace)
-        .or_default();
+    let mono = fonts.families.entry(FontFamily::Monospace).or_default();
+    if let Some(ref m) = mono_name {
+        if !mono.contains(m) {
+            mono.insert(0, m.clone());
+        }
+    }
     if !mono.contains(&"lucide".to_owned()) {
         mono.push("lucide".to_owned());
     }
+
+    fonts
+        .families
+        .insert(FontFamily::Name("lucide".into()), vec!["lucide".to_owned()]);
+
     ctx.set_fonts(fonts);
 
-    let mut visuals = egui::Visuals::dark();
+    ctx.set_theme(egui::Theme::Dark);
+    ctx.style_mut_of(egui::Theme::Dark, |style| {
+        style.text_styles.insert(
+            egui::TextStyle::Small,
+            FontId::new(FONT_META, FontFamily::Proportional),
+        );
+        style.text_styles.insert(
+            egui::TextStyle::Body,
+            FontId::new(FONT_BODY, FontFamily::Proportional),
+        );
+        style.text_styles.insert(
+            egui::TextStyle::Button,
+            FontId::new(FONT_SMALL, FontFamily::Proportional),
+        );
+        style.text_styles.insert(
+            egui::TextStyle::Heading,
+            FontId::new(FONT_HEADING, FontFamily::Proportional),
+        );
+        style.text_styles.insert(
+            egui::TextStyle::Monospace,
+            FontId::new(FONT_META, FontFamily::Monospace),
+        );
 
-    // Fondos de paneles y ventanas
-    visuals.panel_fill = COLOR_SURFACE;
-    visuals.window_fill = COLOR_SURFACE_LOW;
-    visuals.extreme_bg_color = COLOR_SURFACE_LOWEST;
-    visuals.faint_bg_color = COLOR_SURFACE_LOW;
+        style.spacing.item_spacing = Vec2::new(SPACE_SM, SPACE_SM);
+        style.spacing.button_padding = Vec2::new(12.0, 6.0);
+        style.spacing.interact_size = Vec2::new(32.0, 28.0);
 
-    // Redondeo táctico militar (4px widgets, 8px contenedores)
-    visuals.window_corner_radius = CornerRadius::same(8);
-    visuals.menu_corner_radius = CornerRadius::same(6);
+        let mut visuals = egui::Visuals::dark();
+        visuals.panel_fill = COLOR_SURFACE;
+        visuals.window_fill = COLOR_SURFACE_LOW;
+        visuals.extreme_bg_color = COLOR_SURFACE_LOWEST;
+        visuals.faint_bg_color = COLOR_SURFACE_CONTAINER;
+        visuals.window_stroke = Stroke::new(1.0, COLOR_BORDER_HAIRLINE);
+        visuals.window_corner_radius = CornerRadius::same(RADIUS_CARD);
+        visuals.menu_corner_radius = CornerRadius::same(RADIUS_CONTROL);
+        visuals.slider_trailing_fill = true;
 
-    // Controles no interactivos
-    visuals.widgets.noninteractive.bg_fill = COLOR_SURFACE_CONTAINER;
-    visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, COLOR_OUTLINE_VARIANT);
-    visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0, COLOR_ON_SURFACE);
-    visuals.widgets.noninteractive.corner_radius = CornerRadius::same(4);
+        visuals.widgets.noninteractive.bg_fill = COLOR_SURFACE_CONTAINER;
+        visuals.widgets.noninteractive.weak_bg_fill = COLOR_SURFACE_CONTAINER;
+        visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, COLOR_BORDER_HAIRLINE);
+        visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0, COLOR_TEXT_PRIMARY);
+        visuals.widgets.noninteractive.corner_radius = CornerRadius::same(RADIUS_CONTROL);
 
-    // Controles inactivos (estado reposo)
-    visuals.widgets.inactive.bg_fill = COLOR_SURFACE_CONTAINER;
-    visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, COLOR_OUTLINE_VARIANT);
-    visuals.widgets.inactive.fg_stroke = Stroke::new(1.0, COLOR_ON_SURFACE);
-    visuals.widgets.inactive.corner_radius = CornerRadius::same(4);
+        visuals.widgets.inactive.bg_fill = COLOR_SURFACE_HIGH;
+        visuals.widgets.inactive.weak_bg_fill = COLOR_SURFACE_HIGH;
+        visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, COLOR_BORDER_HAIRLINE);
+        visuals.widgets.inactive.fg_stroke = Stroke::new(1.0, COLOR_TEXT_PRIMARY);
+        visuals.widgets.inactive.corner_radius = CornerRadius::same(RADIUS_CONTROL);
 
-    // Hover (brillo táctico)
-    visuals.widgets.hovered.bg_fill = COLOR_SURFACE_HIGH;
-    visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, COLOR_PRIMARY_CONTAINER);
-    visuals.widgets.hovered.fg_stroke = Stroke::new(1.0, COLOR_PRIMARY);
-    visuals.widgets.hovered.corner_radius = CornerRadius::same(4);
+        visuals.widgets.hovered.bg_fill = COLOR_SURFACE_HIGHEST;
+        visuals.widgets.hovered.weak_bg_fill = COLOR_SURFACE_HIGHEST;
+        visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, COLOR_BORDER_STRONG);
+        visuals.widgets.hovered.fg_stroke = Stroke::new(1.0, COLOR_TEXT_PRIMARY);
+        visuals.widgets.hovered.corner_radius = CornerRadius::same(RADIUS_CONTROL);
 
-    // Activo / Presionado
-    visuals.widgets.active.bg_fill = COLOR_SECONDARY_CONTAINER;
-    visuals.widgets.active.bg_stroke = Stroke::new(1.5, COLOR_PRIMARY_CONTAINER);
-    visuals.widgets.active.fg_stroke = Stroke::new(1.0, COLOR_ON_SECONDARY_CONTAINER);
-    visuals.widgets.active.corner_radius = CornerRadius::same(4);
+        visuals.widgets.active.bg_fill = COLOR_SURFACE_BRIGHT;
+        visuals.widgets.active.weak_bg_fill = COLOR_SURFACE_BRIGHT;
+        visuals.widgets.active.bg_stroke = Stroke::new(1.0, COLOR_ACCENT_BORDER);
+        visuals.widgets.active.fg_stroke = Stroke::new(1.0, COLOR_TEXT_PRIMARY);
+        visuals.widgets.active.corner_radius = CornerRadius::same(RADIUS_CONTROL);
 
-    // Abierto / Seleccionado
-    visuals.widgets.open.bg_fill = COLOR_SURFACE_HIGH;
-    visuals.widgets.open.bg_stroke = Stroke::new(1.0, COLOR_PRIMARY_CONTAINER);
-    visuals.widgets.open.fg_stroke = Stroke::new(1.0, COLOR_PRIMARY);
-    visuals.widgets.open.corner_radius = CornerRadius::same(4);
+        visuals.widgets.open.bg_fill = COLOR_SURFACE_HIGHEST;
+        visuals.widgets.open.weak_bg_fill = COLOR_SURFACE_HIGHEST;
+        visuals.widgets.open.bg_stroke = Stroke::new(1.0, COLOR_BORDER_STRONG);
+        visuals.widgets.open.fg_stroke = Stroke::new(1.0, COLOR_TEXT_PRIMARY);
+        visuals.widgets.open.corner_radius = CornerRadius::same(RADIUS_CONTROL);
 
-    // Selección de texto y enlaces
-    visuals.selection.bg_fill = COLOR_SECONDARY_CONTAINER;
-    visuals.selection.stroke = Stroke::new(1.0, COLOR_PRIMARY_CONTAINER);
-    visuals.hyperlink_color = COLOR_PRIMARY_CONTAINER;
+        visuals.selection.bg_fill = COLOR_ACCENT_SOFT;
+        visuals.selection.stroke = Stroke::new(1.0, COLOR_ACCENT_BORDER);
+        visuals.hyperlink_color = COLOR_ACCENT;
 
-    ctx.set_visuals(visuals);
+        style.visuals = visuals;
+    });
 }
 
 // ============================================================================
-// FRAMES Y CONTENEDORES PREDEFINIDOS
+// FRAMES & SURFACES
 // ============================================================================
 
-/// Frame base de tarjeta de control táctica.
+/// Primary card frame (`#19191b`, 1px hairline, `r=12`, `16px` padding).
 pub fn card_frame() -> Frame {
     Frame::new()
         .fill(COLOR_SURFACE_LOW)
-        .stroke(Stroke::new(1.0, COLOR_OUTLINE_VARIANT))
-        .corner_radius(CornerRadius::same(8))
-        .inner_margin(Margin::same(12))
+        .stroke(Stroke::new(1.0, COLOR_BORDER_HAIRLINE))
+        .corner_radius(CornerRadius::same(RADIUS_CARD))
+        .inner_margin(Margin::same(SPACE_LG as i8))
 }
 
-/// Frame para bloques hundidos (Canvas de gráficos, visualizadores HUD).
-pub fn sunken_frame() -> Frame {
+/// Nested sub-card frame (`#1e1e21`, 1px hairline, `r=8`, `12px` padding).
+pub fn subcard_frame() -> Frame {
+    Frame::new()
+        .fill(COLOR_SURFACE_CONTAINER)
+        .stroke(Stroke::new(1.0, COLOR_BORDER_HAIRLINE))
+        .corner_radius(CornerRadius::same(RADIUS_CONTROL))
+        .inner_margin(Margin::same(SPACE_MD as i8))
+}
+
+/// Recessed plot/schematic canvas frame (`#0f0f10`, 1px hairline, `r=8`, `12px` padding).
+pub fn canvas_frame() -> Frame {
     Frame::new()
         .fill(COLOR_SURFACE_LOWEST)
-        .stroke(Stroke::new(1.0, COLOR_OUTLINE_VARIANT))
-        .corner_radius(CornerRadius::same(8))
-        .inner_margin(Margin::same(10))
+        .stroke(Stroke::new(1.0, COLOR_BORDER_HAIRLINE))
+        .corner_radius(CornerRadius::same(RADIUS_CONTROL))
+        .inner_margin(Margin::same(SPACE_MD as i8))
 }
 
-/// Frame para la barra de navegación lateral izquierda.
+/// Left sidebar navigation frame (`#0f0f10`, `r=0`, `12x16` padding).
 pub fn sidebar_frame() -> Frame {
     Frame::new()
-        .fill(COLOR_SURFACE_LOW)
-        .stroke(Stroke::new(1.0, COLOR_OUTLINE_VARIANT))
-        .inner_margin(Margin::symmetric(12, 14))
+        .fill(COLOR_SURFACE_LOWEST)
+        .corner_radius(CornerRadius::ZERO)
+        .inner_margin(Margin::symmetric(SPACE_MD as i8, SPACE_LG as i8))
 }
 
-/// Frame para la HeaderBar superior táctica.
+/// Top header bar frame (`#141415`, `r=0`, `16x8` padding).
 pub fn header_frame() -> Frame {
     Frame::new()
-        .fill(COLOR_SURFACE_LOWEST)
-        .stroke(Stroke::new(1.0, COLOR_OUTLINE_VARIANT))
-        .inner_margin(Margin::symmetric(14, 8))
+        .fill(COLOR_SURFACE)
+        .corner_radius(CornerRadius::ZERO)
+        .inner_margin(Margin::symmetric(SPACE_LG as i8, SPACE_SM as i8))
 }
 
-/// Frame para el Dock inferior de acciones globales.
+/// Bottom action dock frame (`#141415`, `r=0`, `16x8` padding).
 pub fn dock_frame() -> Frame {
     Frame::new()
-        .fill(COLOR_SURFACE_LOW)
-        .stroke(Stroke::new(1.0, COLOR_OUTLINE_VARIANT))
-        .corner_radius(CornerRadius::same(8))
-        .inner_margin(Margin::symmetric(14, 10))
+        .fill(COLOR_SURFACE)
+        .corner_radius(CornerRadius::ZERO)
+        .inner_margin(Margin::symmetric(SPACE_LG as i8, SPACE_SM as i8))
 }
 
 // ============================================================================
-// WIDGETS AUXILIARES
+// ERGONOMIC SHARED WIDGETS
 // ============================================================================
 
-/// Dibuja un pill o badge informativo telemétrico monoespaciado.
-/// Calcula su tamaño exacto antes de reservar espacio para que `horizontal_wrapped`
-/// haga salto de línea limpiamente sin desbordar jamás el borde derecho de su contenedor.
-pub fn telemetry_badge(ui: &mut Ui, label: &str, value: &str, val_color: Color32) {
-    let label_galley = ui.painter().layout_no_wrap(
-        label.to_owned(),
-        egui::FontId::monospace(10.0),
-        COLOR_OUTLINE,
-    );
-    let value_galley =
-        ui.painter()
-            .layout_no_wrap(value.to_owned(), egui::FontId::monospace(10.5), val_color);
+/// Primary off-white CTA button (`#ededed` bg, `#ffffff` hover, `#141415` text, `r=8`, `min_h=32`).
+pub fn primary_button(ui: &mut Ui, text: &str) -> egui::Response {
+    ui.scope(|ui| {
+        let visuals = ui.visuals_mut();
+        visuals.widgets.inactive.weak_bg_fill = COLOR_CTA_BG;
+        visuals.widgets.inactive.bg_fill = COLOR_CTA_BG;
+        visuals.widgets.inactive.bg_stroke = Stroke::NONE;
+        visuals.widgets.inactive.fg_stroke = Stroke::new(1.0, COLOR_CTA_TEXT);
+        visuals.widgets.hovered.weak_bg_fill = COLOR_CTA_BG_HOVER;
+        visuals.widgets.hovered.bg_fill = COLOR_CTA_BG_HOVER;
+        visuals.widgets.hovered.bg_stroke = Stroke::NONE;
+        visuals.widgets.hovered.fg_stroke = Stroke::new(1.0, COLOR_CTA_TEXT);
+        visuals.widgets.active.weak_bg_fill = Color32::from_rgb(0xd4, 0xd4, 0xd8);
+        visuals.widgets.active.bg_fill = Color32::from_rgb(0xd4, 0xd4, 0xd8);
+        visuals.widgets.active.bg_stroke = Stroke::NONE;
+        visuals.widgets.active.fg_stroke = Stroke::new(1.0, COLOR_CTA_TEXT);
 
-    let pad_x = 6.0;
-    let pad_y = 3.5;
-    let inner_gap = 4.0;
-    let content_w = label_galley.size().x + inner_gap + value_galley.size().x;
-    let content_h = label_galley.size().y.max(value_galley.size().y);
-    let total_size = egui::Vec2::new(content_w + pad_x * 2.0, content_h + pad_y * 2.0);
+        let rich = RichText::new(text).color(COLOR_CTA_TEXT).size(FONT_SMALL);
+        ui.add(
+            egui::Button::new(rich)
+                .corner_radius(CornerRadius::same(RADIUS_CONTROL))
+                .min_size(Vec2::new(0.0, 32.0)),
+        )
+    })
+    .inner
+}
 
-    let (rect, _) = ui.allocate_exact_size(total_size, egui::Sense::hover());
-    if ui.is_rect_visible(rect) {
-        let painter = ui.painter();
-        painter.rect_filled(rect, CornerRadius::same(4), COLOR_SURFACE_LOWEST);
-        painter.rect_stroke(
-            rect,
-            CornerRadius::same(4),
-            Stroke::new(1.0, COLOR_OUTLINE_VARIANT),
-            egui::StrokeKind::Inside,
+/// Secondary raised surface button (`#232325`, 1px hairline, `#ededed` text, `r=8`, `min_h=32`).
+pub fn secondary_button(ui: &mut Ui, text: &str) -> egui::Response {
+    let resp = ui
+        .scope(|ui| {
+            let visuals = ui.visuals_mut();
+            visuals.widgets.inactive.weak_bg_fill = COLOR_SURFACE_HIGH;
+            visuals.widgets.inactive.bg_fill = COLOR_SURFACE_HIGH;
+            visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, COLOR_BORDER_HAIRLINE);
+            visuals.widgets.hovered.weak_bg_fill = COLOR_SURFACE_HIGHEST;
+            visuals.widgets.hovered.bg_fill = COLOR_SURFACE_HIGHEST;
+            visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, COLOR_BORDER_STRONG);
+            visuals.widgets.active.weak_bg_fill = COLOR_SURFACE_BRIGHT;
+            visuals.widgets.active.bg_fill = COLOR_SURFACE_BRIGHT;
+            visuals.widgets.active.bg_stroke = Stroke::new(1.0, COLOR_BORDER_STRONG);
+
+            let rich = RichText::new(text)
+                .color(COLOR_TEXT_PRIMARY)
+                .size(FONT_SMALL);
+            ui.add(
+                egui::Button::new(rich)
+                    .corner_radius(CornerRadius::same(RADIUS_CONTROL))
+                    .min_size(Vec2::new(0.0, 32.0)),
+            )
+        })
+        .inner;
+
+    if ui.is_rect_visible(resp.rect) {
+        let r = resp.rect;
+        ui.painter().hline(
+            (r.min.x + RADIUS_CONTROL as f32)..=(r.max.x - RADIUS_CONTROL as f32),
+            r.min.y + 1.0,
+            Stroke::new(1.0, COLOR_TOP_HIGHLIGHT),
         );
-
-        let label_pos = egui::Pos2::new(
-            rect.min.x + pad_x,
-            rect.center().y - label_galley.size().y * 0.5,
-        );
-        let value_pos = egui::Pos2::new(
-            label_pos.x + label_galley.size().x + inner_gap,
-            rect.center().y - value_galley.size().y * 0.5,
-        );
-
-        painter.galley(label_pos, label_galley, COLOR_OUTLINE);
-        painter.galley(value_pos, value_galley, val_color);
     }
+    resp
 }
 
-/// Dibuja un badge de estado con contorno coloreado que envuelve atómicamente en `horizontal_wrapped`.
-pub fn outline_badge(ui: &mut Ui, text: &str, text_color: Color32, border_color: Color32) {
-    let galley =
-        ui.painter()
-            .layout_no_wrap(text.to_owned(), egui::FontId::monospace(10.0), text_color);
+/// Quiet transparent ghost button (`#a1a1a6` text, `#232325` hover fill, `r=8`, `min_h=32`).
+pub fn ghost_button(ui: &mut Ui, text: &str) -> egui::Response {
+    ui.scope(|ui| {
+        let visuals = ui.visuals_mut();
+        visuals.widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
+        visuals.widgets.inactive.bg_fill = Color32::TRANSPARENT;
+        visuals.widgets.inactive.bg_stroke = Stroke::NONE;
+        visuals.widgets.hovered.weak_bg_fill = COLOR_SURFACE_HIGH;
+        visuals.widgets.hovered.bg_fill = COLOR_SURFACE_HIGH;
+        visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, COLOR_BORDER_SUBTLE);
+        visuals.widgets.active.weak_bg_fill = COLOR_SURFACE_HIGHEST;
+        visuals.widgets.active.bg_fill = COLOR_SURFACE_HIGHEST;
+        visuals.widgets.active.bg_stroke = Stroke::new(1.0, COLOR_BORDER_HAIRLINE);
 
-    let pad_x = 8.0;
-    let pad_y = 3.5;
-    let total_size = egui::Vec2::new(galley.size().x + pad_x * 2.0, galley.size().y + pad_y * 2.0);
+        let rich = RichText::new(text)
+            .color(COLOR_TEXT_SECONDARY)
+            .size(FONT_SMALL);
+        ui.add(
+            egui::Button::new(rich)
+                .corner_radius(CornerRadius::same(RADIUS_CONTROL))
+                .min_size(Vec2::new(0.0, 32.0)),
+        )
+    })
+    .inner
+}
 
+/// Destructive action button (`#e5484d` semantic red text and subtle tint, `r=8`, `min_h=32`).
+pub fn danger_button(ui: &mut Ui, text: &str) -> egui::Response {
+    let rest_bg = Color32::from_rgba_unmultiplied_const(229, 72, 77, 24);
+    let hover_bg = Color32::from_rgba_unmultiplied_const(229, 72, 77, 46);
+    let active_bg = Color32::from_rgba_unmultiplied_const(229, 72, 77, 68);
+    let border = Color32::from_rgba_unmultiplied_const(229, 72, 77, 92);
+
+    ui.scope(|ui| {
+        let visuals = ui.visuals_mut();
+        visuals.widgets.inactive.weak_bg_fill = rest_bg;
+        visuals.widgets.inactive.bg_fill = rest_bg;
+        visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, border);
+        visuals.widgets.hovered.weak_bg_fill = hover_bg;
+        visuals.widgets.hovered.bg_fill = hover_bg;
+        visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, COLOR_NEGATIVE);
+        visuals.widgets.active.weak_bg_fill = active_bg;
+        visuals.widgets.active.bg_fill = active_bg;
+        visuals.widgets.active.bg_stroke = Stroke::new(1.0, COLOR_NEGATIVE);
+
+        let rich = RichText::new(text).color(COLOR_NEGATIVE).size(FONT_SMALL);
+        ui.add(
+            egui::Button::new(rich)
+                .corner_radius(CornerRadius::same(RADIUS_CONTROL))
+                .min_size(Vec2::new(0.0, 32.0)),
+        )
+    })
+    .inner
+}
+
+/// Segmented selector button (`r=8`, `min_h=32`, single Instrument Cyan border when selected).
+pub fn segmented_button(ui: &mut Ui, text: &str, selected: bool) -> egui::Response {
+    ui.scope(|ui| {
+        let visuals = ui.visuals_mut();
+        if selected {
+            visuals.widgets.inactive.weak_bg_fill = COLOR_ACCENT_SOFT;
+            visuals.widgets.inactive.bg_fill = COLOR_ACCENT_SOFT;
+            visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, COLOR_ACCENT_BORDER);
+            visuals.widgets.hovered.weak_bg_fill = COLOR_ACCENT_SOFT;
+            visuals.widgets.hovered.bg_fill = COLOR_ACCENT_SOFT;
+            visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, COLOR_ACCENT);
+        } else {
+            visuals.widgets.inactive.weak_bg_fill = COLOR_SURFACE_CONTAINER;
+            visuals.widgets.inactive.bg_fill = COLOR_SURFACE_CONTAINER;
+            visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, COLOR_BORDER_HAIRLINE);
+            visuals.widgets.hovered.weak_bg_fill = COLOR_SURFACE_HIGH;
+            visuals.widgets.hovered.bg_fill = COLOR_SURFACE_HIGH;
+            visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, COLOR_BORDER_STRONG);
+        }
+
+        let text_col = if selected {
+            COLOR_TEXT_PRIMARY
+        } else {
+            COLOR_TEXT_SECONDARY
+        };
+        let rich = RichText::new(text).color(text_col).size(FONT_SMALL);
+        ui.add(
+            egui::Button::new(rich)
+                .corner_radius(CornerRadius::same(RADIUS_CONTROL))
+                .min_size(Vec2::new(0.0, 32.0)),
+        )
+    })
+    .inner
+}
+
+/// Recessed keycap well (`#0f0f10`, 1px hairline, `r=4`, `12px` mono `#ededed`).
+pub fn keycap(ui: &mut Ui, text: &str) {
+    let galley = ui.painter().layout_no_wrap(
+        text.to_owned(),
+        FontId::monospace(FONT_META),
+        COLOR_TEXT_PRIMARY,
+    );
+    let pad_x = 6.0;
+    let pad_y = 3.0;
+    let total_size = Vec2::new(galley.size().x + pad_x * 2.0, galley.size().y + pad_y * 2.0);
     let (rect, _) = ui.allocate_exact_size(total_size, egui::Sense::hover());
+
     if ui.is_rect_visible(rect) {
         let painter = ui.painter();
-        painter.rect_filled(rect, CornerRadius::same(4), COLOR_SURFACE_LOWEST);
+        painter.rect_filled(
+            rect,
+            CornerRadius::same(RADIUS_KEYCAP),
+            COLOR_SURFACE_LOWEST,
+        );
         painter.rect_stroke(
             rect,
-            CornerRadius::same(4),
-            Stroke::new(1.0, border_color),
+            CornerRadius::same(RADIUS_KEYCAP),
+            Stroke::new(1.0, COLOR_BORDER_HAIRLINE),
             egui::StrokeKind::Inside,
         );
         let pos = egui::Pos2::new(rect.min.x + pad_x, rect.center().y - galley.size().y * 0.5);
-        painter.galley(pos, galley, text_color);
+        painter.galley(pos, galley, COLOR_TEXT_PRIMARY);
     }
 }
 
-/// Botón táctico con acento de color opcional.
-pub fn tactical_button(
-    ui: &mut Ui,
-    text: &str,
-    is_active: bool,
-    primary_accent: bool,
-) -> egui::Response {
-    let (bg, text_col, border_col) = if is_active {
-        (
-            COLOR_PRIMARY_CONTAINER,
-            COLOR_ON_PRIMARY_CONTAINER,
-            COLOR_PRIMARY,
-        )
-    } else if primary_accent {
-        (
-            COLOR_SECONDARY_CONTAINER,
-            COLOR_ON_SECONDARY_CONTAINER,
-            COLOR_PRIMARY_CONTAINER,
-        )
-    } else {
-        (
-            COLOR_SURFACE_CONTAINER,
-            COLOR_ON_SURFACE,
-            COLOR_OUTLINE_VARIANT,
-        )
-    };
+/// Tactile selector detent for M1 / M2 / S1 mode switches (`r=8`, `min_h=28`).
+pub fn mode_detent(ui: &mut Ui, label: &str, selected: bool) -> egui::Response {
+    let resp = ui
+        .scope(|ui| {
+            let visuals = ui.visuals_mut();
+            if selected {
+                visuals.widgets.inactive.weak_bg_fill = COLOR_ACCENT_SOFT;
+                visuals.widgets.inactive.bg_fill = COLOR_ACCENT_SOFT;
+                visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, COLOR_ACCENT_BORDER);
+                visuals.widgets.hovered.weak_bg_fill = COLOR_ACCENT_SOFT;
+                visuals.widgets.hovered.bg_fill = COLOR_ACCENT_SOFT;
+                visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, COLOR_ACCENT);
+            } else {
+                visuals.widgets.inactive.weak_bg_fill = COLOR_SURFACE_HIGH;
+                visuals.widgets.inactive.bg_fill = COLOR_SURFACE_HIGH;
+                visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, COLOR_BORDER_HAIRLINE);
+                visuals.widgets.hovered.weak_bg_fill = COLOR_SURFACE_HIGHEST;
+                visuals.widgets.hovered.bg_fill = COLOR_SURFACE_HIGHEST;
+                visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, COLOR_BORDER_STRONG);
+            }
 
-    let rich = RichText::new(text)
-        .color(text_col)
-        .size(11.0)
-        .strong()
-        .monospace();
+            let text_col = if selected {
+                COLOR_ACCENT
+            } else {
+                COLOR_TEXT_SECONDARY
+            };
+            let rich = RichText::new(label)
+                .color(text_col)
+                .size(FONT_META)
+                .monospace();
+            ui.add(
+                egui::Button::new(rich)
+                    .corner_radius(CornerRadius::same(RADIUS_CONTROL))
+                    .min_size(Vec2::new(0.0, 28.0)),
+            )
+        })
+        .inner;
 
-    ui.add(
-        egui::Button::new(rich)
-            .fill(bg)
-            .stroke(Stroke::new(1.0, border_col))
-            .corner_radius(CornerRadius::same(4)),
-    )
+    if selected && ui.is_rect_visible(resp.rect) {
+        let r = resp.rect;
+        ui.painter().hline(
+            (r.min.x + RADIUS_CONTROL as f32)..=(r.max.x - RADIUS_CONTROL as f32),
+            r.min.y + 1.0,
+            Stroke::new(1.0, COLOR_TOP_HIGHLIGHT),
+        );
+    }
+    resp
+}
+
+/// Flat circular status dot with no glow or shadow.
+pub fn status_dot(ui: &mut Ui, color: Color32, size: f32) {
+    let (rect, _) = ui.allocate_exact_size(Vec2::splat(size), egui::Sense::hover());
+    if ui.is_rect_visible(rect) {
+        ui.painter().circle_filled(rect.center(), size * 0.5, color);
+    }
+}
+
+/// Quiet inline monospace key-value metadata without any surrounding pill border.
+pub fn meta_kv(ui: &mut Ui, label: &str, value: &str, value_color: Color32) {
+    let label_galley = ui.painter().layout_no_wrap(
+        label.to_owned(),
+        FontId::monospace(FONT_META),
+        COLOR_TEXT_MUTED,
+    );
+    let value_galley =
+        ui.painter()
+            .layout_no_wrap(value.to_owned(), FontId::monospace(FONT_META), value_color);
+
+    let gap = SPACE_XS;
+    let total_size = Vec2::new(
+        label_galley.size().x + gap + value_galley.size().x,
+        label_galley.size().y.max(value_galley.size().y),
+    );
+
+    let (rect, _) = ui.allocate_exact_size(total_size, egui::Sense::hover());
+    if ui.is_rect_visible(rect) {
+        let painter = ui.painter();
+        let label_pos = egui::Pos2::new(rect.min.x, rect.center().y - label_galley.size().y * 0.5);
+        let value_pos = egui::Pos2::new(
+            label_pos.x + label_galley.size().x + gap,
+            rect.center().y - value_galley.size().y * 0.5,
+        );
+        painter.galley(label_pos, label_galley, COLOR_TEXT_MUTED);
+        painter.galley(value_pos, value_galley, value_color);
+    }
+}
+
+/// Clean proportional section heading in sentence case without decorative icons.
+pub fn section_heading(ui: &mut Ui, text: &str) {
+    ui.label(
+        RichText::new(text)
+            .color(COLOR_TEXT_PRIMARY)
+            .size(FONT_HEADING),
+    );
 }

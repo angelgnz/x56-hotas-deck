@@ -60,6 +60,15 @@ impl ModeSlot {
             Self::S1 => "Modo S1 (Especial / Aterrizaje)",
         }
     }
+
+    /// Localized mode description using the active Fluent locale.
+    pub fn localized_description(&self) -> String {
+        match self {
+            Self::M1 => crate::t!("mode-m1-desc"),
+            Self::M2 => crate::t!("mode-m2-desc"),
+            Self::S1 => crate::t!("mode-s1-desc"),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

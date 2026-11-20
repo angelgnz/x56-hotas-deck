@@ -98,7 +98,7 @@ impl Tray for X56Tray {
     }
 
     fn title(&self) -> String {
-        "X-56 RHINO Control Center".into()
+        "X56 Deck".into()
     }
 
     fn category(&self) -> Category {
@@ -124,13 +124,13 @@ impl Tray for X56Tray {
             .map(|p| p.clone())
             .unwrap_or_else(|_| "Default".into());
         let uinput = if self.uinput_online.lock().map(|g| *g).unwrap_or(true) {
-            "Online (1000Hz)"
+            format!("{} (50 Hz)", x56_core::t!("tray-status-online"))
         } else {
-            "Offline"
+            x56_core::t!("tray-status-offline")
         };
         ToolTip {
-            title: "X-56 RHINO // RUST-EVDEV".into(),
-            description: format!("Perfil: {prof} | uinput: {uinput}"),
+            title: "X56 Deck".into(),
+            description: x56_core::t!("tray-tooltip", "profile" => &prof, "uinput" => &uinput),
             ..Default::default()
         }
     }
@@ -271,8 +271,8 @@ fn spawn_x11_xembed_tray(tx: Sender<TrayCommand>, egui_ctx: egui::Context) -> Op
                 Err(_) => return,
             };
 
-            let mut cur_w = 21u16;
-            let mut cur_h = 21u16;
+            let mut cur_w = 22u16;
+            let mut cur_h = 22u16;
             let values = CreateWindowAux::new()
                 .background_pixmap(BackPixmap::PARENT_RELATIVE)
                 .event_mask(
@@ -384,10 +384,10 @@ fn spawn_x11_xembed_tray(tx: Sender<TrayCommand>, egui_ctx: egui::Context) -> Op
                         if base + 2 < bg.len() {
                             (bg[base] as f32, bg[base + 1] as f32, bg[base + 2] as f32)
                         } else {
-                            (30.0, 30.0, 30.0)
+                            (25.0, 25.0, 27.0)
                         }
                     } else {
-                        (30.0, 30.0, 30.0)
+                        (25.0, 25.0, 27.0)
                     };
 
                     chunk[0] = ((p[2] as f32 * alpha) + (bg_b * inv)).clamp(0.0, 255.0) as u8;
@@ -442,8 +442,8 @@ fn spawn_x11_xembed_tray(tx: Sender<TrayCommand>, egui_ctx: egui::Context) -> Op
 
                 let menu_vals = CreateWindowAux::new()
                     .override_redirect(1)
-                    .background_pixel(0x11141b)
-                    .border_pixel(0x00f0ff)
+                    .background_pixel(0x19191b)
+                    .border_pixel(0x28282b)
                     .event_mask(
                         EventMask::EXPOSURE
                             | EventMask::BUTTON_PRESS

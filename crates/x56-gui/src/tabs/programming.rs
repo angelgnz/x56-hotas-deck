@@ -1,28 +1,34 @@
-//! Pestaña táctica de Programación y Mapeo de Botones ("Avionics Vector")
-//! para el Saitek / Logitech G X56 HOTAS (Inspirada en la Sección 8 del Manual).
-//!
-//! Implementa la arquitectura visual Avionics Vector:
-//! - Top Bar táctica con selector de dispositivo, pills M1/M2/S1 y toggle en vivo del router uinput.
-//! - Columna Izquierda: Monitor de detección en vivo (evdev hook 1000 Hz), mapa vectorial 2D interactivo,
-//!   matriz POV Hat 1 con brújula octogonal y botones de acción rápida de macros.
-//! - Columna Derecha: Buscador táctico, estadísticas telemétricas, chips de filtro y filas de mapeo
-//!   con badges destacados uinput y metadatos de Star Citizen / Simuladores.
+//! Button mapping and mode programming tab for Saitek / Logitech G X56 HOTAS.
 
 use std::collections::HashSet;
 use std::time::Instant;
 
 use eframe::egui::{self, Color32, Key, RichText, Stroke, Ui, Vec2};
 use x56_core::{
-    catalog_for_device, ButtonDescriptor, ButtonMonitor, CommandCell, DeviceKind,
+    catalog_for_device, parse_color, ButtonDescriptor, ButtonMonitor, CommandCell, DeviceKind,
     LiveButtonsSnapshot, MacroStep, ModeSlot, ProgrammingProfile, TestTriggerStatus,
     TriggeredCommandEvent,
 };
 
 use crate::curve_math::{LiveAxesState, LiveInputPoller};
 use crate::icons;
-use crate::theme::{self, *};
+use crate::theme::{
+    self, COLOR_ACCENT, COLOR_ACCENT_BORDER, COLOR_BORDER_HAIRLINE, COLOR_BORDER_STRONG,
+    COLOR_BORDER_SUBTLE, COLOR_NEGATIVE, COLOR_ON_ACCENT, COLOR_POSITIVE, COLOR_SURFACE_HIGHEST,
+    COLOR_SURFACE_LOWEST, COLOR_TEXT_MUTED, COLOR_TEXT_PRIMARY, COLOR_TEXT_SECONDARY,
+    COLOR_WARNING, FONT_BODY, FONT_HEADING, FONT_META, FONT_SMALL, RADIUS_CONTROL, SPACE_LG,
+    SPACE_MD, SPACE_SM, SPACE_XS,
+};
 
-/// Categorías de filtro táctico para el catálogo de botones.
+// Matte anodized graphite hardware palette for the 2D schematic canvas.
+const CHASSIS_FILL: Color32 = Color32::from_rgb(0x1a, 0x1a, 0x1d);
+const CHASSIS_WELL: Color32 = Color32::from_rgb(0x12, 0x12, 0x14);
+const CONTROL_BASE: Color32 = Color32::from_rgb(0x22, 0x22, 0x26);
+const CONTROL_CAP: Color32 = Color32::from_rgb(0x2b, 0x2b, 0x30);
+const CONTROL_BEVEL: Color32 = Color32::from_rgb(0x36, 0x36, 0x3c);
+const CONTROL_HAIRLINE: Color32 = Color32::from_rgb(0x3f, 0x3f, 0x46);
+
+/// Filter categories for the button mapping catalog.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FilterCategory {
     #[default]
@@ -45,22 +51,10 @@ impl FilterCategory {
             Self::Shift => x56_core::t!("prog-filter-shift"),
         }
     }
-
-    pub fn icon(&self) -> &'static str {
-        match self {
-            Self::Todos => icons::LAYERS,
-            Self::Gatillos => icons::TARGET,
-            Self::Setas => icons::COMPASS,
-            Self::BotonesFrontales => icons::GAMEPAD,
-            Self::Macros => icons::TERMINAL,
-            Self::Shift => icons::SPARKLES,
-        }
-    }
 }
 
-/// Estado y lógica de la pestaña táctica de Programación de Botones y Modos.
+/// State and UI logic for button mapping, mode layers, and macro recording.
 pub struct ProgrammingTab {
-    // Estado principal
     pub selected_device: DeviceKind,
     pub selected_mode: ModeSlot,
     pub follow_hardware_mode: bool,
@@ -75,7 +69,6 @@ pub struct ProgrammingTab {
     pub status_message: Option<(String, bool)>,
     pub test_input_text: String,
 
-    // Avionics Vector Redesign
     pub search_query: String,
     pub filter_category: FilterCategory,
     pub last_detected_button: Option<String>,
@@ -94,7 +87,7 @@ pub struct ProgrammingTab {
     pub active_pressed_summary: String,
 }
 
-/// Estado de interacción táctil para los componentes del mapa vectorial.
+/// Interaction state for schematic vector controls.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum InteractState {
     #[default]
@@ -110,7 +103,7 @@ impl InteractState {
     }
 }
 
-/// Estado de interacción para controles bidireccionales (K1, SC, TGL 1-4, SW 1-6).
+/// Interaction state for bidirectional schematic controls (K1, SC, TGL 1-4, SW 1-6).
 #[derive(Copy, Clone, Debug, Default)]
 pub struct Dir2Interact {
     pub up: InteractState,
@@ -123,7 +116,7 @@ impl Dir2Interact {
     }
 }
 
-/// Estado de interacción para crucetas/D-Pads (POV, H1, H2, H3, H4).
+/// Interaction state for 4-way hat/D-pad schematic controls (POV, H1, H2, H3, H4).
 #[derive(Copy, Clone, Debug, Default)]
 pub struct Dir4Interact {
     pub up: InteractState,
@@ -138,7 +131,7 @@ impl Dir4Interact {
     }
 }
 
-/// Mapa de interacción resuelto para una trama de renderizado inmediato.
+/// Resolved interaction map for an immediate-mode schematic render frame.
 pub struct InteractionMap<'a> {
     pub pressed: &'a HashSet<String>,
     pub hovered: Option<&'a str>,
@@ -200,7 +193,6 @@ impl Default for ProgrammingTab {
 }
 
 impl ProgrammingTab {
-    /// Inicializa la pestaña con los parámetros por defecto de Avionics Vector.
     pub fn new() -> Self {
         Self {
             selected_device: DeviceKind::Stick,
@@ -236,104 +228,96 @@ impl ProgrammingTab {
         }
     }
 
-    /// Carga un perfil de programación y lo sincroniza con el monitor de botones.
+    /// Loads a programming profile and synchronizes it with the button monitor.
     pub fn load_programming_profile(&mut self, prof: ProgrammingProfile, monitor: &ButtonMonitor) {
         self.profile = prof;
         monitor.set_profile(self.profile.clone());
         self.editing_button_id = None;
         self.pending_keys.clear();
         self.pending_name.clear();
-        self.status_message = Some((
-            "PERFIL TÁCTICO SINCRONIZADO CORRECTAMENTE // UINPUT LISTO".to_string(),
-            false,
-        ));
+        self.status_message = Some((x56_core::t!("prog-profile-synced"), false));
     }
 
-    /// Devuelve una copia del perfil de programación actual.
+    /// Returns a copy of the active programming profile.
     pub fn current_programming_profile(&self) -> ProgrammingProfile {
         self.profile.clone()
     }
 
-    /// Renderizado principal de la pestaña de programación.
+    /// Main UI entry point for the button programming tab.
     pub fn ui(&mut self, ui: &mut Ui, monitor: &ButtonMonitor, poller: &LiveInputPoller) {
-        // Establecer el ancho máximo disponible para evitar cualquier desbordamiento horizontal
         let avail_w = ui.available_width();
         ui.set_max_width(avail_w);
 
         let snapshot = monitor.snapshot();
         let live_axes = poller.get_state();
 
-        // 1. Sincronización física de hardware si está activo el seguimiento automático
         if self.follow_hardware_mode {
             self.selected_mode = snapshot.active_mode;
         }
 
-        // 2. Detección en vivo de pulsaciones físicas para telemetría
         self.update_live_detection_state(&snapshot);
 
-        // 3. Captura interactiva de teclas (grabación de secuencia vs edición de celda)
         if self.is_recording_macro {
             self.handle_live_macro_recording(ui);
         } else {
             self.handle_live_key_capture(ui);
         }
 
-        // 4. Barra Superior Táctica (Top Bar)
-        self.render_tactical_top_bar(ui, monitor, &snapshot);
+        self.render_top_toolbar(ui, monitor, &snapshot);
 
-        ui.add_space(6.0);
+        ui.add_space(SPACE_SM);
 
-        // Mensaje de estado táctico / toast si está presente
         let mut dismiss_status = false;
         if let Some((ref msg, is_err)) = self.status_message {
-            let col = if is_err {
-                COLOR_ERROR
+            let dot_col = if is_err {
+                COLOR_NEGATIVE
             } else {
-                COLOR_TERTIARY_CONTAINER
+                COLOR_POSITIVE
             };
-            theme::sunken_frame().show(ui, |ui| {
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(
-                        RichText::new(format!("{} TELEMETRÍA //", icons::ACTIVITY))
-                            .color(col)
-                            .size(10.0)
-                            .monospace()
-                            .strong(),
-                    );
+            theme::subcard_frame().show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    theme::status_dot(ui, dot_col, 8.0);
                     ui.label(
                         RichText::new(msg)
-                            .color(COLOR_PRIMARY)
-                            .size(11.0)
-                            .monospace(),
+                            .color(COLOR_TEXT_PRIMARY)
+                            .size(FONT_SMALL),
                     );
-                    if ui.small_button(icons::X).clicked() {
-                        dismiss_status = true;
-                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .add(
+                                egui::Button::new(
+                                    RichText::new(icons::X)
+                                        .color(COLOR_TEXT_MUTED)
+                                        .size(FONT_SMALL),
+                                )
+                                .frame(false),
+                            )
+                            .clicked()
+                        {
+                            dismiss_status = true;
+                        }
+                    });
                 });
             });
-            ui.add_space(4.0);
+            ui.add_space(SPACE_SM);
         }
         if dismiss_status {
             self.status_message = None;
         }
 
-        // 5. Layout Táctico: 2 Columnas en pantallas amplias (>= 850px) o Apilado Responsivo (< 850px)
         let total_w = ui.available_width();
 
         if self.show_diagram_view {
             if total_w >= 850.0 {
-                let gap = 12.0;
-                let col_w = ((total_w - gap) * 0.5).max(240.0);
-                let left_w = col_w;
+                let gap = SPACE_MD;
+                let left_w = ((total_w - gap) * 0.5).max(240.0);
 
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = gap;
 
-                    // ================================================================
-                    // COLUMNA IZQUIERDA (50%): Monitor, Mapa Vectorial 2D, POV Hat
-                    // ================================================================
                     ui.allocate_ui_with_layout(
-                        Vec2::new(left_w, ui.available_height() - 48.0),
+                        Vec2::new(left_w, ui.available_height()),
                         egui::Layout::top_down(egui::Align::Min),
                         |ui| {
                             ui.set_width(left_w);
@@ -343,15 +327,12 @@ impl ProgrammingTab {
                                 .auto_shrink([false, false])
                                 .show(ui, |ui| {
                                     ui.set_width(ui.available_width());
-                                    // A. Monitor de detección en vivo (EVDEV Hook)
                                     self.render_evdev_hook_card(ui, &snapshot);
-                                    ui.add_space(8.0);
+                                    ui.add_space(SPACE_MD);
 
-                                    // B. Mapa Vectorial de Entradas X-56 2D
                                     self.render_vector_map_card(ui, &snapshot);
-                                    ui.add_space(8.0);
+                                    ui.add_space(SPACE_MD);
 
-                                    // C. POV Hat 1 Live Matrix (Stick) o Throttle Mini-Gimbal 2D (Throttle)
                                     if self.selected_device == DeviceKind::Stick {
                                         self.render_pov_compass_card(ui, &snapshot);
                                     } else {
@@ -359,36 +340,28 @@ impl ProgrammingTab {
                                             ui, &snapshot, &live_axes,
                                         );
                                     }
-                                    ui.add_space(8.0);
+                                    ui.add_space(SPACE_MD);
 
-                                    // D. Botones de acción rápida de macros
                                     self.render_quick_macro_actions(ui);
-                                    ui.add_space(6.0);
+                                    ui.add_space(SPACE_SM);
                                 });
                         },
                     );
 
-                    // ================================================================
-                    // COLUMNA DERECHA (50%): Buscador, Estadísticas, Filtros y Mapeos
-                    // ================================================================
                     let right_w = ui.available_width().max(240.0);
                     ui.allocate_ui_with_layout(
-                        Vec2::new(right_w, ui.available_height() - 48.0),
+                        Vec2::new(right_w, ui.available_height()),
                         egui::Layout::top_down(egui::Align::Min),
                         |ui| {
                             ui.set_width(right_w);
-                            // A. Buscador táctico y estadísticas telemétricas
                             self.render_search_and_stats(ui);
-                            ui.add_space(6.0);
+                            ui.add_space(SPACE_SM);
 
-                            // B. Pills de filtro por categoría
                             self.render_filter_pills(ui);
-                            ui.add_space(6.0);
+                            ui.add_space(SPACE_SM);
 
-                            // B2. Grabador de secuencias cuando está activo/abierto
                             self.render_macro_recorder_panel(ui, monitor);
 
-                            // C. Filas de mapeo tácticas en tarjetas
                             egui::ScrollArea::vertical()
                                 .id_salt("mapping_rows_scroll")
                                 .max_width(right_w)
@@ -401,60 +374,51 @@ impl ProgrammingTab {
                     );
                 });
             } else {
-                // Modo Apilado Responsivo para pantallas compactas (< 850px)
                 egui::ScrollArea::vertical()
                     .id_salt("programming_stacked_scroll")
                     .max_width(total_w)
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
                         ui.set_width(ui.available_width());
-                        // Monitor de detección en vivo (EVDEV Hook)
                         self.render_evdev_hook_card(ui, &snapshot);
-                        ui.add_space(8.0);
+                        ui.add_space(SPACE_MD);
 
-                        // Mapa Vectorial de Entradas X-56 2D
                         self.render_vector_map_card(ui, &snapshot);
-                        ui.add_space(8.0);
+                        ui.add_space(SPACE_MD);
 
-                        // POV Hat 1 Live Matrix (Stick) o Throttle Mini-Gimbal 2D (Throttle)
                         if self.selected_device == DeviceKind::Stick {
                             self.render_pov_compass_card(ui, &snapshot);
                         } else {
                             self.render_throttle_ministick_card(ui, &snapshot, &live_axes);
                         }
-                        ui.add_space(8.0);
+                        ui.add_space(SPACE_MD);
 
-                        // Botones de acción rápida de macros
                         self.render_quick_macro_actions(ui);
-                        ui.add_space(6.0);
+                        ui.add_space(SPACE_SM);
                         self.render_macro_recorder_panel(ui, monitor);
-                        ui.add_space(10.0);
+                        ui.add_space(SPACE_MD);
                         ui.separator();
-                        ui.add_space(10.0);
+                        ui.add_space(SPACE_MD);
 
-                        // Buscador táctico y estadísticas telemétricas
                         self.render_search_and_stats(ui);
-                        ui.add_space(6.0);
+                        ui.add_space(SPACE_SM);
 
-                        // Pills de filtro por categoría
                         self.render_filter_pills(ui);
-                        ui.add_space(6.0);
+                        ui.add_space(SPACE_SM);
 
-                        // Filas de mapeo tácticas en tarjetas
                         self.render_mapping_cards(ui, monitor, &snapshot);
                     });
             }
         } else {
-            // Modo Solo Celdas (ancho completo)
             ui.allocate_ui_with_layout(
-                Vec2::new(total_w, ui.available_height() - 48.0),
+                Vec2::new(total_w, ui.available_height()),
                 egui::Layout::top_down(egui::Align::Min),
                 |ui| {
                     ui.set_width(total_w);
                     self.render_search_and_stats(ui);
-                    ui.add_space(6.0);
+                    ui.add_space(SPACE_SM);
                     self.render_filter_pills(ui);
-                    ui.add_space(6.0);
+                    ui.add_space(SPACE_SM);
                     self.render_macro_recorder_panel(ui, monitor);
                     egui::ScrollArea::vertical()
                         .id_salt("mapping_rows_scroll_full")
@@ -468,13 +432,12 @@ impl ProgrammingTab {
             );
         }
 
-        // 6. Modal de prueba de loop evdev
         if self.show_test_window {
             self.render_test_modal(ui, monitor, &snapshot);
         }
     }
 
-    /// Actualiza el estado del monitor telemétrico a partir de las entradas físicas.
+    /// Updates live detection telemetry from physical button snapshot.
     fn update_live_detection_state(&mut self, snapshot: &LiveButtonsSnapshot) {
         self.currently_pressed_count = snapshot.pressed_buttons.len();
         if !snapshot.pressed_buttons.is_empty() {
@@ -486,8 +449,11 @@ impl ProgrammingTab {
                     all_desc
                         .iter()
                         .find(|d| &d.id == id)
-                        .map(|d| format!("• {} ({})", d.label, d.id.to_uppercase()))
-                        .unwrap_or_else(|| format!("• {}", id.to_uppercase()))
+                        .map(|d| {
+                            let loc = localized_node_name_by_id(&d.id, d.label);
+                            format!("{loc} ({})", d.id.to_uppercase())
+                        })
+                        .unwrap_or_else(|| id.to_uppercase())
                 })
                 .collect();
             labels.sort();
@@ -505,7 +471,6 @@ impl ProgrammingTab {
 
         self.last_state_down = true;
 
-        // 1. Detectar transiciones de nuevos botones presionados (0 -> 1)
         let mut newly_pressed: Vec<String> = snapshot
             .pressed_buttons
             .iter()
@@ -514,19 +479,15 @@ impl ProgrammingTab {
             .collect();
 
         if !newly_pressed.is_empty() {
-            // Si hay botones recién presionados, orden determinista y priorizamos el nuevo botón
             newly_pressed.sort();
             self.active_detected_id = Some(newly_pressed[0].clone());
         } else if let Some(ref current) = self.active_detected_id {
-            // Si el botón actual sigue presionado, lo mantenemos estable (sin flicker)
             if !snapshot.pressed_buttons.contains(current) {
-                // El botón activo fue liberado; seleccionar de forma determinista entre los que sigan activos
                 let mut remaining: Vec<String> = snapshot.pressed_buttons.iter().cloned().collect();
                 remaining.sort();
                 self.active_detected_id = Some(remaining[0].clone());
             }
         } else {
-            // Caso inicial: sin botón previo pero con botones presionados
             let mut remaining: Vec<String> = snapshot.pressed_buttons.iter().cloned().collect();
             remaining.sort();
             self.active_detected_id = Some(remaining[0].clone());
@@ -534,12 +495,11 @@ impl ProgrammingTab {
 
         self.prev_pressed_buttons = snapshot.pressed_buttons.clone();
 
-        // 2. Actualizar telemetría visual del HUD con el botón activo
         if let Some(ref btn_id) = self.active_detected_id {
             let all_desc = x56_core::all_button_descriptors();
             if let Some(desc) = all_desc.iter().find(|d| &d.id == btn_id) {
-                self.last_detected_button =
-                    Some(format!("{} // {}", desc.id.to_uppercase(), desc.label));
+                let loc = localized_node_name_by_id(&desc.id, desc.label);
+                self.last_detected_button = Some(format!("{} · {loc}", desc.id.to_uppercase()));
                 self.last_hex_code = if desc.evdev_code != 0 {
                     format!("{:#06x}", desc.evdev_code)
                 } else {
@@ -557,13 +517,9 @@ impl ProgrammingTab {
         }
     }
 
-    /// Captura pulsaciones de teclado en vivo para la celda en edición.
+    /// Captures live keyboard presses for the mapping cell currently being edited.
     fn handle_live_key_capture(&mut self, ui: &mut Ui) {
-        if self.editing_button_id.is_none() {
-            return;
-        }
-
-        if ui.ctx().egui_wants_keyboard_input() {
+        if self.editing_button_id.is_none() || ui.ctx().egui_wants_keyboard_input() {
             return;
         }
 
@@ -592,7 +548,7 @@ impl ProgrammingTab {
         });
     }
 
-    /// Captura secuencias de teclado en vivo mientras el grabador de macros está activo.
+    /// Captures live keyboard chords while macro sequence recording is active.
     fn handle_live_macro_recording(&mut self, ui: &mut Ui) {
         if !self.is_recording_macro || ui.ctx().egui_wants_keyboard_input() {
             return;
@@ -648,7 +604,7 @@ impl ProgrammingTab {
         }
     }
 
-    /// Registra un acorde de teclas como nuevo paso en la secuencia grabada.
+    /// Records a key chord as a step in the macro sequence.
     pub(crate) fn record_key_chord(&mut self, chord: Vec<String>, now: Instant) {
         if chord.is_empty() {
             return;
@@ -672,22 +628,24 @@ impl ProgrammingTab {
     }
 
     // ========================================================================
-    // TOP BAR TÁCTICA
+    // 1. TOP TOOLBAR
     // ========================================================================
 
-    fn render_tactical_top_bar(
+    fn render_top_toolbar(
         &mut self,
         ui: &mut Ui,
         monitor: &ButtonMonitor,
         snapshot: &LiveButtonsSnapshot,
     ) {
-        theme::header_frame().show(ui, |ui| {
+        theme::subcard_frame().show(ui, |ui| {
+            ui.set_width(ui.available_width());
             ui.horizontal_wrapped(|ui| {
-                // Switcher de Dispositivo
+                ui.spacing_mut().item_spacing = Vec2::new(SPACE_XS, SPACE_XS);
+
+                // Device switcher: Stick / Throttle
                 let is_stick = self.selected_device == DeviceKind::Stick;
-                let stick_label =
-                    format!("{} {}", icons::JOYSTICK, x56_core::t!("prog-device-stick"));
-                if tactical_button(ui, &stick_label, is_stick, false).clicked()
+                if theme::segmented_button(ui, &x56_core::t!("curves-stick-short"), is_stick)
+                    .clicked()
                     && !is_stick
                 {
                     self.selected_device = DeviceKind::Stick;
@@ -696,9 +654,8 @@ impl ProgrammingTab {
                 }
 
                 let is_throttle = self.selected_device == DeviceKind::Throttle;
-                let thr_label =
-                    format!("{} {}", icons::SLIDERS, x56_core::t!("prog-device-throttle"));
-                if tactical_button(ui, &thr_label, is_throttle, false).clicked()
+                if theme::segmented_button(ui, &x56_core::t!("curves-throttle-short"), is_throttle)
+                    .clicked()
                     && !is_throttle
                 {
                     self.selected_device = DeviceKind::Throttle;
@@ -706,113 +663,66 @@ impl ProgrammingTab {
                     self.hovered_button_id = None;
                 }
 
-                ui.separator();
+                ui.add_space(SPACE_XS);
 
-                // Botón de Alternancia de Vistas (Dual 5:7 vs Solo Celdas)
-                let view_label = if self.show_diagram_view {
-                    format!("{} VISTAS: DUAL (5:7)", icons::LAYERS)
-                } else {
-                    format!("{} VISTAS: SOLO CELDAS", icons::LAYERS)
-                };
-                if tactical_button(ui, &view_label, self.show_diagram_view, false)
-                    .on_hover_text("Alterna entre la vista combinada con Esquema Vectorial y la vista de Solo Celdas")
+                // View switcher: Split / List
+                let split_lbl = short_view_label(&x56_core::t!("prog-view-dual"));
+                let list_lbl = short_view_label(&x56_core::t!("prog-view-cells"));
+                if theme::segmented_button(ui, &split_lbl, self.show_diagram_view)
+                    .on_hover_text(x56_core::t!("prog-view-tooltip"))
                     .clicked()
+                    && !self.show_diagram_view
                 {
-                    self.show_diagram_view = !self.show_diagram_view;
+                    self.show_diagram_view = true;
+                }
+                if theme::segmented_button(ui, &list_lbl, !self.show_diagram_view)
+                    .on_hover_text(x56_core::t!("prog-view-tooltip"))
+                    .clicked()
+                    && self.show_diagram_view
+                {
+                    self.show_diagram_view = false;
                 }
 
-                ui.separator();
+                ui.add_space(SPACE_XS);
 
-                // Selector de Modo Físico
-                ui.label(
-                    RichText::new(x56_core::t!("prog-hw-mode"))
-                        .color(COLOR_OUTLINE)
-                        .size(10.0)
-                        .monospace()
-                        .strong(),
-                );
-
-                let modes = [
-                    (
-                        ModeSlot::M1,
-                        x56_core::t!("prog-mode-m1-desc"),
-                        COLOR_PRIMARY_CONTAINER,
-                    ),
-                    (
-                        ModeSlot::M2,
-                        x56_core::t!("prog-mode-m2-desc"),
-                        COLOR_WARNING_AMBER,
-                    ),
-                    (
-                        ModeSlot::S1,
-                        x56_core::t!("prog-mode-s1-desc"),
-                        COLOR_SECONDARY,
-                    ),
-                ];
-
-                for (slot, default_label, active_tint) in modes {
+                // Rotary mode detents: M1 / M2 / S1 with optional 6px LED color dot
+                for slot in ModeSlot::ALL {
                     let is_sel = self.selected_mode == slot;
                     let bindings = self.profile.bindings_for(slot);
-                    let label = if let Some(ref name) = bindings.name {
-                        format!("{}: {}", slot.as_str(), name.to_uppercase())
+                    let led_col = bindings
+                        .rgb_for(self.selected_device)
+                        .or_else(|| bindings.rgb_for(DeviceKind::Stick))
+                        .and_then(|hex| parse_color(hex).ok())
+                        .map(|c| Color32::from_rgb(c.r, c.g, c.b));
+
+                    let detent_label = if led_col.is_some() {
+                        format!("  {}", slot.as_str())
                     } else {
-                        format!("{}: {}", slot.as_str(), default_label)
+                        slot.as_str().to_string()
                     };
 
-                    let tint = bindings
-                        .rgb_for(DeviceKind::Stick)
-                        .and_then(|hex| x56_core::parse_color(hex).ok())
-                        .map(|c| Color32::from_rgb(c.r, c.g, c.b))
-                        .unwrap_or(active_tint);
-
-                    let (bg, fg, stroke_col) = if is_sel {
-                        (tint, Color32::WHITE, tint)
-                    } else {
-                        (COLOR_SURFACE_CONTAINER, COLOR_ON_SURFACE, COLOR_OUTLINE_VARIANT)
-                    };
-
-                    let btn = egui::Button::new(
-                        RichText::new(label)
-                            .size(10.5)
-                            .color(fg)
-                            .strong()
-                            .monospace(),
-                    )
-                    .fill(bg)
-                    .stroke(Stroke::new(1.0, stroke_col))
-                    .corner_radius(egui::CornerRadius::same(4));
-
-                    if ui.add(btn).clicked() {
+                    let resp = theme::mode_detent(ui, &detent_label, is_sel)
+                        .on_hover_text(slot.localized_description());
+                    if let Some(dot_col) = led_col {
+                        if ui.is_rect_visible(resp.rect) {
+                            let dot_pos = egui::pos2(resp.rect.min.x + 11.0, resp.rect.center().y);
+                            ui.painter().circle_filled(dot_pos, 3.0, dot_col);
+                        }
+                    }
+                    if resp.clicked() {
                         self.selected_mode = slot;
                         self.follow_hardware_mode = false;
                         self.editing_button_id = None;
                     }
                 }
 
-                // Checkbox Sincronización HW
-                let hw_sync_label = format!(
-                    "{} {}",
-                    icons::ROTATE_CW,
-                    if self.follow_hardware_mode {
-                        x56_core::t!("prog-sync-hw-on")
-                    } else {
-                        x56_core::t!("prog-sync-hw-off")
-                    }
-                );
-                let hw_sync_col = if self.follow_hardware_mode {
-                    COLOR_TERTIARY_CONTAINER
+                // Sync dial toggle
+                let sync_label = if self.follow_hardware_mode {
+                    x56_core::t!("prog-sync-hw-on")
                 } else {
-                    COLOR_OUTLINE
+                    x56_core::t!("prog-sync-hw-off")
                 };
-
-                if ui
-                    .button(
-                        RichText::new(hw_sync_label)
-                            .color(hw_sync_col)
-                            .size(10.0)
-                            .monospace()
-                            .strong(),
-                    )
+                if theme::segmented_button(ui, &sync_label, self.follow_hardware_mode)
                     .on_hover_text(x56_core::t!("prog-sync-hw-tooltip"))
                     .clicked()
                 {
@@ -822,9 +732,9 @@ impl ProgrammingTab {
                     }
                 }
 
-                ui.separator();
+                ui.add_space(SPACE_XS);
 
-                // Estado / Toggle en vivo del Router uinput
+                // uinput router semantic status / toggle
                 let uinput_ready = monitor.uinput_available();
                 if !uinput_ready {
                     let router_text = format!(
@@ -832,75 +742,50 @@ impl ProgrammingTab {
                         x56_core::t!("prog-router-uinput"),
                         x56_core::t!("prog-router-offline")
                     );
-                    theme::sunken_frame()
-                        .inner_margin(egui::Margin::symmetric(8, 3))
-                        .show(ui, |ui| {
-                            ui.horizontal(|ui| {
-                                ui.label(
-                                    RichText::new(icons::CIRCLE_DOT)
-                                        .color(COLOR_ERROR)
-                                        .size(11.0),
-                                );
-                                ui.label(
-                                    RichText::new(router_text)
-                                        .color(COLOR_ERROR)
-                                        .size(10.0)
-                                        .monospace(),
-                                );
-                            });
-                        })
-                        .response
-                        .on_hover_text(x56_core::t!("sidebar-uinput-offline-tooltip"));
+                    ui.horizontal(|ui| {
+                        theme::status_dot(ui, COLOR_NEGATIVE, 8.0);
+                        ui.label(
+                            RichText::new(router_text)
+                                .color(COLOR_TEXT_MUTED)
+                                .size(FONT_META),
+                        );
+                    })
+                    .response
+                    .on_hover_text(x56_core::t!("sidebar-uinput-offline-tooltip"));
                 } else {
                     let is_active = monitor.is_active();
-                    let (label, accent_col) = if is_active {
-                        (
-                            format!(
-                                "{} {}",
-                                icons::CIRCLE_DOT,
-                                x56_core::t!("prog-uinput-active-short")
-                            ),
-                            COLOR_TERTIARY_CONTAINER,
-                        )
+                    let dot_col = if is_active {
+                        COLOR_POSITIVE
                     } else {
-                        (
-                            format!("{} {}", icons::UPLOAD, x56_core::t!("prog-uinput-paused-short")),
-                            COLOR_WARNING_AMBER,
-                        )
+                        COLOR_WARNING
                     };
-
-                    let btn = egui::Button::new(
-                        RichText::new(label)
-                            .color(accent_col)
-                            .size(10.0)
-                            .monospace()
-                            .strong(),
-                    )
-                    .fill(COLOR_SURFACE_HIGH)
-                    .stroke(Stroke::new(1.2, accent_col))
-                    .corner_radius(egui::CornerRadius::same(4));
-
-                    if ui
-                        .add(btn)
-                        .on_hover_text(x56_core::t!("prog-uinput-toggle-tooltip"))
-                        .clicked()
-                    {
-                        if is_active {
-                            monitor.set_active(false);
-                            self.status_message =
-                                Some((x56_core::t!("prog-uinput-paused-msg"), false));
-                        } else {
-                            monitor.set_profile(self.profile.clone());
-                            monitor.set_active(true);
-                            self.status_message =
-                                Some((x56_core::t!("prog-uinput-resumed-msg"), false));
+                    let toggle_lbl = if is_active {
+                        x56_core::t!("prog-uinput-active-short")
+                    } else {
+                        x56_core::t!("prog-uinput-paused-short")
+                    };
+                    ui.horizontal(|ui| {
+                        theme::status_dot(ui, dot_col, 8.0);
+                        if theme::ghost_button(ui, &toggle_lbl)
+                            .on_hover_text(x56_core::t!("prog-uinput-toggle-tooltip"))
+                            .clicked()
+                        {
+                            if is_active {
+                                monitor.set_active(false);
+                                self.status_message =
+                                    Some((x56_core::t!("prog-uinput-paused-msg"), false));
+                            } else {
+                                monitor.set_profile(self.profile.clone());
+                                monitor.set_active(true);
+                                self.status_message =
+                                    Some((x56_core::t!("prog-uinput-resumed-msg"), false));
+                            }
                         }
-                    }
+                    });
                 }
 
-                // Botón TEST EVDEV LOOP
-                let test_loop_lbl = format!("{} {}", icons::ZAP, x56_core::t!("prog-test-loop"));
-                if tactical_button(ui, &test_loop_lbl, false, true).clicked() {
+                // Test loop modal trigger
+                if theme::secondary_button(ui, &x56_core::t!("prog-test-loop")).clicked() {
                     self.show_test_window = true;
                 }
             });
@@ -908,155 +793,118 @@ impl ProgrammingTab {
     }
 
     // ========================================================================
-    // COLUMNA IZQUIERDA: TARJETA 1 - MONITOR DE DETECCIÓN EN VIVO
+    // 2. LIVE DETECTION MONITOR CARD
     // ========================================================================
 
     fn render_evdev_hook_card(&self, ui: &mut Ui, snapshot: &LiveButtonsSnapshot) {
         theme::card_frame().show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal_wrapped(|ui| {
-                ui.label(
-                    RichText::new(format!(
-                        "{} {}",
-                        icons::RADIO,
-                        x56_core::t!("prog-monitor-title")
-                    ))
-                    .color(COLOR_PRIMARY)
-                    .size(11.0)
-                    .strong()
-                    .monospace(),
-                );
-                if snapshot.stick_connected || snapshot.throttle_connected {
-                    telemetry_badge(ui, "HOOK", "EVDEV ACTIVO (50Hz)", COLOR_TERTIARY_CONTAINER);
+                theme::section_heading(ui, &x56_core::t!("prog-monitor-title"));
+                ui.add_space(SPACE_SM);
+                let connected = snapshot.stick_connected || snapshot.throttle_connected;
+                let (dot_col, status_txt) = if connected {
+                    (COLOR_POSITIVE, x56_core::t!("prog-hook-active"))
                 } else {
-                    telemetry_badge(ui, "HOOK", "SIN HARDWARE USB", COLOR_WARNING_AMBER);
-                }
+                    (COLOR_WARNING, x56_core::t!("prog-hook-no-usb"))
+                };
+                theme::status_dot(ui, dot_col, 8.0);
+                ui.label(
+                    RichText::new(status_txt)
+                        .color(COLOR_TEXT_SECONDARY)
+                        .size(FONT_META),
+                );
             });
 
-            ui.add_space(4.0);
+            ui.add_space(SPACE_SM);
 
-            // Fila: Evento detectado
-            theme::sunken_frame().show(ui, |ui| {
+            theme::subcard_frame().show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.horizontal_wrapped(|ui| {
                     ui.label(
-                        RichText::new("EVENTO:")
-                            .color(COLOR_OUTLINE)
-                            .size(10.0)
-                            .monospace()
-                            .strong(),
+                        RichText::new(x56_core::t!("prog-monitor-event"))
+                            .color(COLOR_TEXT_MUTED)
+                            .size(FONT_META),
                     );
-                    let (ev_name, ev_col) = if let Some(ref det) = self.last_detected_button {
-                        (det.as_str(), COLOR_PRIMARY_CONTAINER)
+                    if let Some(ref det) = self.last_detected_button {
+                        ui.label(
+                            RichText::new(det)
+                                .color(COLOR_ACCENT)
+                                .size(FONT_SMALL)
+                                .monospace(),
+                        );
                     } else {
-                        (
-                            "REPOSO // LISTO PARA DETECCIÓN FÍSICA",
-                            COLOR_ON_SURFACE_VARIANT,
-                        )
-                    };
-                    ui.label(
-                        RichText::new(ev_name)
-                            .color(ev_col)
-                            .size(11.0)
-                            .strong()
-                            .monospace(),
-                    );
+                        ui.label(
+                            RichText::new(x56_core::t!("prog-monitor-idle"))
+                                .color(COLOR_TEXT_SECONDARY)
+                                .size(FONT_SMALL),
+                        );
+                    }
 
                     if self.currently_pressed_count > 1 {
-                        let tip = format!(
-                            "Entradas físicas simultáneas ({}):\n{}",
-                            self.currently_pressed_count, self.active_pressed_summary
+                        let count_str = self.currently_pressed_count.to_string();
+                        let tip = x56_core::t!(
+                            "prog-monitor-multi",
+                            "count" => &count_str,
+                            "list" => &self.active_pressed_summary
                         );
                         ui.label(
-                            RichText::new(format!(
-                                "{} {} ACTIVOS",
-                                icons::CIRCLE_DOT,
-                                self.currently_pressed_count
+                            RichText::new(x56_core::t!(
+                                "prog-monitor-active-count",
+                                "count" => &count_str
                             ))
-                            .color(COLOR_WARNING_AMBER)
-                            .size(9.5)
-                            .monospace()
-                            .strong(),
+                            .color(COLOR_WARNING)
+                            .size(FONT_META)
+                            .monospace(),
                         )
                         .on_hover_text(tip);
                     }
                 });
             });
 
-            ui.add_space(4.0);
+            ui.add_space(SPACE_SM);
 
-            // 3 Tarjetas telemétricas en fila: HEX CODE, MODO FÍSICO, ESTADO
             ui.columns(3, |cols| {
-                // HEX CODE
-                theme::sunken_frame().show(&mut cols[0], |ui| {
-                    ui.vertical(|ui| {
-                        ui.label(
-                            RichText::new("HEX CODE")
-                                .color(COLOR_OUTLINE)
-                                .size(9.0)
-                                .monospace(),
-                        );
-                        ui.label(
-                            RichText::new(&self.last_hex_code)
-                                .color(COLOR_PRIMARY_CONTAINER)
-                                .size(13.0)
-                                .strong()
-                                .monospace(),
-                        );
-                    });
-                });
-
-                // MODO FÍSICO
-                theme::sunken_frame().show(&mut cols[1], |ui| {
-                    ui.vertical(|ui| {
-                        ui.label(
-                            RichText::new("MODO FÍSICO")
-                                .color(COLOR_OUTLINE)
-                                .size(9.0)
-                                .monospace(),
-                        );
-                        ui.label(
-                            RichText::new(snapshot.active_mode.as_str())
-                                .color(COLOR_TERTIARY_CONTAINER)
-                                .size(13.0)
-                                .strong()
-                                .monospace(),
-                        );
-                    });
-                });
-
-                // ESTADO
-                let (val_str, val_col) = if self.last_state_down {
-                    ("VAL: 1 (DOWN)", COLOR_TERTIARY_CONTAINER)
+                let state_val = if self.last_state_down {
+                    x56_core::t!("prog-monitor-val-down")
                 } else {
-                    ("VAL: 0 (UP)", COLOR_ON_SURFACE_VARIANT)
+                    x56_core::t!("prog-monitor-val-up")
                 };
-                theme::sunken_frame().show(&mut cols[2], |ui| {
-                    ui.vertical(|ui| {
-                        ui.label(
-                            RichText::new("ESTADO")
-                                .color(COLOR_OUTLINE)
-                                .size(9.0)
-                                .monospace(),
-                        );
-                        ui.label(
-                            RichText::new(val_str)
-                                .color(val_col)
-                                .size(11.5)
-                                .strong()
-                                .monospace(),
-                        );
+
+                let items = [
+                    (
+                        x56_core::t!("prog-monitor-hex-code"),
+                        self.last_hex_code.clone(),
+                    ),
+                    (
+                        x56_core::t!("prog-monitor-hw-mode"),
+                        snapshot.active_mode.as_str().to_string(),
+                    ),
+                    (x56_core::t!("prog-monitor-state"), state_val),
+                ];
+
+                for (idx, (label, val)) in items.into_iter().enumerate() {
+                    theme::subcard_frame().show(&mut cols[idx], |ui| {
+                        ui.set_width(ui.available_width());
+                        ui.vertical(|ui| {
+                            ui.label(RichText::new(label).color(COLOR_TEXT_MUTED).size(FONT_META));
+                            ui.label(
+                                RichText::new(val)
+                                    .color(COLOR_TEXT_PRIMARY)
+                                    .size(FONT_HEADING)
+                                    .monospace(),
+                            );
+                        });
                     });
-                });
+                }
             });
         });
     }
 
     // ========================================================================
-    // COLUMNA IZQUIERDA: TARJETA 2 - MAPA VECTORIAL DE ENTRADAS 2D
+    // 3. PHYSICAL STICK & DUAL THROTTLE SCHEMATIC
     // ========================================================================
 
-    /// Posiciona horizontalmente los controles del mapa vectorial dentro del canvas de forma proporcional.
     #[inline]
     fn compact_vector_map_x(rect: egui::Rect, norm_x: f32, _device: DeviceKind) -> f32 {
         rect.min.x + norm_x * rect.width()
@@ -1066,285 +914,224 @@ impl ProgrammingTab {
         theme::card_frame().show(ui, |ui| {
             ui.set_width(ui.available_width());
             let title = match self.selected_device {
-                DeviceKind::Stick => {
-                    format!(
-                        "{} MAPA VECTORIAL DE ENTRADAS // X-56 STICK (HOTAS RHINO RUST CORE)",
-                        icons::CROSSHAIR
-                    )
-                }
-                DeviceKind::Throttle => {
-                    format!(
-                        "{} MAPA VECTORIAL DE ENTRADAS // X-56 DUAL THROTTLE (RUST CORE)",
-                        icons::CROSSHAIR
-                    )
-                }
+                DeviceKind::Stick => x56_core::t!("prog-schematic-stick-title"),
+                DeviceKind::Throttle => x56_core::t!("prog-schematic-throttle-title"),
             };
+            theme::section_heading(ui, &title);
+            ui.add_space(SPACE_SM);
 
-            ui.horizontal_wrapped(|ui| {
-                ui.label(
-                    RichText::new(title)
-                        .color(COLOR_PRIMARY)
-                        .size(11.0)
-                        .strong()
-                        .monospace(),
-                );
-            });
+            theme::canvas_frame().show(ui, |ui| {
+                let avail_w = ui.available_width();
+                let aspect = 790.0 / 1180.0;
+                let canvas_height = (avail_w * aspect).clamp(120.0, 540.0);
+                let canvas_width = (canvas_height / aspect).min(avail_w);
+                let canvas_size = Vec2::new(canvas_width, canvas_height);
+                let (response, painter) = ui.allocate_painter(canvas_size, egui::Sense::click());
+                let rect = response.rect;
 
-            ui.add_space(4.0);
+                painter.rect_filled(rect, RADIUS_CONTROL as f32, COLOR_SURFACE_LOWEST);
 
-            // Canvas de dibujo vectorial con egui::Painter
-            // Ambos dispositivos usan la relación de aspecto exacta de la suite vectorial (1180x790 ≈ 0.6695)
-            let aspect = 790.0 / 1180.0;
-            let canvas_height = (ui.available_width() * aspect).clamp(280.0, 540.0);
-            let canvas_size = Vec2::new(ui.available_width(), canvas_height);
-            let (response, painter) = ui.allocate_painter(canvas_size, egui::Sense::click());
-            let rect = response.rect;
+                // Ultra-subtle hairline reference grid
+                let step = 64.0;
+                let mut gx = rect.min.x + step;
+                while gx < rect.max.x {
+                    painter.line_segment(
+                        [egui::pos2(gx, rect.min.y), egui::pos2(gx, rect.max.y)],
+                        Stroke::new(0.5, COLOR_BORDER_SUBTLE),
+                    );
+                    gx += step;
+                }
+                let mut gy = rect.min.y + step;
+                while gy < rect.max.y {
+                    painter.line_segment(
+                        [egui::pos2(rect.min.x, gy), egui::pos2(rect.max.x, gy)],
+                        Stroke::new(0.5, COLOR_BORDER_SUBTLE),
+                    );
+                    gy += step;
+                }
 
-            // Fondo sunken y rejilla táctica
-            painter.rect_filled(rect, 6.0, COLOR_SURFACE_LOWEST);
-            painter.rect_stroke(
-                rect,
-                6.0,
-                Stroke::new(1.0, COLOR_OUTLINE_VARIANT),
-                egui::StrokeKind::Inside,
-            );
+                let s = rect.width() / 1180.0;
+                let nodes = get_device_schematic_nodes(self.selected_device);
+                let mouse_pos = ui.input(|i| i.pointer.hover_pos());
+                let clicked = response.clicked();
 
-            // Rejilla HUD sutil
-            let step = 32.0;
-            let mut x = rect.min.x + step;
-            while x < rect.max.x {
-                painter.line_segment(
-                    [egui::pos2(x, rect.min.y), egui::pos2(x, rect.max.y)],
-                    Stroke::new(0.5, COLOR_GRID_HUD),
-                );
-                x += step;
-            }
-            let mut y = rect.min.y + step;
-            while y < rect.max.y {
-                painter.line_segment(
-                    [egui::pos2(rect.min.x, y), egui::pos2(rect.max.x, y)],
-                    Stroke::new(0.5, COLOR_GRID_HUD),
-                );
-                y += step;
-            }
+                let mut newly_hovered: Option<String> = None;
+                let mut best_dist = f32::INFINITY;
+                let mut clicked_pin: Option<String> = None;
 
-            // Escuadras tácticas de esquina HUD
-            let corner_len = 10.0;
-            let bracket_stroke = Stroke::new(1.5, COLOR_PRIMARY_CONTAINER);
-            // Top-left
-            painter.line_segment(
-                [
-                    rect.left_top(),
-                    egui::pos2(rect.min.x + corner_len, rect.min.y),
-                ],
-                bracket_stroke,
-            );
-            painter.line_segment(
-                [
-                    rect.left_top(),
-                    egui::pos2(rect.min.x, rect.min.y + corner_len),
-                ],
-                bracket_stroke,
-            );
-            // Top-right
-            painter.line_segment(
-                [
-                    rect.right_top(),
-                    egui::pos2(rect.max.x - corner_len, rect.min.y),
-                ],
-                bracket_stroke,
-            );
-            painter.line_segment(
-                [
-                    rect.right_top(),
-                    egui::pos2(rect.max.x, rect.min.y + corner_len),
-                ],
-                bracket_stroke,
-            );
-            // Bottom-left
-            painter.line_segment(
-                [
-                    rect.left_bottom(),
-                    egui::pos2(rect.min.x + corner_len, rect.max.y),
-                ],
-                bracket_stroke,
-            );
-            painter.line_segment(
-                [
-                    rect.left_bottom(),
-                    egui::pos2(rect.min.x, rect.max.y - corner_len),
-                ],
-                bracket_stroke,
-            );
-            // Bottom-right
-            painter.line_segment(
-                [
-                    rect.right_bottom(),
-                    egui::pos2(rect.max.x - corner_len, rect.max.y),
-                ],
-                bracket_stroke,
-            );
-            painter.line_segment(
-                [
-                    rect.right_bottom(),
-                    egui::pos2(rect.max.x, rect.max.y - corner_len),
-                ],
-                bracket_stroke,
-            );
+                if let Some(mpos) = mouse_pos {
+                    if rect.contains(mpos) {
+                        for node in &nodes {
+                            let center = egui::pos2(
+                                Self::compact_vector_map_x(rect, node.norm_x, self.selected_device),
+                                rect.min.y + node.norm_y * rect.height(),
+                            );
 
-            // Detección previa de colisión para hover sin lag de un frame
-            let nodes = get_device_schematic_nodes(self.selected_device);
-            let mouse_pos = ui.input(|i| i.pointer.hover_pos());
-            let clicked = response.clicked();
+                            let dist = (mpos - center).length();
+                            let is_hit = if node.is_rect {
+                                let half_w = (node.rect_size.x * s * 0.5).max(12.0);
+                                let half_h = (node.rect_size.y * s * 0.5).max(10.0);
+                                mpos.x >= center.x - half_w
+                                    && mpos.x <= center.x + half_w
+                                    && mpos.y >= center.y - half_h
+                                    && mpos.y <= center.y + half_h
+                            } else {
+                                let hit_r = (node.radius * s + 2.0).max(10.0);
+                                dist <= hit_r
+                            };
 
-            let mut newly_hovered: Option<String> = None;
-            let mut clicked_pin: Option<String> = None;
-
-            if let Some(mpos) = mouse_pos {
-                if rect.contains(mpos) {
-                    for node in &nodes {
-                        let center = egui::pos2(
-                            Self::compact_vector_map_x(rect, node.norm_x, self.selected_device),
-                            rect.min.y + node.norm_y * rect.height(),
-                        );
-
-                        let is_hit = if node.is_rect {
-                            let half = node.rect_size * 0.5;
-                            mpos.x >= center.x - half.x
-                                && mpos.x <= center.x + half.x
-                                && mpos.y >= center.y - half.y
-                                && mpos.y <= center.y + half.y
-                        } else {
-                            (mpos - center).length() <= node.radius + 4.0
-                        };
-
-                        if is_hit {
-                            newly_hovered = Some(node.id.to_string());
-                            if clicked {
-                                clicked_pin = Some(node.id.to_string());
+                            if is_hit && dist < best_dist {
+                                best_dist = dist;
+                                newly_hovered = Some(node.id.to_string());
+                                if clicked {
+                                    clicked_pin = Some(node.id.to_string());
+                                }
                             }
-                            break;
                         }
                     }
                 }
-            }
 
-            if let Some(ref h) = newly_hovered {
-                self.hovered_button_id = Some(h.clone());
-            } else if let Some(mpos) = mouse_pos {
-                if rect.contains(mpos) {
-                    self.hovered_button_id = None;
-                }
-            }
-            let active_hovered = self.hovered_button_id.as_deref();
-
-            let im = InteractionMap {
-                pressed: &snapshot.pressed_buttons,
-                hovered: active_hovered,
-                profile: &self.profile,
-                mode: self.selected_mode,
-            };
-
-            // Dibujar siluetas vectoriales y componentes tácticos interactivos con la suite de interacción
-            match self.selected_device {
-                DeviceKind::Stick => self.draw_vector_stick_silhouette(&painter, rect, &im),
-                DeviceKind::Throttle => self.draw_vector_throttle_silhouette(&painter, rect, &im),
-            }
-
-            // Tooltips tácticos al pasar el ratón
-            for node in &nodes {
-                if active_hovered == Some(node.id) {
-                    let default_info = default_mapping_for(node.id);
-                    let mapped_str =
-                        if let Some(cell) = self.profile.get_cell(self.selected_mode, node.id) {
-                            if cell.is_assigned() {
-                                format!("{} [{}]", cell.name, cell.keys_display())
-                            } else {
-                                format!(
-                                    "DEFAULT: {} {}",
-                                    default_info.key_display, default_info.action
-                                )
-                            }
-                        } else {
-                            format!(
-                                "DEFAULT: {} {}",
-                                default_info.key_display, default_info.action
-                            )
-                        };
-
-                    response.clone().on_hover_ui_at_pointer(|ui| {
-                        theme::sunken_frame().show(ui, |ui| {
-                            ui.vertical(|ui| {
-                                ui.label(
-                                    RichText::new(node.full_name)
-                                        .color(COLOR_PRIMARY)
-                                        .size(12.0)
-                                        .strong()
-                                        .monospace(),
-                                );
-                                ui.label(
-                                    RichText::new(format!(
-                                        "ID: {} // EVDEV: {}",
-                                        node.id, node.short_label
-                                    ))
-                                    .color(COLOR_OUTLINE)
-                                    .size(9.5)
-                                    .monospace(),
-                                );
-                                ui.separator();
-                                ui.label(
-                                    RichText::new(mapped_str)
-                                        .color(COLOR_PRIMARY_CONTAINER)
-                                        .size(11.0)
-                                        .strong()
-                                        .monospace(),
-                                );
-                                ui.label(
-                                    RichText::new(format!(
-                                        "GRUPO: {} // TIPO: {}",
-                                        default_info.group_sc, default_info.map_type
-                                    ))
-                                    .color(COLOR_ON_SURFACE_VARIANT)
-                                    .size(9.0)
-                                    .monospace(),
-                                );
-                            });
-                        });
-                    });
-                }
-            }
-
-            if let Some(pin_id) = clicked_pin {
-                if self.macro_recorder_open || self.is_recording_macro {
-                    self.macro_target_button_id = Some(pin_id.clone());
-                    self.hovered_button_id = Some(pin_id);
-                } else {
-                    self.search_query = pin_id.clone();
-                    self.editing_button_id = Some(pin_id.clone());
-                    if let Some(cell) = self.profile.get_cell(self.selected_mode, &pin_id) {
-                        self.pending_name = cell.name.clone();
-                        self.pending_keys = cell.keys.clone();
-                    } else {
-                        let def = default_mapping_for(&pin_id);
-                        self.pending_name = def.action.to_string();
-                        self.pending_keys = vec![def.key_display.replace(['[', ']'], "")];
+                if let Some(ref h) = newly_hovered {
+                    self.hovered_button_id = Some(h.clone());
+                } else if let Some(mpos) = mouse_pos {
+                    if rect.contains(mpos) {
+                        self.hovered_button_id = None;
                     }
                 }
-            }
+                let active_hovered = self.hovered_button_id.as_deref();
+
+                let im = InteractionMap {
+                    pressed: &snapshot.pressed_buttons,
+                    hovered: active_hovered,
+                    profile: &self.profile,
+                    mode: self.selected_mode,
+                };
+
+                match self.selected_device {
+                    DeviceKind::Stick => self.draw_vector_stick_silhouette(&painter, rect, &im),
+                    DeviceKind::Throttle => {
+                        self.draw_vector_throttle_silhouette(&painter, rect, &im);
+                    }
+                }
+
+                for node in &nodes {
+                    if active_hovered == Some(node.id) {
+                        let meta = control_meta_for(node.id);
+                        let loc_name = localized_node_name_by_id(node.id, node.full_name);
+                        let (mapped_str, is_assigned) = if let Some(cell) =
+                            self.profile.get_cell(self.selected_mode, node.id)
+                        {
+                            if cell.is_assigned() {
+                                (format!("{} [{}]", cell.name, cell.keys_display()), true)
+                            } else {
+                                (unassigned_label(), false)
+                            }
+                        } else {
+                            (unassigned_label(), false)
+                        };
+
+                        response.clone().on_hover_ui_at_pointer(|ui| {
+                            theme::subcard_frame().show(ui, |ui| {
+                                ui.vertical(|ui| {
+                                    ui.label(
+                                        RichText::new(&loc_name)
+                                            .color(COLOR_TEXT_PRIMARY)
+                                            .size(FONT_BODY),
+                                    );
+                                    ui.label(
+                                        RichText::new(x56_core::t!(
+                                            "prog-schematic-meta-id",
+                                            "id" => node.id,
+                                            "code" => node.short_label
+                                        ))
+                                        .color(COLOR_TEXT_MUTED)
+                                        .size(FONT_META)
+                                        .monospace(),
+                                    );
+                                    ui.add_space(SPACE_XS);
+                                    ui.label(
+                                        RichText::new(mapped_str)
+                                            .color(if is_assigned {
+                                                COLOR_ACCENT
+                                            } else {
+                                                COLOR_TEXT_SECONDARY
+                                            })
+                                            .size(FONT_SMALL),
+                                    );
+                                    ui.label(
+                                        RichText::new(x56_core::t!(
+                                            "prog-schematic-meta-group",
+                                            "group" => &meta.group,
+                                            "kind" => &meta.kind
+                                        ))
+                                        .color(COLOR_TEXT_MUTED)
+                                        .size(FONT_META),
+                                    );
+                                });
+                            });
+                        });
+                    }
+                }
+
+                if let Some(pin_id) = clicked_pin {
+                    if self.macro_recorder_open || self.is_recording_macro {
+                        self.macro_target_button_id = Some(pin_id.clone());
+                        self.hovered_button_id = Some(pin_id);
+                    } else {
+                        self.search_query = pin_id.clone();
+                        self.editing_button_id = Some(pin_id.clone());
+                        if let Some(cell) = self.profile.get_cell(self.selected_mode, &pin_id) {
+                            if cell.is_assigned() {
+                                self.pending_name = cell.name.clone();
+                                self.pending_keys = cell.keys.clone();
+                            } else {
+                                self.pending_name.clear();
+                                self.pending_keys.clear();
+                            }
+                        } else {
+                            self.pending_name.clear();
+                            self.pending_keys.clear();
+                        }
+                    }
+                }
+            });
         });
     }
 
-    /// Dibuja la silueta técnica, carcasas y componentes interactivos animados del Stick
-    /// con la misma estética táctil y fotorrealista que el Throttle Deck (viewBox 1180x790).
+    #[inline]
+    fn schematic_control_style(
+        st: InteractState,
+        is_assigned: bool,
+    ) -> (Color32, Color32, Color32) {
+        match st {
+            InteractState::Pressed => (COLOR_ACCENT, COLOR_ACCENT, COLOR_ON_ACCENT),
+            InteractState::Hovered => (
+                COLOR_SURFACE_HIGHEST,
+                COLOR_TEXT_PRIMARY,
+                COLOR_TEXT_PRIMARY,
+            ),
+            InteractState::Idle => (
+                CONTROL_BASE,
+                if is_assigned {
+                    COLOR_ACCENT_BORDER
+                } else {
+                    CONTROL_HAIRLINE
+                },
+                COLOR_TEXT_SECONDARY,
+            ),
+        }
+    }
+
+    /// Draws the anodized graphite Stick chassis silhouette and interactive controls.
     fn draw_vector_stick_silhouette(
         &self,
         painter: &egui::Painter,
         rect: egui::Rect,
         im: &InteractionMap,
     ) {
-        let outline = Stroke::new(1.2, COLOR_OUTLINE_VARIANT);
-        let accent = Stroke::new(1.4, COLOR_PRIMARY_CONTAINER);
         let s = rect.width() / 1180.0;
+        let stroke_w = (1.2 * s).max(1.0);
+        let outline = Stroke::new(stroke_w, CONTROL_HAIRLINE);
         let p = |nx: f32, ny: f32| {
             egui::pos2(
                 rect.min.x + nx * rect.width(),
@@ -1352,51 +1139,39 @@ impl ProgrammingTab {
             )
         };
 
-        // 1. Cabezal superior del Stick (enmarca POV, A, H1, B, H2)
+        // Upper stick head
         let head_rect = egui::Rect::from_min_max(p(0.26, 0.04), p(0.74, 0.36));
-        painter.rect_filled(head_rect, 18.0 * s, Color32::from_rgb(14, 19, 30));
+        painter.rect_filled(head_rect, 18.0 * s, CHASSIS_FILL);
         painter.rect_stroke(head_rect, 18.0 * s, outline, egui::StrokeKind::Inside);
 
-        // Bisel interior decorativo del cabezal
         let inner_head = egui::Rect::from_min_max(p(0.28, 0.06), p(0.72, 0.34));
         painter.rect_stroke(
             inner_head,
             12.0 * s,
-            Stroke::new(1.0 * s, Color32::from_rgb(29, 38, 54)),
+            Stroke::new(stroke_w, CONTROL_BEVEL),
             egui::StrokeKind::Inside,
         );
 
-        // 2. Mástil y empuñadura ergonómica centrada
+        // Grip shaft
         let shaft_rect = egui::Rect::from_min_max(p(0.38, 0.34), p(0.62, 0.78));
-        painter.rect_filled(shaft_rect, 14.0 * s, Color32::from_rgb(10, 14, 23));
+        painter.rect_filled(shaft_rect, 14.0 * s, CHASSIS_WELL);
         painter.rect_stroke(shaft_rect, 14.0 * s, outline, egui::StrokeKind::Inside);
 
-        // Paneles laterales del mástil
         painter.line_segment(
             [p(0.40, 0.38), p(0.40, 0.74)],
-            Stroke::new(1.5 * s, Color32::from_rgb(26, 35, 50)),
+            Stroke::new(stroke_w, CONTROL_BEVEL),
         );
         painter.line_segment(
             [p(0.60, 0.38), p(0.60, 0.74)],
-            Stroke::new(1.5 * s, Color32::from_rgb(26, 35, 50)),
+            Stroke::new(stroke_w, CONTROL_BEVEL),
         );
 
-        // 3. Base del Stick / Reposamanos ergonómico
+        // Palm rest base
         let base_rect = egui::Rect::from_min_max(p(0.32, 0.77), p(0.68, 0.93));
-        painter.rect_filled(base_rect, 16.0 * s, Color32::from_rgb(15, 20, 31));
-        painter.rect_stroke(base_rect, 16.0 * s, accent, egui::StrokeKind::Inside);
+        painter.rect_filled(base_rect, 16.0 * s, CHASSIS_FILL);
+        painter.rect_stroke(base_rect, 16.0 * s, outline, egui::StrokeKind::Inside);
 
-        painter.text(
-            p(0.50, 0.90),
-            egui::Align2::CENTER_CENTER,
-            "X-56 RHINO FLIGHT STICK // 16-BIT HALL SENSOR CORE",
-            egui::FontId::monospace(8.5),
-            COLOR_OUTLINE,
-        );
-
-        // ==================== COMPONENTES TÁCTILES DEL STICK ====================
-
-        // 4. POV 1: Selector de Vista 8-Way (cx: 0.330, cy: 0.242, scale: 0.30)
+        // POV 1 (8-way)
         Self::draw_dpad(
             painter,
             p(0.330, 0.242),
@@ -1416,7 +1191,7 @@ impl ProgrammingTab {
             "POV",
         );
 
-        // 5. Botón A: Cabezal Superior (cx: 0.415, cy: 0.138, scale: 0.32)
+        // Button A
         Self::draw_circular_button(
             painter,
             p(0.415, 0.138),
@@ -1427,7 +1202,7 @@ impl ProgrammingTab {
             true,
         );
 
-        // 6. HAT 1: Witches Hat (cx: 0.525, cy: 0.121, scale: 0.30)
+        // Hat 1
         Self::draw_dpad(
             painter,
             p(0.525, 0.121),
@@ -1447,7 +1222,7 @@ impl ProgrammingTab {
             "H1",
         );
 
-        // 7. Botón B: Lateral Pulgar (cx: 0.670, cy: 0.072, scale: 0.30)
+        // Button B
         Self::draw_circular_button(
             painter,
             p(0.670, 0.072),
@@ -1458,7 +1233,7 @@ impl ProgrammingTab {
             false,
         );
 
-        // 8. HAT 2: Castle Hat (cx: 0.630, cy: 0.285, scale: 0.30)
+        // Hat 2
         Self::draw_dpad(
             painter,
             p(0.630, 0.285),
@@ -1478,7 +1253,7 @@ impl ProgrammingTab {
             "H2",
         );
 
-        // 9. Gatillo Principal (TRG: cx: 0.500, cy: 0.420)
+        // Primary trigger
         Self::draw_stick_trigger(
             painter,
             p(0.500, 0.420),
@@ -1487,7 +1262,7 @@ impl ProgrammingTab {
             im.is_assigned("stick_trigger"),
         );
 
-        // 10. Botón C: Minipalanca Analógica / C-Stick Push (cx: 0.440, cy: 0.560, scale: 0.28)
+        // Button C (ministick push)
         Self::draw_circular_button(
             painter,
             p(0.440, 0.560),
@@ -1498,7 +1273,7 @@ impl ProgrammingTab {
             false,
         );
 
-        // 11. Palanca Meñique (PNK: cx: 0.500, cy: 0.700)
+        // Pinkie lever
         Self::draw_stick_pinkie_lever(
             painter,
             p(0.500, 0.700),
@@ -1507,7 +1282,7 @@ impl ProgrammingTab {
             im.is_assigned("stick_pinkie"),
         );
 
-        // 12. Botón D: Meñique / Base Rest (cx: 0.570, cy: 0.840, scale: 0.28)
+        // Button D
         Self::draw_circular_button(
             painter,
             p(0.570, 0.840),
@@ -1519,7 +1294,7 @@ impl ProgrammingTab {
         );
     }
 
-    /// Dibuja el gatillo principal (Trigger) del Stick con protector y hoja móvil iluminada.
+    /// Draws the Stick primary trigger with live mechanical travel offset.
     fn draw_stick_trigger(
         painter: &egui::Painter,
         center: egui::Pos2,
@@ -1527,23 +1302,20 @@ impl ProgrammingTab {
         st: InteractState,
         is_assigned: bool,
     ) {
-        let cyan = COLOR_PRIMARY_CONTAINER;
         let is_pressed = st == InteractState::Pressed;
+        let (fill_col, stroke_col, text_col) = Self::schematic_control_style(st, is_assigned);
         let guard_w = 68.0 * s;
         let guard_h = 36.0 * s;
 
-        // Guarda exterior del gatillo
         let guard_rect = egui::Rect::from_center_size(center, egui::vec2(guard_w, guard_h));
-        painter.rect_filled(guard_rect, 6.0 * s, Color32::from_rgb(14, 19, 30));
+        painter.rect_filled(guard_rect, 6.0 * s, CHASSIS_WELL);
+        painter.rect_stroke(
+            guard_rect,
+            6.0 * s,
+            Stroke::new((1.5 * s).max(1.0), stroke_col),
+            egui::StrokeKind::Inside,
+        );
 
-        let guard_stroke = match st {
-            InteractState::Pressed => Stroke::new(2.4 * s, cyan),
-            InteractState::Hovered => Stroke::new(2.4 * s, Color32::WHITE),
-            InteractState::Idle => Stroke::new(1.8 * s, Color32::from_rgb(38, 53, 77)),
-        };
-        painter.rect_stroke(guard_rect, 6.0 * s, guard_stroke, egui::StrokeKind::Inside);
-
-        // Hoja del gatillo
         let blade_w = 52.0 * s;
         let blade_h = 24.0 * s;
         let blade_y = if is_pressed {
@@ -1556,41 +1328,23 @@ impl ProgrammingTab {
             egui::vec2(blade_w, blade_h),
         );
 
-        let (fill_col, stroke_col, text_col) = match st {
-            InteractState::Pressed => (
-                Color32::from_rgb(180, 32, 42),
-                Color32::WHITE,
-                Color32::WHITE,
-            ),
-            InteractState::Hovered => (
-                Color32::from_rgb(32, 45, 65),
-                Color32::WHITE,
-                Color32::WHITE,
-            ),
-            InteractState::Idle => (
-                Color32::from_rgb(24, 32, 46),
-                Color32::from_rgb(67, 86, 117),
-                if is_assigned { cyan } else { Color32::WHITE },
-            ),
-        };
-
         painter.rect_filled(blade_rect, 4.0 * s, fill_col);
         painter.rect_stroke(
             blade_rect,
             4.0 * s,
-            Stroke::new(1.8 * s, stroke_col),
+            Stroke::new((1.4 * s).max(1.0), stroke_col),
             egui::StrokeKind::Inside,
         );
         painter.text(
             egui::pos2(center.x, blade_y),
             egui::Align2::CENTER_CENTER,
             "TRG",
-            egui::FontId::monospace(14.0 * s),
+            egui::FontId::monospace((14.0 * s).max(8.5)),
             text_col,
         );
     }
 
-    /// Dibuja la palanca meñique (Pinkie Lever) del Stick en la parte inferior del mástil.
+    /// Draws the Stick pinkie lever with live mechanical travel offset.
     fn draw_stick_pinkie_lever(
         painter: &egui::Painter,
         center: egui::Pos2,
@@ -1598,8 +1352,8 @@ impl ProgrammingTab {
         st: InteractState,
         is_assigned: bool,
     ) {
-        let cyan = COLOR_PRIMARY_CONTAINER;
         let is_pressed = st == InteractState::Pressed;
+        let (fill_col, stroke_col, text_col) = Self::schematic_control_style(st, is_assigned);
         let lever_w = 64.0 * s;
         let lever_h = 26.0 * s;
 
@@ -1613,39 +1367,23 @@ impl ProgrammingTab {
             egui::vec2(lever_w, lever_h),
         );
 
-        let (fill_col, stroke_col, text_col) = match st {
-            InteractState::Pressed => (cyan, Color32::WHITE, Color32::from_rgb(6, 8, 13)),
-            InteractState::Hovered => (
-                Color32::from_rgb(32, 45, 65),
-                Color32::WHITE,
-                Color32::WHITE,
-            ),
-            InteractState::Idle => (
-                Color32::from_rgb(24, 32, 46),
-                Color32::from_rgb(67, 86, 117),
-                if is_assigned { cyan } else { Color32::WHITE },
-            ),
-        };
-
         painter.rect_filled(lever_rect, 6.0 * s, fill_col);
         painter.rect_stroke(
             lever_rect,
             6.0 * s,
-            Stroke::new(1.8 * s, stroke_col),
+            Stroke::new((1.5 * s).max(1.0), stroke_col),
             egui::StrokeKind::Inside,
         );
         painter.text(
             egui::pos2(center.x, lever_y),
             egui::Align2::CENTER_CENTER,
             "PNK",
-            egui::FontId::monospace(14.0 * s),
+            egui::FontId::monospace((14.0 * s).max(8.5)),
             text_col,
         );
     }
 
-    /// Dibuja la silueta técnica, carcasas y componentes interactivos animados del Throttle
-    /// replicando con fidelidad la suite vectorial SVG (viewBox 1180x790) y respondiendo en tiempo real
-    /// a las pulsaciones físicas de conmutadores, botones y ejes.
+    /// Draws the restrained Dual Throttle chassis silhouette and all 32 interactive controls.
     fn draw_vector_throttle_silhouette(
         &self,
         painter: &egui::Painter,
@@ -1653,6 +1391,9 @@ impl ProgrammingTab {
         im: &InteractionMap,
     ) {
         let s = rect.width() / 1180.0;
+        let stroke_w = (1.2 * s).max(1.0);
+        let outline = Stroke::new(stroke_w, CONTROL_HAIRLINE);
+        let inner_bevel = Stroke::new(stroke_w, CONTROL_BEVEL);
         let p = |x: f32, y: f32| {
             egui::pos2(
                 rect.min.x + (x / 1180.0) * rect.width(),
@@ -1660,7 +1401,40 @@ impl ProgrammingTab {
             )
         };
 
-        // 1. SC: Scroll Wheel (cx: 138, cy: 209, scale: 0.38)
+        // Base console housing behind toggle and switch banks
+        let base_deck = egui::Rect::from_min_max(p(110.0, 155.0), p(1118.0, 756.0));
+        painter.rect_filled(base_deck, 20.0 * s, CHASSIS_WELL);
+        painter.rect_stroke(base_deck, 20.0 * s, outline, egui::StrokeKind::Inside);
+
+        let base_inset = egui::Rect::from_min_max(p(130.0, 174.0), p(1098.0, 738.0));
+        painter.rect_stroke(base_inset, 14.0 * s, inner_bevel, egui::StrokeKind::Inside);
+
+        // Right toggle bank recess
+        let toggle_bay = egui::Rect::from_min_max(p(864.0, 194.0), p(1090.0, 632.0));
+        painter.rect_filled(toggle_bay, 14.0 * s, CHASSIS_FILL);
+        painter.rect_stroke(toggle_bay, 14.0 * s, inner_bevel, egui::StrokeKind::Inside);
+
+        // Bottom switch bay recess
+        let switch_bay = egui::Rect::from_min_max(p(256.0, 616.0), p(834.0, 744.0));
+        painter.rect_filled(switch_bay, 14.0 * s, CHASSIS_FILL);
+        painter.rect_stroke(switch_bay, 14.0 * s, inner_bevel, egui::StrokeKind::Inside);
+
+        // Mechanical bridge bar linking left and right throttle levers
+        let bridge_rect = egui::Rect::from_min_max(p(290.0, 212.0), p(410.0, 272.0));
+        painter.rect_filled(bridge_rect, 8.0 * s, CONTROL_BASE);
+        painter.rect_stroke(bridge_rect, 8.0 * s, outline, egui::StrokeKind::Inside);
+
+        // Left throttle lever housing (SC + K1)
+        let left_grip = egui::Rect::from_min_max(p(72.0, 68.0), p(318.0, 392.0));
+        painter.rect_filled(left_grip, 20.0 * s, CHASSIS_FILL);
+        painter.rect_stroke(left_grip, 20.0 * s, outline, egui::StrokeKind::Inside);
+
+        // Right throttle lever housing (I, H, F, G, SLD, E, H3, H4)
+        let right_grip = egui::Rect::from_min_max(p(378.0, 52.0), p(820.0, 578.0));
+        painter.rect_filled(right_grip, 22.0 * s, CHASSIS_FILL);
+        painter.rect_stroke(right_grip, 22.0 * s, outline, egui::StrokeKind::Inside);
+
+        // 1. SC: Scroll wheel
         let sc_center = p(138.0, 208.8);
         Self::draw_scroll_wheel(
             painter,
@@ -1670,7 +1444,7 @@ impl ProgrammingTab {
             im.assigned_dir2("thr_scroll_fwd", "thr_scroll_bck"),
         );
 
-        // 2. K1: Toggle Doble Vertical (cx: 235.1, cy: 210.8, scale: 0.38)
+        // 2. K1: Double vertical toggle
         let k1_center = p(235.1, 210.8);
         Self::draw_double_toggle_k1(
             painter,
@@ -1680,22 +1454,19 @@ impl ProgrammingTab {
             im.assigned_dir2("thr_k1_up", "thr_k1_down"),
         );
 
-        // 3. Botones Circulares del Grip: I y H (scale: 0.29)
-        let i_center = p(484.6, 184.6);
+        // 3. Grip circular buttons I and H
         Self::draw_circular_button(
             painter,
-            i_center,
+            p(484.6, 184.6),
             0.29 * s,
             im.get("thr_btn_i"),
             im.is_assigned("thr_btn_i"),
             "I",
             false,
         );
-
-        let h_center = p(594.6, 184.6);
         Self::draw_circular_button(
             painter,
-            h_center,
+            p(594.6, 184.6),
             0.29 * s,
             im.get("thr_btn_h"),
             im.is_assigned("thr_btn_h"),
@@ -1703,22 +1474,19 @@ impl ProgrammingTab {
             false,
         );
 
-        // 4. Giratorios Superiores F y G (scale: 0.40)
-        let f_center = p(745.0, 118.0);
+        // 4. Upper rotaries F and G
         Self::draw_circular_button(
             painter,
-            f_center,
+            p(745.0, 118.0),
             0.40 * s,
             im.get("thr_rty_f_push"),
             im.is_assigned("thr_rty_f_push"),
             "F",
             true,
         );
-
-        let g_center = p(745.0, 272.0);
         Self::draw_circular_button(
             painter,
-            g_center,
+            p(745.0, 272.0),
             0.40 * s,
             im.get("thr_rty_g_push"),
             im.is_assigned("thr_rty_g_push"),
@@ -1726,56 +1494,51 @@ impl ProgrammingTab {
             true,
         );
 
-        // 5. SLD: Toggle Horizontal (cx: 594.0, cy: 290.0, scale: 0.40)
-        let sld_center = p(594.0, 290.0);
+        // 5. SLD horizontal slider
         let sld_on = im.get("thr_sld") == InteractState::Pressed;
         Self::draw_horizontal_slider_sld(
             painter,
-            sld_center,
+            p(594.0, 290.0),
             0.40 * s,
             im.get("thr_sld"),
             im.is_assigned("thr_sld"),
             sld_on,
         );
 
-        // 6. E: Botón Cuadrado (cx: 581.6, cy: 391.6, scale: 0.29)
-        let e_center = p(581.6, 391.6);
+        // 6. Square thumb button E
         Self::draw_square_button(
             painter,
-            e_center,
+            p(581.6, 391.6),
             0.29 * s,
             im.get("thr_btn_e"),
             im.is_assigned("thr_btn_e"),
             "E",
         );
 
-        // 7. H3: Cruceta Circular (cx: 694.7, cy: 394.7, scale: 0.31)
-        let h3_center = p(694.7, 394.7);
+        // 7. Hat 3
         Self::draw_dpad(
             painter,
-            h3_center,
+            p(694.7, 394.7),
             0.31 * s,
             im.dir4("thr_h3_up", "thr_h3_right", "thr_h3_down", "thr_h3_left"),
             im.assigned_dir4("thr_h3_up", "thr_h3_right", "thr_h3_down", "thr_h3_left"),
             "H3",
         );
 
-        // 8. H4: Cruceta Circular (cx: 647.7, cy: 509.7, scale: 0.31)
-        let h4_center = p(647.7, 509.7);
+        // 8. Hat 4
         Self::draw_dpad(
             painter,
-            h4_center,
+            p(647.7, 509.7),
             0.31 * s,
             im.dir4("thr_h4_up", "thr_h4_right", "thr_h4_down", "thr_h4_left"),
             im.assigned_dir4("thr_h4_up", "thr_h4_right", "thr_h4_down", "thr_h4_left"),
             "H4",
         );
 
-        // 9. Columna Derecha de Toggles: TGL 4, TGL 3, TGL 2, TGL 1 (scale: 0.34, solo flechas)
-        let tgl4_center = p(1035.0, 262.0);
+        // 9. Right toggle column: TGL 4..1
         Self::draw_circular_double_toggle(
             painter,
-            tgl4_center,
+            p(1035.0, 262.0),
             0.34 * s,
             im.dir2("thr_sw_13", "thr_sw_14"),
             im.assigned_dir2("thr_sw_13", "thr_sw_14"),
@@ -1784,11 +1547,9 @@ impl ProgrammingTab {
             "",
             "",
         );
-
-        let tgl3_center = p(938.0, 352.0);
         Self::draw_circular_double_toggle(
             painter,
-            tgl3_center,
+            p(938.0, 352.0),
             0.34 * s,
             im.dir2("thr_sw_11", "thr_sw_12"),
             im.assigned_dir2("thr_sw_11", "thr_sw_12"),
@@ -1797,11 +1558,9 @@ impl ProgrammingTab {
             "",
             "",
         );
-
-        let tgl2_center = p(1035.0, 472.0);
         Self::draw_circular_double_toggle(
             painter,
-            tgl2_center,
+            p(1035.0, 472.0),
             0.34 * s,
             im.dir2("thr_sw_9", "thr_sw_10"),
             im.assigned_dir2("thr_sw_9", "thr_sw_10"),
@@ -1810,11 +1569,9 @@ impl ProgrammingTab {
             "",
             "",
         );
-
-        let tgl1_center = p(938.0, 562.0);
         Self::draw_circular_double_toggle(
             painter,
-            tgl1_center,
+            p(938.0, 562.0),
             0.34 * s,
             im.dir2("thr_sw_7", "thr_sw_8"),
             im.assigned_dir2("thr_sw_7", "thr_sw_8"),
@@ -1824,11 +1581,10 @@ impl ProgrammingTab {
             "",
         );
 
-        // 10. Fila Inferior de Conmutadores SW con números (scale: 0.36)
-        let sw12_center = p(345.0, 685.0);
+        // 10. Bottom row switches: SW 1..6
         Self::draw_circular_double_toggle(
             painter,
-            sw12_center,
+            p(345.0, 685.0),
             0.36 * s,
             im.dir2("thr_sw_1", "thr_sw_2"),
             im.assigned_dir2("thr_sw_1", "thr_sw_2"),
@@ -1837,11 +1593,9 @@ impl ProgrammingTab {
             "1",
             "2",
         );
-
-        let sw34_center = p(545.0, 685.0);
         Self::draw_circular_double_toggle(
             painter,
-            sw34_center,
+            p(545.0, 685.0),
             0.36 * s,
             im.dir2("thr_sw_3", "thr_sw_4"),
             im.assigned_dir2("thr_sw_3", "thr_sw_4"),
@@ -1850,11 +1604,9 @@ impl ProgrammingTab {
             "3",
             "4",
         );
-
-        let sw56_center = p(745.0, 685.0);
         Self::draw_circular_double_toggle(
             painter,
-            sw56_center,
+            p(745.0, 685.0),
             0.36 * s,
             im.dir2("thr_sw_5", "thr_sw_6"),
             im.assigned_dir2("thr_sw_5", "thr_sw_6"),
@@ -1865,7 +1617,7 @@ impl ProgrammingTab {
         );
     }
 
-    /// Dibuja un conmutador circular doble interactivo (TGL 1-4 o SW 1-6) con su palanca animada.
+    /// Draws a circular two-way toggle (TGL 1-4 or SW 1-6) with animated lever travel.
     #[allow(clippy::too_many_arguments)]
     fn draw_circular_double_toggle(
         painter: &egui::Painter,
@@ -1880,101 +1632,30 @@ impl ProgrammingTab {
     ) {
         let (ass_up, ass_down) = assigned;
         let any_assigned = ass_up || ass_down;
-        let cyan = COLOR_PRIMARY_CONTAINER;
         let is_up = d.up == InteractState::Pressed;
         let is_down = d.down == InteractState::Pressed;
         let is_neutral = !is_up && !is_down;
+        let (fill_col, border_col, text_col) = Self::schematic_control_style(d.any(), any_assigned);
 
         let r_outer = 144.0 * s;
-        let r_inner = 134.0 * s;
         let r_dish = 120.0 * s;
+        let sw = (1.8 * s).max(1.0);
 
-        // Contorno exterior: blanco en hover, cian en pressed, base en idle
-        let outer_stroke = match d.any() {
-            InteractState::Pressed => Stroke::new(2.8 * s, cyan),
-            InteractState::Hovered => Stroke::new(2.8 * s, Color32::WHITE),
-            InteractState::Idle => Stroke::new(2.5 * s, Color32::from_rgb(46, 60, 86)),
-        };
-        painter.circle_filled(center, r_outer, Color32::from_rgb(18, 24, 36));
-        painter.circle_stroke(center, r_outer, outer_stroke);
-        painter.circle_stroke(
-            center,
-            r_inner,
-            Stroke::new(2.0 * s, Color32::from_rgb(11, 15, 23)),
-        );
-        painter.circle_filled(center, r_dish, Color32::from_rgb(24, 32, 48));
-        painter.circle_stroke(
-            center,
-            r_dish,
-            Stroke::new(1.8 * s, Color32::from_rgb(30, 40, 58)),
-        );
+        painter.circle_filled(center, r_outer, CHASSIS_FILL);
+        painter.circle_stroke(center, r_outer, Stroke::new(sw, border_col));
+        painter.circle_filled(center, r_dish, CONTROL_BASE);
+        painter.circle_stroke(center, r_dish, Stroke::new(sw * 0.8, CONTROL_BEVEL));
 
-        // Guardas curvas laterales
-        let guard_col = Color32::from_rgb(40, 55, 78);
-        let guard_w = 3.5 * s;
-        painter.line_segment(
-            [
-                egui::pos2(center.x - 68.0 * s, center.y - 40.0 * s),
-                egui::pos2(center.x - 76.0 * s, center.y),
-            ],
-            Stroke::new(guard_w, guard_col),
-        );
-        painter.line_segment(
-            [
-                egui::pos2(center.x - 76.0 * s, center.y),
-                egui::pos2(center.x - 68.0 * s, center.y + 40.0 * s),
-            ],
-            Stroke::new(guard_w, guard_col),
-        );
-        painter.line_segment(
-            [
-                egui::pos2(center.x + 68.0 * s, center.y - 40.0 * s),
-                egui::pos2(center.x + 76.0 * s, center.y),
-            ],
-            Stroke::new(guard_w, guard_col),
-        );
-        painter.line_segment(
-            [
-                egui::pos2(center.x + 76.0 * s, center.y),
-                egui::pos2(center.x + 68.0 * s, center.y + 40.0 * s),
-            ],
-            Stroke::new(guard_w, guard_col),
-        );
-
-        // Pozo vertical central
-        let well_w = 76.0 * s;
-        let well_h = 172.0 * s;
-        let well_rect = egui::Rect::from_center_size(center, egui::vec2(well_w, well_h));
-        painter.rect_filled(well_rect, 38.0 * s, Color32::from_rgb(6, 9, 15));
+        // Central vertical slot well
+        let well_rect = egui::Rect::from_center_size(center, egui::vec2(76.0 * s, 172.0 * s));
+        painter.rect_filled(well_rect, 38.0 * s, CHASSIS_WELL);
         painter.rect_stroke(
             well_rect,
             38.0 * s,
-            Stroke::new(1.8 * s, Color32::from_rgb(31, 41, 59)),
+            Stroke::new(sw * 0.8, CONTROL_BEVEL),
             egui::StrokeKind::Inside,
         );
 
-        // Marcas de centro neutro
-        let tick_col = if is_neutral {
-            cyan
-        } else {
-            Color32::from_rgb(71, 85, 105)
-        };
-        painter.line_segment(
-            [
-                egui::pos2(center.x - 62.0 * s, center.y),
-                egui::pos2(center.x - 42.0 * s, center.y),
-            ],
-            Stroke::new(2.5 * s, tick_col),
-        );
-        painter.line_segment(
-            [
-                egui::pos2(center.x + 42.0 * s, center.y),
-                egui::pos2(center.x + 62.0 * s, center.y),
-            ],
-            Stroke::new(2.5 * s, tick_col),
-        );
-
-        // Posición del pomo animado
         let handle_y = if is_up {
             center.y - 52.0 * s
         } else if is_down {
@@ -1983,32 +1664,22 @@ impl ProgrammingTab {
             center.y
         };
 
-        // Varilla de conexión
         painter.line_segment(
             [center, egui::pos2(center.x, handle_y)],
             Stroke::new(
-                5.5 * s,
+                (4.5 * s).max(2.0),
                 if !is_neutral {
-                    cyan
+                    COLOR_ACCENT
                 } else {
-                    Color32::from_rgb(30, 41, 59)
+                    CONTROL_BEVEL
                 },
             ),
         );
 
-        // Indicador Superior
+        // Top directional indicator
         let top_y = center.y - 100.0 * s;
-        let top_stroke = match d.up {
-            InteractState::Pressed => Stroke::new(2.4 * s, cyan),
-            InteractState::Hovered => Stroke::new(2.2 * s, Color32::WHITE),
-            InteractState::Idle => {
-                if ass_up {
-                    Stroke::new(1.8 * s, cyan)
-                } else {
-                    Stroke::new(1.8 * s, Color32::WHITE)
-                }
-            }
-        };
+        let (_, top_stroke_col, top_txt_col) = Self::schematic_control_style(d.up, ass_up);
+        let top_stroke = Stroke::new(sw, top_stroke_col);
 
         if is_numbered {
             let tri = vec![
@@ -2016,27 +1687,18 @@ impl ProgrammingTab {
                 egui::pos2(center.x - 22.0 * s, top_y + 14.0 * s),
                 egui::pos2(center.x + 22.0 * s, top_y + 14.0 * s),
             ];
-            let t_col = match d.up {
-                InteractState::Pressed | InteractState::Hovered => Color32::WHITE,
-                InteractState::Idle => {
-                    if ass_up {
-                        cyan
-                    } else {
-                        Color32::WHITE
-                    }
-                }
+            let tri_fill = if is_up {
+                COLOR_ACCENT
+            } else {
+                Color32::TRANSPARENT
             };
-            painter.add(egui::Shape::convex_polygon(
-                tri,
-                Color32::TRANSPARENT,
-                top_stroke,
-            ));
+            painter.add(egui::Shape::convex_polygon(tri, tri_fill, top_stroke));
             painter.text(
                 egui::pos2(center.x, top_y + 2.0 * s),
                 egui::Align2::CENTER_CENTER,
                 top_num,
-                egui::FontId::monospace(18.5 * s),
-                t_col,
+                egui::FontId::monospace((18.5 * s).max(8.0)),
+                top_txt_col,
             );
         } else {
             let tri = vec![
@@ -2044,26 +1706,18 @@ impl ProgrammingTab {
                 egui::pos2(center.x - 18.0 * s, top_y + 6.0 * s),
                 egui::pos2(center.x + 18.0 * s, top_y + 6.0 * s),
             ];
-            painter.add(egui::Shape::convex_polygon(
-                tri,
-                Color32::TRANSPARENT,
-                top_stroke,
-            ));
+            let tri_fill = if is_up {
+                COLOR_ACCENT
+            } else {
+                Color32::TRANSPARENT
+            };
+            painter.add(egui::Shape::convex_polygon(tri, tri_fill, top_stroke));
         }
 
-        // Indicador Inferior
+        // Bottom directional indicator
         let bot_y = center.y + 100.0 * s;
-        let bot_stroke = match d.down {
-            InteractState::Pressed => Stroke::new(2.4 * s, cyan),
-            InteractState::Hovered => Stroke::new(2.2 * s, Color32::WHITE),
-            InteractState::Idle => {
-                if ass_down {
-                    Stroke::new(1.8 * s, cyan)
-                } else {
-                    Stroke::new(1.8 * s, Color32::WHITE)
-                }
-            }
-        };
+        let (_, bot_stroke_col, bot_txt_col) = Self::schematic_control_style(d.down, ass_down);
+        let bot_stroke = Stroke::new(sw, bot_stroke_col);
 
         if is_numbered {
             let tri = vec![
@@ -2071,27 +1725,18 @@ impl ProgrammingTab {
                 egui::pos2(center.x - 22.0 * s, bot_y - 14.0 * s),
                 egui::pos2(center.x + 22.0 * s, bot_y - 14.0 * s),
             ];
-            let t_col = match d.down {
-                InteractState::Pressed | InteractState::Hovered => Color32::WHITE,
-                InteractState::Idle => {
-                    if ass_down {
-                        cyan
-                    } else {
-                        Color32::WHITE
-                    }
-                }
+            let tri_fill = if is_down {
+                COLOR_ACCENT
+            } else {
+                Color32::TRANSPARENT
             };
-            painter.add(egui::Shape::convex_polygon(
-                tri,
-                Color32::TRANSPARENT,
-                bot_stroke,
-            ));
+            painter.add(egui::Shape::convex_polygon(tri, tri_fill, bot_stroke));
             painter.text(
                 egui::pos2(center.x, bot_y - 2.0 * s),
                 egui::Align2::CENTER_CENTER,
                 bot_num,
-                egui::FontId::monospace(18.5 * s),
-                t_col,
+                egui::FontId::monospace((18.5 * s).max(8.0)),
+                bot_txt_col,
             );
         } else {
             let tri = vec![
@@ -2099,55 +1744,42 @@ impl ProgrammingTab {
                 egui::pos2(center.x - 18.0 * s, bot_y - 6.0 * s),
                 egui::pos2(center.x + 18.0 * s, bot_y - 6.0 * s),
             ];
-            painter.add(egui::Shape::convex_polygon(
-                tri,
-                Color32::TRANSPARENT,
-                bot_stroke,
-            ));
+            let tri_fill = if is_down {
+                COLOR_ACCENT
+            } else {
+                Color32::TRANSPARENT
+            };
+            painter.add(egui::Shape::convex_polygon(tri, tri_fill, bot_stroke));
         }
 
-        // Pomo central animado
+        // Animated toggle knob
         let knob_pos = egui::pos2(center.x, handle_y);
         let r_knob = 34.0 * s;
-        painter.circle_filled(
-            egui::pos2(knob_pos.x, knob_pos.y + 3.0 * s),
-            r_knob,
-            Color32::from_black_alpha(150),
-        );
-        painter.circle_filled(knob_pos, r_knob, Color32::from_rgb(32, 42, 60));
-        let knob_border = match d.any() {
-            InteractState::Pressed => Stroke::new(2.0 * s, cyan),
-            InteractState::Hovered => Stroke::new(2.0 * s, Color32::WHITE),
-            InteractState::Idle => Stroke::new(1.8 * s, Color32::from_rgb(71, 91, 124)),
+        let knob_fill = if d.any() == InteractState::Pressed {
+            fill_col
+        } else if d.any() == InteractState::Hovered {
+            COLOR_SURFACE_HIGHEST
+        } else {
+            CONTROL_CAP
         };
-        painter.circle_stroke(knob_pos, r_knob, knob_border);
-        painter.circle_filled(knob_pos, r_knob * 0.72, Color32::from_rgb(20, 28, 41));
+        painter.circle_filled(knob_pos, r_knob, knob_fill);
+        painter.circle_stroke(knob_pos, r_knob, Stroke::new(sw, border_col));
 
         let knob_font_sz = if center_label.len() <= 2 {
-            20.0 * s
+            (20.0 * s).max(8.0)
         } else {
-            16.5 * s
-        };
-        let knob_text_col = match d.any() {
-            InteractState::Pressed | InteractState::Hovered => Color32::WHITE,
-            InteractState::Idle => {
-                if any_assigned {
-                    cyan
-                } else {
-                    Color32::WHITE
-                }
-            }
+            (16.5 * s).max(7.5)
         };
         painter.text(
             knob_pos,
             egui::Align2::CENTER_CENTER,
             center_label,
             egui::FontId::monospace(knob_font_sz),
-            knob_text_col,
+            text_col,
         );
     }
 
-    /// Dibuja un botón circular táctico (I, H, F, G, A, B, C, D) con bisel radial y halo LED.
+    /// Draws a circular push button (I, H, F, G, A, B, C, D) in anodized graphite.
     fn draw_circular_button(
         painter: &egui::Painter,
         center: egui::Pos2,
@@ -2157,75 +1789,48 @@ impl ProgrammingTab {
         letter: &str,
         is_large: bool,
     ) {
-        let cyan = COLOR_PRIMARY_CONTAINER;
         let is_pressed = st == InteractState::Pressed;
+        let (fill_col, stroke_col, text_col) = Self::schematic_control_style(st, is_assigned);
         let r_bezel = 132.0 * s;
-        let r_well = 114.0 * s;
-        let r_halo = 102.0 * s;
-        let r_cap = if is_pressed { 80.0 * s } else { 86.0 * s };
+        let r_well = 110.0 * s;
+        let r_cap = if is_pressed { 84.0 * s } else { 90.0 * s };
+        let sw = (1.8 * s).max(1.0);
 
-        let bezel_stroke = match st {
-            InteractState::Pressed => Stroke::new(2.8 * s, cyan),
-            InteractState::Hovered => Stroke::new(2.8 * s, Color32::WHITE),
-            InteractState::Idle => Stroke::new(2.2 * s, Color32::from_rgb(51, 67, 94)),
+        painter.circle_filled(center, r_bezel, CHASSIS_FILL);
+        painter.circle_stroke(center, r_bezel, Stroke::new(sw, stroke_col));
+        painter.circle_filled(center, r_well, CHASSIS_WELL);
+
+        let cap_fill = match st {
+            InteractState::Pressed => fill_col,
+            InteractState::Hovered => COLOR_SURFACE_HIGHEST,
+            InteractState::Idle => CONTROL_CAP,
         };
+        painter.circle_filled(center, r_cap, cap_fill);
+        painter.circle_stroke(center, r_cap, Stroke::new(sw, stroke_col));
 
-        painter.circle_filled(center, r_bezel, Color32::from_rgb(19, 25, 38));
-        painter.circle_stroke(center, r_bezel, bezel_stroke);
-        painter.circle_filled(center, r_well, Color32::from_rgb(7, 10, 16));
+        if is_assigned && st == InteractState::Idle {
+            painter.circle_filled(
+                egui::pos2(center.x, center.y - r_cap * 0.62),
+                (6.0 * s).max(2.0),
+                COLOR_ACCENT,
+            );
+        }
 
-        // Halo LED circular
-        let halo_stroke = match st {
-            InteractState::Pressed => Stroke::new(4.5 * s, cyan),
-            InteractState::Hovered => Stroke::new(3.5 * s, Color32::WHITE),
-            InteractState::Idle => {
-                Stroke::new(1.8 * s, Color32::from_rgba_unmultiplied(34, 48, 70, 130))
-            }
-        };
-        painter.circle_stroke(center, r_halo, halo_stroke);
-
-        // Émbolo central
-        let shadow_y = if is_pressed { 2.0 * s } else { 6.0 * s };
-        painter.circle_filled(
-            egui::pos2(center.x, center.y + shadow_y),
-            r_cap,
-            Color32::from_black_alpha(160),
-        );
-        let cap_col = if is_pressed {
-            Color32::from_rgb(24, 33, 48)
+        let font_sz = if is_large {
+            (52.0 * s).max(9.0)
         } else {
-            Color32::from_rgb(32, 42, 60)
-        };
-        painter.circle_filled(center, r_cap, cap_col);
-        let cap_stroke = match st {
-            InteractState::Pressed => Stroke::new(2.0 * s, cyan),
-            InteractState::Hovered => Stroke::new(2.0 * s, Color32::WHITE),
-            InteractState::Idle => Stroke::new(1.8 * s, Color32::from_rgb(71, 91, 124)),
-        };
-        painter.circle_stroke(center, r_cap, cap_stroke);
-        painter.circle_filled(center, r_cap * 0.72, Color32::from_rgb(18, 24, 36));
-
-        let font_sz = if is_large { 52.0 * s } else { 48.0 * s };
-        let t_col = match st {
-            InteractState::Pressed | InteractState::Hovered => Color32::WHITE,
-            InteractState::Idle => {
-                if is_assigned {
-                    cyan
-                } else {
-                    Color32::WHITE
-                }
-            }
+            (48.0 * s).max(8.5)
         };
         painter.text(
             egui::pos2(center.x, center.y + 1.5 * s),
             egui::Align2::CENTER_CENTER,
             letter,
             egui::FontId::monospace(font_sz),
-            t_col,
+            text_col,
         );
     }
 
-    /// Dibuja el botón cuadrado biselado E.
+    /// Draws the square thumb button E in anodized graphite.
     fn draw_square_button(
         painter: &egui::Painter,
         center: egui::Pos2,
@@ -2234,86 +1839,62 @@ impl ProgrammingTab {
         is_assigned: bool,
         letter: &str,
     ) {
-        let cyan = COLOR_PRIMARY_CONTAINER;
         let is_pressed = st == InteractState::Pressed;
+        let (fill_col, stroke_col, text_col) = Self::schematic_control_style(st, is_assigned);
         let half_chassis = 126.0 * s;
         let half_well = 102.0 * s;
-        let half_cap = if is_pressed { 74.0 * s } else { 80.0 * s };
-
-        let stroke_col = match st {
-            InteractState::Pressed => cyan,
-            InteractState::Hovered => Color32::WHITE,
-            InteractState::Idle => Color32::from_rgb(46, 61, 86),
-        };
+        let half_cap = if is_pressed { 76.0 * s } else { 82.0 * s };
+        let sw = (1.8 * s).max(1.0);
 
         let chassis_rect = egui::Rect::from_center_size(
             center,
             egui::vec2(half_chassis * 2.0, half_chassis * 2.0),
         );
-        painter.rect_filled(chassis_rect, 14.0 * s, Color32::from_rgb(18, 24, 36));
+        painter.rect_filled(chassis_rect, 14.0 * s, CHASSIS_FILL);
         painter.rect_stroke(
             chassis_rect,
             14.0 * s,
-            Stroke::new(2.2 * s, stroke_col),
+            Stroke::new(sw, stroke_col),
             egui::StrokeKind::Inside,
         );
 
         let well_rect =
             egui::Rect::from_center_size(center, egui::vec2(half_well * 2.0, half_well * 2.0));
-        painter.rect_filled(well_rect, 10.0 * s, Color32::from_rgb(6, 9, 15));
-        painter.rect_stroke(
-            well_rect,
-            10.0 * s,
-            Stroke::new(1.8 * s, Color32::from_rgb(31, 41, 59)),
-            egui::StrokeKind::Inside,
-        );
-
-        let shadow_y = if is_pressed { 2.0 * s } else { 6.0 * s };
-        let shadow_rect = egui::Rect::from_center_size(
-            egui::pos2(center.x, center.y + shadow_y),
-            egui::vec2(half_cap * 2.0, half_cap * 2.0),
-        );
-        painter.rect_filled(shadow_rect, 8.0 * s, Color32::from_black_alpha(160));
+        painter.rect_filled(well_rect, 10.0 * s, CHASSIS_WELL);
 
         let cap_rect =
             egui::Rect::from_center_size(center, egui::vec2(half_cap * 2.0, half_cap * 2.0));
-        let cap_col = if is_pressed {
-            Color32::from_rgb(24, 33, 48)
-        } else {
-            Color32::from_rgb(32, 42, 60)
+        let cap_fill = match st {
+            InteractState::Pressed => fill_col,
+            InteractState::Hovered => COLOR_SURFACE_HIGHEST,
+            InteractState::Idle => CONTROL_CAP,
         };
-        painter.rect_filled(cap_rect, 8.0 * s, cap_col);
-        let cap_stroke = match st {
-            InteractState::Pressed => Stroke::new(1.8 * s, cyan),
-            InteractState::Hovered => Stroke::new(1.8 * s, Color32::WHITE),
-            InteractState::Idle => Stroke::new(1.8 * s, Color32::from_rgb(71, 91, 124)),
-        };
-        painter.rect_stroke(cap_rect, 8.0 * s, cap_stroke, egui::StrokeKind::Inside);
+        painter.rect_filled(cap_rect, 8.0 * s, cap_fill);
+        painter.rect_stroke(
+            cap_rect,
+            8.0 * s,
+            Stroke::new(sw, stroke_col),
+            egui::StrokeKind::Inside,
+        );
 
-        let inner_rect =
-            egui::Rect::from_center_size(center, egui::vec2(half_cap * 1.35, half_cap * 1.35));
-        painter.rect_filled(inner_rect, 5.0 * s, Color32::from_rgb(17, 23, 35));
+        if is_assigned && st == InteractState::Idle {
+            painter.circle_filled(
+                egui::pos2(center.x, center.y - half_cap * 0.62),
+                (6.0 * s).max(2.0),
+                COLOR_ACCENT,
+            );
+        }
 
-        let t_col = match st {
-            InteractState::Pressed | InteractState::Hovered => Color32::WHITE,
-            InteractState::Idle => {
-                if is_assigned {
-                    cyan
-                } else {
-                    Color32::WHITE
-                }
-            }
-        };
         painter.text(
             egui::pos2(center.x, center.y + 1.5 * s),
             egui::Align2::CENTER_CENTER,
             letter,
-            egui::FontId::monospace(48.0 * s),
-            t_col,
+            egui::FontId::monospace((48.0 * s).max(8.5)),
+            text_col,
         );
     }
 
-    /// Dibuja la rueda scroll táctica SC con punteros laterales y ranuras rotativas.
+    /// Draws the scroll wheel SC without idle neon decorations.
     fn draw_scroll_wheel(
         painter: &egui::Painter,
         center: egui::Pos2,
@@ -2323,151 +1904,112 @@ impl ProgrammingTab {
     ) {
         let (ass_up, ass_down) = assigned;
         let any_assigned = ass_up || ass_down;
-        let cyan = COLOR_PRIMARY_CONTAINER;
+        let (fill_col, border_col, text_col) = Self::schematic_control_style(d.any(), any_assigned);
+        let sw = (1.8 * s).max(1.0);
 
         let w = 164.0 * s;
         let h = 300.0 * s;
         let cap_rect = egui::Rect::from_center_size(center, egui::vec2(w, h));
-        painter.rect_filled(cap_rect, w * 0.5, Color32::from_rgb(14, 19, 30));
+        painter.rect_filled(cap_rect, w * 0.5, CHASSIS_FILL);
+        painter.rect_stroke(
+            cap_rect,
+            w * 0.5,
+            Stroke::new(sw, border_col),
+            egui::StrokeKind::Inside,
+        );
 
-        let cap_stroke = match d.any() {
-            InteractState::Pressed => Stroke::new(2.8 * s, cyan),
-            InteractState::Hovered => Stroke::new(2.8 * s, Color32::WHITE),
-            InteractState::Idle => Stroke::new(2.2 * s, Color32::from_rgb(41, 56, 82)),
-        };
-        painter.rect_stroke(cap_rect, w * 0.5, cap_stroke, egui::StrokeKind::Inside);
-
-        // Flechas superior e inferior
+        // Top / bottom scroll arrows
+        let (_, up_col, _) = Self::schematic_control_style(d.up, ass_up);
         let top_arrow = vec![
             egui::pos2(center.x, center.y - 136.0 * s),
             egui::pos2(center.x - 15.0 * s, center.y - 114.0 * s),
             egui::pos2(center.x + 15.0 * s, center.y - 114.0 * s),
         ];
-        let top_stroke = match d.up {
-            InteractState::Pressed => Stroke::new(2.2 * s, cyan),
-            InteractState::Hovered => Stroke::new(2.0 * s, Color32::WHITE),
-            InteractState::Idle => {
-                if ass_up {
-                    Stroke::new(1.5 * s, cyan)
-                } else {
-                    Stroke::new(1.5 * s, Color32::WHITE)
-                }
-            }
-        };
         painter.add(egui::Shape::convex_polygon(
             top_arrow,
-            Color32::TRANSPARENT,
-            top_stroke,
+            if d.up == InteractState::Pressed {
+                COLOR_ACCENT
+            } else {
+                Color32::TRANSPARENT
+            },
+            Stroke::new(sw, up_col),
         ));
 
+        let (_, dn_col, _) = Self::schematic_control_style(d.down, ass_down);
         let bot_arrow = vec![
             egui::pos2(center.x, center.y + 136.0 * s),
             egui::pos2(center.x - 15.0 * s, center.y + 114.0 * s),
             egui::pos2(center.x + 15.0 * s, center.y + 114.0 * s),
         ];
-        let bot_stroke = match d.down {
-            InteractState::Pressed => Stroke::new(2.2 * s, cyan),
-            InteractState::Hovered => Stroke::new(2.0 * s, Color32::WHITE),
-            InteractState::Idle => {
-                if ass_down {
-                    Stroke::new(1.5 * s, cyan)
-                } else {
-                    Stroke::new(1.5 * s, Color32::WHITE)
-                }
-            }
-        };
         painter.add(egui::Shape::convex_polygon(
             bot_arrow,
-            Color32::TRANSPARENT,
-            bot_stroke,
+            if d.down == InteractState::Pressed {
+                COLOR_ACCENT
+            } else {
+                Color32::TRANSPARENT
+            },
+            Stroke::new(sw, dn_col),
         ));
 
-        // Cavidad del tambor
+        // Drum cavity & rotary drum
         let cav_rect = egui::Rect::from_center_size(center, egui::vec2(92.0 * s, 212.0 * s));
-        painter.rect_filled(cav_rect, 22.0 * s, Color32::from_rgb(5, 7, 12));
+        painter.rect_filled(cav_rect, 22.0 * s, CHASSIS_WELL);
         painter.rect_stroke(
             cav_rect,
             22.0 * s,
-            Stroke::new(1.8 * s, Color32::from_rgb(30, 41, 59)),
+            Stroke::new(sw * 0.8, CONTROL_BEVEL),
             egui::StrokeKind::Inside,
         );
 
-        // Punteros laterales cian
-        let p_left = vec![
-            egui::pos2(center.x - 56.0 * s, center.y),
-            egui::pos2(center.x - 66.0 * s, center.y - 5.0 * s),
-            egui::pos2(center.x - 66.0 * s, center.y + 5.0 * s),
-        ];
-        painter.add(egui::Shape::convex_polygon(p_left, cyan, Stroke::NONE));
-
-        let p_right = vec![
-            egui::pos2(center.x + 56.0 * s, center.y),
-            egui::pos2(center.x + 66.0 * s, center.y - 5.0 * s),
-            egui::pos2(center.x + 66.0 * s, center.y + 5.0 * s),
-        ];
-        painter.add(egui::Shape::convex_polygon(p_right, cyan, Stroke::NONE));
-
-        // Tambor rotativo
         let drum_rect = egui::Rect::from_center_size(center, egui::vec2(72.0 * s, 196.0 * s));
-        painter.rect_filled(drum_rect, 16.0 * s, Color32::from_rgb(30, 40, 58));
-        let drum_stroke = match d.any() {
-            InteractState::Pressed => Stroke::new(2.0 * s, cyan),
-            InteractState::Hovered => Stroke::new(2.0 * s, Color32::WHITE),
-            InteractState::Idle => Stroke::new(1.8 * s, Color32::from_rgb(59, 77, 107)),
-        };
-        painter.rect_stroke(drum_rect, 16.0 * s, drum_stroke, egui::StrokeKind::Inside);
+        painter.rect_filled(drum_rect, 16.0 * s, CONTROL_CAP);
+        painter.rect_stroke(
+            drum_rect,
+            16.0 * s,
+            Stroke::new(sw * 0.9, border_col),
+            egui::StrokeKind::Inside,
+        );
 
-        // Ranuras del tambor
         for i in -5..=5 {
             let ry = center.y + (i as f32) * 16.0 * s;
-            let line_col = if i == 0 {
-                cyan
+            let line_col = if i == 0 && d.any() == InteractState::Pressed {
+                COLOR_ACCENT
             } else {
-                Color32::from_rgb(71, 85, 105)
+                CONTROL_HAIRLINE
             };
             painter.line_segment(
                 [
                     egui::pos2(center.x - 26.0 * s, ry),
                     egui::pos2(center.x + 26.0 * s, ry),
                 ],
-                Stroke::new(1.4 * s, line_col),
+                Stroke::new((1.2 * s).max(0.8), line_col),
             );
         }
 
-        // Badge central "SC"
+        // Center SC badge
         let badge_rect = egui::Rect::from_center_size(center, egui::vec2(48.0 * s, 32.0 * s));
-        painter.rect_filled(badge_rect, 6.0 * s, Color32::from_rgb(10, 14, 23));
-        let badge_border = match d.any() {
-            InteractState::Pressed => cyan,
-            InteractState::Hovered => Color32::WHITE,
-            InteractState::Idle => cyan,
+        let badge_fill = if d.any() == InteractState::Pressed {
+            fill_col
+        } else {
+            CHASSIS_WELL
         };
+        painter.rect_filled(badge_rect, 6.0 * s, badge_fill);
         painter.rect_stroke(
             badge_rect,
             6.0 * s,
-            Stroke::new(1.2 * s, badge_border),
+            Stroke::new(sw * 0.8, border_col),
             egui::StrokeKind::Inside,
         );
-        let sc_text_col = match d.any() {
-            InteractState::Pressed | InteractState::Hovered => Color32::WHITE,
-            InteractState::Idle => {
-                if any_assigned {
-                    cyan
-                } else {
-                    Color32::WHITE
-                }
-            }
-        };
         painter.text(
             center,
             egui::Align2::CENTER_CENTER,
             "SC",
-            egui::FontId::monospace(18.0 * s),
-            sc_text_col,
+            egui::FontId::monospace((18.0 * s).max(8.0)),
+            text_col,
         );
     }
 
-    /// Dibuja el conmutador vertical K1 con su manija animada y LEDs.
+    /// Draws the vertical rocker toggle K1 with live handle travel.
     fn draw_double_toggle_k1(
         painter: &egui::Painter,
         center: egui::Pos2,
@@ -2477,75 +2019,48 @@ impl ProgrammingTab {
     ) {
         let (ass_up, ass_down) = assigned;
         let any_assigned = ass_up || ass_down;
-        let cyan = COLOR_PRIMARY_CONTAINER;
         let is_up = d.up == InteractState::Pressed;
         let is_down = d.down == InteractState::Pressed;
         let is_neutral = !is_up && !is_down;
+        let (fill_col, border_col, text_col) = Self::schematic_control_style(d.any(), any_assigned);
+        let sw = (1.8 * s).max(1.0);
 
         let w = 166.0 * s;
         let h = 300.0 * s;
         let k1_rect = egui::Rect::from_center_size(center, egui::vec2(w, h));
-        painter.rect_filled(k1_rect, 14.0 * s, Color32::from_rgb(14, 19, 30));
-
-        let k1_stroke = match d.any() {
-            InteractState::Pressed => Stroke::new(2.5 * s, cyan),
-            InteractState::Hovered => Stroke::new(2.5 * s, Color32::WHITE),
-            InteractState::Idle => Stroke::new(2.0 * s, Color32::from_rgb(38, 53, 77)),
-        };
-        painter.rect_stroke(k1_rect, 14.0 * s, k1_stroke, egui::StrokeKind::Inside);
-
-        // Barras laterales
-        let b_left = egui::Rect::from_center_size(
-            egui::pos2(center.x - 63.0 * s, center.y),
-            egui::vec2(8.0 * s, 184.0 * s),
-        );
-        painter.rect_filled(b_left, 3.0 * s, Color32::from_rgb(20, 27, 38));
-        let b_right = egui::Rect::from_center_size(
-            egui::pos2(center.x + 63.0 * s, center.y),
-            egui::vec2(8.0 * s, 184.0 * s),
-        );
-        painter.rect_filled(b_right, 3.0 * s, Color32::from_rgb(20, 27, 38));
-
-        // Flecha Arriba + LED
-        let top_arrow = vec![
-            egui::pos2(center.x, center.y - 142.0 * s),
-            egui::pos2(center.x - 13.0 * s, center.y - 124.0 * s),
-            egui::pos2(center.x + 13.0 * s, center.y - 124.0 * s),
-        ];
-        let (top_stroke, top_led_col) = match d.up {
-            InteractState::Pressed => (Stroke::new(2.2 * s, cyan), cyan),
-            InteractState::Hovered => (Stroke::new(2.0 * s, Color32::WHITE), Color32::WHITE),
-            InteractState::Idle => (
-                if ass_up {
-                    Stroke::new(1.5 * s, cyan)
-                } else {
-                    Stroke::new(1.5 * s, Color32::WHITE)
-                },
-                Color32::from_rgb(24, 32, 44),
-            ),
-        };
-        painter.add(egui::Shape::convex_polygon(
-            top_arrow,
-            Color32::TRANSPARENT,
-            top_stroke,
-        ));
-        painter.circle_filled(
-            egui::pos2(center.x, center.y - 110.0 * s),
-            6.0 * s,
-            top_led_col,
-        );
-
-        // Pozo vertical
-        let slot_rect = egui::Rect::from_center_size(center, egui::vec2(70.0 * s, 184.0 * s));
-        painter.rect_filled(slot_rect, 35.0 * s, Color32::from_rgb(6, 9, 15));
+        painter.rect_filled(k1_rect, 14.0 * s, CHASSIS_FILL);
         painter.rect_stroke(
-            slot_rect,
-            35.0 * s,
-            Stroke::new(1.8 * s, Color32::from_rgb(29, 38, 54)),
+            k1_rect,
+            14.0 * s,
+            Stroke::new(sw, border_col),
             egui::StrokeKind::Inside,
         );
 
-        // Manija animada
+        let (_, top_col, _) = Self::schematic_control_style(d.up, ass_up);
+        let top_arrow = vec![
+            egui::pos2(center.x, center.y - 140.0 * s),
+            egui::pos2(center.x - 13.0 * s, center.y - 122.0 * s),
+            egui::pos2(center.x + 13.0 * s, center.y - 122.0 * s),
+        ];
+        painter.add(egui::Shape::convex_polygon(
+            top_arrow,
+            if is_up {
+                COLOR_ACCENT
+            } else {
+                Color32::TRANSPARENT
+            },
+            Stroke::new(sw, top_col),
+        ));
+
+        let slot_rect = egui::Rect::from_center_size(center, egui::vec2(70.0 * s, 184.0 * s));
+        painter.rect_filled(slot_rect, 35.0 * s, CHASSIS_WELL);
+        painter.rect_stroke(
+            slot_rect,
+            35.0 * s,
+            Stroke::new(sw * 0.8, CONTROL_BEVEL),
+            egui::StrokeKind::Inside,
+        );
+
         let handle_y = if is_up {
             center.y - 58.0 * s
         } else if is_down {
@@ -2557,11 +2072,11 @@ impl ProgrammingTab {
         painter.line_segment(
             [center, egui::pos2(center.x, handle_y)],
             Stroke::new(
-                4.5 * s,
+                (4.0 * s).max(2.0),
                 if !is_neutral {
-                    cyan
+                    COLOR_ACCENT
                 } else {
-                    Color32::from_rgb(30, 41, 59)
+                    CONTROL_BEVEL
                 },
             ),
         );
@@ -2575,65 +2090,42 @@ impl ProgrammingTab {
             egui::pos2(h_pos.x - 26.0 * s, h_pos.y + 28.0 * s),
             egui::pos2(h_pos.x - 30.0 * s, h_pos.y),
         ];
-        let handle_border = match d.any() {
-            InteractState::Pressed => Stroke::new(1.8 * s, cyan),
-            InteractState::Hovered => Stroke::new(1.8 * s, Color32::WHITE),
-            InteractState::Idle => Stroke::new(1.8 * s, Color32::from_rgb(67, 86, 117)),
+        let handle_fill = match d.any() {
+            InteractState::Pressed => fill_col,
+            InteractState::Hovered => COLOR_SURFACE_HIGHEST,
+            InteractState::Idle => CONTROL_CAP,
         };
         painter.add(egui::Shape::convex_polygon(
             handle_pts,
-            Color32::from_rgb(32, 42, 59),
-            handle_border,
+            handle_fill,
+            Stroke::new(sw, border_col),
         ));
-        let k1_text_col = match d.any() {
-            InteractState::Pressed | InteractState::Hovered => Color32::WHITE,
-            InteractState::Idle => {
-                if any_assigned {
-                    cyan
-                } else {
-                    Color32::WHITE
-                }
-            }
-        };
         painter.text(
             h_pos,
             egui::Align2::CENTER_CENTER,
             "K1",
-            egui::FontId::monospace(19.0 * s),
-            k1_text_col,
+            egui::FontId::monospace((19.0 * s).max(8.0)),
+            text_col,
         );
 
-        // LED + Flecha Abajo
-        let (bot_stroke, bot_led_col) = match d.down {
-            InteractState::Pressed => (Stroke::new(2.2 * s, cyan), cyan),
-            InteractState::Hovered => (Stroke::new(2.0 * s, Color32::WHITE), Color32::WHITE),
-            InteractState::Idle => (
-                if ass_down {
-                    Stroke::new(1.5 * s, cyan)
-                } else {
-                    Stroke::new(1.5 * s, Color32::WHITE)
-                },
-                Color32::from_rgb(24, 32, 44),
-            ),
-        };
-        painter.circle_filled(
-            egui::pos2(center.x, center.y + 110.0 * s),
-            6.0 * s,
-            bot_led_col,
-        );
+        let (_, bot_col, _) = Self::schematic_control_style(d.down, ass_down);
         let bot_arrow = vec![
-            egui::pos2(center.x, center.y + 142.0 * s),
-            egui::pos2(center.x - 13.0 * s, center.y + 124.0 * s),
-            egui::pos2(center.x + 13.0 * s, center.y + 124.0 * s),
+            egui::pos2(center.x, center.y + 140.0 * s),
+            egui::pos2(center.x - 13.0 * s, center.y + 122.0 * s),
+            egui::pos2(center.x + 13.0 * s, center.y + 122.0 * s),
         ];
         painter.add(egui::Shape::convex_polygon(
             bot_arrow,
-            Color32::TRANSPARENT,
-            bot_stroke,
+            if is_down {
+                COLOR_ACCENT
+            } else {
+                Color32::TRANSPARENT
+            },
+            Stroke::new(sw, bot_col),
         ));
     }
 
-    /// Dibuja el control deslizante horizontal SLD con LEDs laterales y manija animada.
+    /// Draws the horizontal two-position slider SLD with live mechanical travel.
     fn draw_horizontal_slider_sld(
         painter: &egui::Painter,
         center: egui::Pos2,
@@ -2642,74 +2134,40 @@ impl ProgrammingTab {
         is_assigned: bool,
         is_on: bool,
     ) {
-        let cyan = COLOR_PRIMARY_CONTAINER;
-        let w = 256.0 * s;
-        let h = 162.0 * s;
-        let sld_rect = egui::Rect::from_center_size(center, egui::vec2(w, h));
-        painter.rect_filled(sld_rect, 34.0 * s, Color32::from_rgb(14, 19, 30));
-
-        let stroke_col = match st {
-            InteractState::Pressed => cyan,
-            InteractState::Hovered => Color32::WHITE,
-            InteractState::Idle => Color32::from_rgb(43, 58, 84),
-        };
+        let (fill_col, border_col, text_col) = Self::schematic_control_style(st, is_assigned);
+        let sw = (1.8 * s).max(1.0);
+        let sld_rect = egui::Rect::from_center_size(center, egui::vec2(256.0 * s, 162.0 * s));
+        painter.rect_filled(sld_rect, 34.0 * s, CHASSIS_FILL);
         painter.rect_stroke(
             sld_rect,
             34.0 * s,
-            Stroke::new(2.2 * s, stroke_col),
+            Stroke::new(sw, border_col),
             egui::StrokeKind::Inside,
         );
 
-        // Pista horizontal
         let track_rect = egui::Rect::from_center_size(center, egui::vec2(168.0 * s, 74.0 * s));
-        painter.rect_filled(track_rect, 37.0 * s, Color32::from_rgb(6, 9, 15));
+        painter.rect_filled(track_rect, 37.0 * s, CHASSIS_WELL);
         painter.rect_stroke(
             track_rect,
             37.0 * s,
-            Stroke::new(1.8 * s, Color32::from_rgb(29, 38, 54)),
+            Stroke::new(sw * 0.8, CONTROL_BEVEL),
             egui::StrokeKind::Inside,
         );
 
-        // LEDs laterales
-        painter.circle_filled(
-            egui::pos2(center.x - 104.0 * s, center.y),
-            5.5 * s,
-            if !is_on {
-                Color32::from_rgb(148, 163, 184)
-            } else {
-                Color32::from_rgb(24, 32, 44)
-            },
-        );
-        painter.circle_filled(
-            egui::pos2(center.x + 104.0 * s, center.y),
-            6.0 * s,
-            if is_on {
-                cyan
-            } else {
-                Color32::from_rgb(24, 32, 44)
-            },
-        );
-
-        // Posición de la manija deslizante
         let handle_x = if is_on {
             center.x + 46.0 * s
         } else {
             center.x - 46.0 * s
         };
 
-        // Barra de recorrido
         painter.line_segment(
             [
                 egui::pos2(center.x - 46.0 * s, center.y),
                 egui::pos2(handle_x, center.y),
             ],
             Stroke::new(
-                5.0 * s,
-                if is_on {
-                    cyan
-                } else {
-                    Color32::from_rgb(30, 41, 59)
-                },
+                (4.5 * s).max(2.0),
+                if is_on { COLOR_ACCENT } else { CONTROL_BEVEL },
             ),
         );
 
@@ -2722,36 +2180,26 @@ impl ProgrammingTab {
             egui::pos2(h_pos.x - 32.0 * s, h_pos.y + 28.0 * s),
             egui::pos2(h_pos.x - 36.0 * s, h_pos.y),
         ];
-        let handle_stroke = match st {
-            InteractState::Pressed => Stroke::new(1.8 * s, cyan),
-            InteractState::Hovered => Stroke::new(1.8 * s, Color32::WHITE),
-            InteractState::Idle => Stroke::new(1.8 * s, Color32::from_rgb(71, 91, 124)),
+        let handle_fill = match st {
+            InteractState::Pressed => fill_col,
+            InteractState::Hovered => COLOR_SURFACE_HIGHEST,
+            InteractState::Idle => CONTROL_CAP,
         };
         painter.add(egui::Shape::convex_polygon(
             handle_pts,
-            Color32::from_rgb(32, 42, 59),
-            handle_stroke,
+            handle_fill,
+            Stroke::new(sw, border_col),
         ));
-        let text_col = match st {
-            InteractState::Pressed | InteractState::Hovered => Color32::WHITE,
-            InteractState::Idle => {
-                if is_assigned {
-                    cyan
-                } else {
-                    Color32::WHITE
-                }
-            }
-        };
         painter.text(
             h_pos,
             egui::Align2::CENTER_CENTER,
             "SLD",
-            egui::FontId::monospace(19.0 * s),
+            egui::FontId::monospace((19.0 * s).max(8.0)),
             text_col,
         );
     }
 
-    /// Dibuja una cruceta circular D-Pad (H3, H4, POV, H1, H2) con 4 flechas cardinales iluminadas dinámicamente.
+    /// Draws a 4-way D-pad / castle hat (H3, H4, POV, H1, H2) in anodized graphite.
     fn draw_dpad(
         painter: &egui::Painter,
         center: egui::Pos2,
@@ -2762,227 +2210,177 @@ impl ProgrammingTab {
     ) {
         let (ass_up, ass_right, ass_down, ass_left) = assigned;
         let any_assigned = ass_up || ass_right || ass_down || ass_left;
-        let cyan = COLOR_PRIMARY_CONTAINER;
+        let (fill_col, rim_col, text_col) = Self::schematic_control_style(d.any(), any_assigned);
+        let sw = (1.8 * s).max(1.0);
+
         let r_rim = 162.0 * s;
-        let r_dish = 140.0 * s;
+        let r_dish = 138.0 * s;
+        painter.circle_filled(center, r_rim, CHASSIS_FILL);
+        painter.circle_stroke(center, r_rim, Stroke::new(sw, rim_col));
+        painter.circle_filled(center, r_dish, CHASSIS_WELL);
+        painter.circle_stroke(center, r_dish, Stroke::new(sw * 0.8, CONTROL_BEVEL));
 
-        let rim_stroke = match d.any() {
-            InteractState::Pressed => Stroke::new(2.8 * s, cyan),
-            InteractState::Hovered => Stroke::new(2.8 * s, Color32::WHITE),
-            InteractState::Idle => Stroke::new(2.8 * s, Color32::from_rgb(46, 60, 86)),
-        };
-
-        painter.circle_filled(center, r_rim, Color32::from_rgb(20, 25, 37));
-        painter.circle_stroke(center, r_rim, rim_stroke);
-        painter.circle_filled(center, r_dish, Color32::from_rgb(17, 22, 34));
-        painter.circle_stroke(
-            center,
-            r_dish,
-            Stroke::new(1.8 * s, Color32::from_rgb(31, 40, 59)),
-        );
-
-        // Brazos de la cruz central
         let arm_w = 76.0 * s;
         let arm_len = 268.0 * s;
         let v_rect = egui::Rect::from_center_size(center, egui::vec2(arm_w, arm_len));
-        painter.rect_filled(v_rect, 14.0 * s, Color32::from_rgb(32, 42, 60));
+        painter.rect_filled(v_rect, 14.0 * s, CONTROL_CAP);
         painter.rect_stroke(
             v_rect,
             14.0 * s,
-            Stroke::new(1.4 * s, Color32::from_rgb(50, 62, 87)),
+            Stroke::new(sw * 0.8, CONTROL_HAIRLINE),
             egui::StrokeKind::Inside,
         );
 
         let h_rect = egui::Rect::from_center_size(center, egui::vec2(arm_len, arm_w));
-        painter.rect_filled(h_rect, 14.0 * s, Color32::from_rgb(32, 42, 60));
+        painter.rect_filled(h_rect, 14.0 * s, CONTROL_CAP);
         painter.rect_stroke(
             h_rect,
             14.0 * s,
-            Stroke::new(1.4 * s, Color32::from_rgb(50, 62, 87)),
+            Stroke::new(sw * 0.8, CONTROL_HAIRLINE),
             egui::StrokeKind::Inside,
         );
 
-        // Flechas direccionales cardinales
         let d_offset = 116.0 * s;
         let arrow_size = 18.0 * s;
 
-        let arrow_stroke = |st: InteractState, is_assigned: bool| match st {
-            InteractState::Pressed => Stroke::new(2.2 * s, cyan),
-            InteractState::Hovered => Stroke::new(2.0 * s, Color32::WHITE),
-            InteractState::Idle => {
-                if is_assigned {
-                    Stroke::new(1.4 * s, cyan)
-                } else {
-                    Stroke::new(1.4 * s, Color32::WHITE)
-                }
-            }
+        let draw_dir_arrow = |pts: Vec<egui::Pos2>, st: InteractState, is_ass: bool| {
+            let (_, st_col, _) = Self::schematic_control_style(st, is_ass);
+            let fill = if st == InteractState::Pressed {
+                COLOR_ACCENT
+            } else {
+                Color32::TRANSPARENT
+            };
+            painter.add(egui::Shape::convex_polygon(
+                pts,
+                fill,
+                Stroke::new(sw, st_col),
+            ));
         };
 
-        // Up arrow
-        let up_tri = vec![
-            egui::pos2(center.x, center.y - d_offset),
-            egui::pos2(
-                center.x - arrow_size * 0.7,
-                center.y - d_offset + arrow_size,
-            ),
-            egui::pos2(
-                center.x + arrow_size * 0.7,
-                center.y - d_offset + arrow_size,
-            ),
-        ];
-        painter.add(egui::Shape::convex_polygon(
-            up_tri,
-            Color32::TRANSPARENT,
-            arrow_stroke(d.up, ass_up),
-        ));
+        draw_dir_arrow(
+            vec![
+                egui::pos2(center.x, center.y - d_offset),
+                egui::pos2(
+                    center.x - arrow_size * 0.7,
+                    center.y - d_offset + arrow_size,
+                ),
+                egui::pos2(
+                    center.x + arrow_size * 0.7,
+                    center.y - d_offset + arrow_size,
+                ),
+            ],
+            d.up,
+            ass_up,
+        );
+        draw_dir_arrow(
+            vec![
+                egui::pos2(center.x, center.y + d_offset),
+                egui::pos2(
+                    center.x - arrow_size * 0.7,
+                    center.y + d_offset - arrow_size,
+                ),
+                egui::pos2(
+                    center.x + arrow_size * 0.7,
+                    center.y + d_offset - arrow_size,
+                ),
+            ],
+            d.down,
+            ass_down,
+        );
+        draw_dir_arrow(
+            vec![
+                egui::pos2(center.x - d_offset, center.y),
+                egui::pos2(
+                    center.x - d_offset + arrow_size,
+                    center.y - arrow_size * 0.7,
+                ),
+                egui::pos2(
+                    center.x - d_offset + arrow_size,
+                    center.y + arrow_size * 0.7,
+                ),
+            ],
+            d.left,
+            ass_left,
+        );
+        draw_dir_arrow(
+            vec![
+                egui::pos2(center.x + d_offset, center.y),
+                egui::pos2(
+                    center.x + d_offset - arrow_size,
+                    center.y - arrow_size * 0.7,
+                ),
+                egui::pos2(
+                    center.x + d_offset - arrow_size,
+                    center.y + arrow_size * 0.7,
+                ),
+            ],
+            d.right,
+            ass_right,
+        );
 
-        // Down arrow
-        let down_tri = vec![
-            egui::pos2(center.x, center.y + d_offset),
-            egui::pos2(
-                center.x - arrow_size * 0.7,
-                center.y + d_offset - arrow_size,
-            ),
-            egui::pos2(
-                center.x + arrow_size * 0.7,
-                center.y + d_offset - arrow_size,
-            ),
-        ];
-        painter.add(egui::Shape::convex_polygon(
-            down_tri,
-            Color32::TRANSPARENT,
-            arrow_stroke(d.down, ass_down),
-        ));
-
-        // Left arrow
-        let left_tri = vec![
-            egui::pos2(center.x - d_offset, center.y),
-            egui::pos2(
-                center.x - d_offset + arrow_size,
-                center.y - arrow_size * 0.7,
-            ),
-            egui::pos2(
-                center.x - d_offset + arrow_size,
-                center.y + arrow_size * 0.7,
-            ),
-        ];
-        painter.add(egui::Shape::convex_polygon(
-            left_tri,
-            Color32::TRANSPARENT,
-            arrow_stroke(d.left, ass_left),
-        ));
-
-        // Right arrow
-        let right_tri = vec![
-            egui::pos2(center.x + d_offset, center.y),
-            egui::pos2(
-                center.x + d_offset - arrow_size,
-                center.y - arrow_size * 0.7,
-            ),
-            egui::pos2(
-                center.x + d_offset - arrow_size,
-                center.y + arrow_size * 0.7,
-            ),
-        ];
-        painter.add(egui::Shape::convex_polygon(
-            right_tri,
-            Color32::TRANSPARENT,
-            arrow_stroke(d.right, ass_right),
-        ));
-
-        // Botón central con H3 / H4 / POV / H1 / H2
-        painter.circle_filled(center, 40.0 * s, Color32::from_rgb(18, 24, 36));
-        let center_stroke = match d.any() {
-            InteractState::Pressed => Stroke::new(2.0 * s, cyan),
-            InteractState::Hovered => Stroke::new(2.0 * s, Color32::WHITE),
-            InteractState::Idle => {
-                if any_assigned {
-                    Stroke::new(1.8 * s, cyan)
-                } else {
-                    Stroke::new(1.8 * s, Color32::WHITE)
-                }
-            }
+        let hub_fill = match d.any() {
+            InteractState::Pressed => fill_col,
+            InteractState::Hovered => COLOR_SURFACE_HIGHEST,
+            InteractState::Idle => CONTROL_BASE,
         };
-        painter.circle_stroke(center, 40.0 * s, center_stroke);
-        let label_col = match d.any() {
-            InteractState::Pressed | InteractState::Hovered => Color32::WHITE,
-            InteractState::Idle => {
-                if any_assigned {
-                    cyan
-                } else {
-                    Color32::WHITE
-                }
-            }
-        };
+        painter.circle_filled(center, 40.0 * s, hub_fill);
+        painter.circle_stroke(center, 40.0 * s, Stroke::new(sw, rim_col));
         painter.text(
             center,
             egui::Align2::CENTER_CENTER,
             label,
-            egui::FontId::monospace(24.0 * s),
-            label_col,
+            egui::FontId::monospace((24.0 * s).max(8.0)),
+            text_col,
         );
     }
 
     // ========================================================================
-    // COLUMNA IZQUIERDA: TARJETA 3 - POV HAT 1 LIVE MATRIX
+    // 4. CONTEXTUAL POV COMPASS & THROTTLE MINI-GIMBAL
     // ========================================================================
 
     fn render_pov_compass_card(&self, ui: &mut Ui, snapshot: &LiveButtonsSnapshot) {
         theme::card_frame().show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.horizontal_wrapped(|ui| {
-                ui.label(
-                    RichText::new(format!(
-                        "{} POV HAT 1 LIVE MATRIX // 8-WAY COMPASS",
-                        icons::COMPASS
-                    ))
-                    .color(COLOR_PRIMARY)
-                    .size(11.0)
-                    .strong()
-                    .monospace(),
-                );
-            });
+            theme::section_heading(ui, &x56_core::t!("prog-pov-title"));
+            ui.add_space(SPACE_SM);
 
-            ui.add_space(4.0);
-
-            // Calcular dirección actual del POV
             let up = snapshot.pressed_buttons.contains("stick_pov_up");
             let right = snapshot.pressed_buttons.contains("stick_pov_right");
             let down = snapshot.pressed_buttons.contains("stick_pov_down");
             let left = snapshot.pressed_buttons.contains("stick_pov_left");
 
             let (angle_str, abs_x, abs_y, dir_idx) = match (up, right, down, left) {
-                (true, true, _, _) => ("045° [NORDESTE - NE]", 1, -1, Some(1)),
-                (true, _, _, true) => ("315° [NOROESTE - NW]", -1, -1, Some(7)),
-                (true, _, _, _) => ("000° [NORTE - N]", 0, -1, Some(0)),
-                (_, true, true, _) => ("135° [SURESTE - SE]", 1, 1, Some(3)),
-                (_, _, true, true) => ("225° [SUROESTE - SW]", -1, 1, Some(5)),
-                (_, _, true, _) => ("180° [SUR - S]", 0, 1, Some(4)),
-                (_, true, _, _) => ("090° [ESTE - E]", 1, 0, Some(2)),
-                (_, _, _, true) => ("270° [OESTE - W]", -1, 0, Some(6)),
-                _ => ("CENTRO [RETÍCULA NEUTRA]", 0, 0, None),
+                (true, true, _, _) => (x56_core::t!("prog-pov-ne"), 1, -1, Some(1)),
+                (true, _, _, true) => (x56_core::t!("prog-pov-nw"), -1, -1, Some(7)),
+                (true, _, _, _) => (x56_core::t!("prog-pov-n"), 0, -1, Some(0)),
+                (_, true, true, _) => (x56_core::t!("prog-pov-se"), 1, 1, Some(3)),
+                (_, _, true, true) => (x56_core::t!("prog-pov-sw"), -1, 1, Some(5)),
+                (_, _, true, _) => (x56_core::t!("prog-pov-s"), 0, 1, Some(4)),
+                (_, true, _, _) => (x56_core::t!("prog-pov-e"), 1, 0, Some(2)),
+                (_, _, _, true) => (x56_core::t!("prog-pov-w"), -1, 0, Some(6)),
+                _ => (x56_core::t!("prog-pov-center"), 0, 0, None),
             };
 
             ui.horizontal(|ui| {
-                // Brújula octogonal renderizada
-                let compass_size = Vec2::new(120.0, 110.0);
+                let compass_size = Vec2::new(124.0, 114.0);
                 let (_, painter) = ui.allocate_painter(compass_size, egui::Sense::hover());
                 let c = painter.clip_rect().center();
                 let r = 42.0;
 
-                // Círculo base y retícula
-                painter.circle_stroke(c, r, Stroke::new(1.0, COLOR_OUTLINE_VARIANT));
-                painter.circle_stroke(c, 16.0, Stroke::new(1.0, COLOR_OUTLINE_VARIANT));
+                // Quiet #0f0f10 instrument dial
+                painter.circle_filled(c, r + 14.0, COLOR_SURFACE_LOWEST);
+                painter.circle_stroke(c, r + 14.0, Stroke::new(1.0, COLOR_BORDER_HAIRLINE));
+                painter.circle_stroke(c, r, Stroke::new(1.0, COLOR_BORDER_HAIRLINE));
+                painter.circle_stroke(c, 16.0, Stroke::new(1.0, COLOR_BORDER_SUBTLE));
                 painter.line_segment(
                     [egui::pos2(c.x - r, c.y), egui::pos2(c.x + r, c.y)],
-                    Stroke::new(0.5, COLOR_GRID_HUD),
+                    Stroke::new(0.5, COLOR_BORDER_SUBTLE),
                 );
                 painter.line_segment(
                     [egui::pos2(c.x, c.y - r), egui::pos2(c.x, c.y + r)],
-                    Stroke::new(0.5, COLOR_GRID_HUD),
+                    Stroke::new(0.5, COLOR_BORDER_SUBTLE),
                 );
 
-                // 8 puntos de dirección octogonal
                 let dir_names = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
                 for (i, name) in dir_names.iter().enumerate() {
                     let rad: f32 =
@@ -2991,78 +2389,60 @@ impl ProgrammingTab {
                     let is_active_dir = dir_idx == Some(i);
 
                     let (col, dot_r) = if is_active_dir {
-                        (COLOR_TERTIARY_CONTAINER, 4.0)
+                        (COLOR_POSITIVE, 4.0)
                     } else {
-                        (COLOR_OUTLINE_VARIANT, 2.0)
+                        (COLOR_BORDER_STRONG, 2.0)
                     };
+                    if is_active_dir {
+                        painter.line_segment([c, p], Stroke::new(1.5, COLOR_POSITIVE));
+                    }
                     painter.circle_filled(p, dot_r, col);
 
-                    if is_active_dir {
-                        // Vector hacia el punto activo
-                        painter.line_segment([c, p], Stroke::new(2.0, COLOR_TERTIARY_CONTAINER));
-                    }
-
                     let text_p =
-                        egui::pos2(c.x + (r + 10.0) * rad.cos(), c.y + (r + 10.0) * rad.sin());
+                        egui::pos2(c.x + (r + 9.0) * rad.cos(), c.y + (r + 9.0) * rad.sin());
                     painter.text(
                         text_p,
                         egui::Align2::CENTER_CENTER,
                         *name,
-                        egui::FontId::monospace(8.0),
+                        egui::FontId::monospace(8.5),
                         if is_active_dir {
-                            COLOR_TERTIARY_CONTAINER
+                            COLOR_POSITIVE
                         } else {
-                            COLOR_OUTLINE
+                            COLOR_TEXT_MUTED
                         },
                     );
                 }
 
-                // Centro activo o neutro
                 if dir_idx.is_none() {
-                    painter.circle_filled(c, 3.5, COLOR_PRIMARY_CONTAINER);
+                    painter.circle_filled(c, 3.5, COLOR_ACCENT);
                 }
 
-                ui.add_space(8.0);
+                ui.add_space(SPACE_SM);
 
-                // Telemetría de la seta
                 ui.vertical(|ui| {
                     ui.label(
-                        RichText::new("ÁNGULO ACTUAL:")
-                            .color(COLOR_OUTLINE)
-                            .size(9.5)
-                            .monospace(),
+                        RichText::new(x56_core::t!("prog-pov-angle"))
+                            .color(COLOR_TEXT_MUTED)
+                            .size(FONT_META),
                     );
                     ui.label(
                         RichText::new(angle_str)
                             .color(if dir_idx.is_some() {
-                                COLOR_TERTIARY_CONTAINER
+                                COLOR_POSITIVE
                             } else {
-                                COLOR_PRIMARY
+                                COLOR_TEXT_PRIMARY
                             })
-                            .size(11.0)
-                            .strong()
+                            .size(FONT_BODY)
                             .monospace(),
                     );
-                    ui.add_space(4.0);
-                    telemetry_badge(
-                        ui,
-                        "ABS_HAT0X",
-                        &format!("{:+}", abs_x),
-                        COLOR_PRIMARY_CONTAINER,
-                    );
-                    ui.add_space(2.0);
-                    telemetry_badge(
-                        ui,
-                        "ABS_HAT0Y",
-                        &format!("{:+}", abs_y),
-                        COLOR_PRIMARY_CONTAINER,
-                    );
+                    ui.add_space(SPACE_XS);
+                    theme::meta_kv(ui, "ABS_HAT0X", &format!("{:+}", abs_x), COLOR_TEXT_PRIMARY);
+                    theme::meta_kv(ui, "ABS_HAT0Y", &format!("{:+}", abs_y), COLOR_TEXT_PRIMARY);
                 });
             });
         });
     }
 
-    /// Radar 2D del Mini-Gimbal del Throttle (Slew analógico X/Y y botón físico de pulsación).
     fn render_throttle_ministick_card(
         &self,
         ui: &mut Ui,
@@ -3071,20 +2451,8 @@ impl ProgrammingTab {
     ) {
         theme::card_frame().show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.horizontal_wrapped(|ui| {
-                ui.label(
-                    RichText::new(format!(
-                        "{} THROTTLE MINI-GIMBAL // ANALOG SLEW & PUSH",
-                        icons::ACTIVITY
-                    ))
-                    .color(COLOR_PRIMARY)
-                    .size(11.0)
-                    .strong()
-                    .monospace(),
-                );
-            });
-
-            ui.add_space(4.0);
+            theme::section_heading(ui, &x56_core::t!("prog-minigimbal-title"));
+            ui.add_space(SPACE_SM);
 
             let is_pushed = snapshot.pressed_buttons.contains("thr_ministick_push");
             let (mag, deg) = live_state.throttle_gimbal_vector();
@@ -3092,123 +2460,114 @@ impl ProgrammingTab {
             let gy = live_state.throttle_ministick_y as f32;
 
             ui.horizontal(|ui| {
-                // Radar 2D de 110x110
-                let radar_size = Vec2::new(120.0, 110.0);
+                let radar_size = Vec2::new(124.0, 114.0);
                 let (_, painter) = ui.allocate_painter(radar_size, egui::Sense::hover());
                 let c = painter.clip_rect().center();
                 let r = 42.0;
 
-                // Anillos y retícula
-                painter.circle_stroke(c, r, Stroke::new(1.0, COLOR_OUTLINE_VARIANT));
-                painter.circle_stroke(c, r * 0.5, Stroke::new(0.8, COLOR_GRID_HUD));
+                // Quiet #0f0f10 instrument dial
+                painter.circle_filled(c, r + 14.0, COLOR_SURFACE_LOWEST);
+                painter.circle_stroke(c, r + 14.0, Stroke::new(1.0, COLOR_BORDER_HAIRLINE));
+                painter.circle_stroke(c, r, Stroke::new(1.0, COLOR_BORDER_HAIRLINE));
+                painter.circle_stroke(c, r * 0.5, Stroke::new(0.8, COLOR_BORDER_SUBTLE));
                 painter.line_segment(
                     [egui::pos2(c.x - r, c.y), egui::pos2(c.x + r, c.y)],
-                    Stroke::new(0.5, COLOR_GRID_HUD),
+                    Stroke::new(0.5, COLOR_BORDER_SUBTLE),
                 );
                 painter.line_segment(
                     [egui::pos2(c.x, c.y - r), egui::pos2(c.x, c.y + r)],
-                    Stroke::new(0.5, COLOR_GRID_HUD),
+                    Stroke::new(0.5, COLOR_BORDER_SUBTLE),
                 );
 
-                // Punto en vivo
                 let dot_pos = egui::pos2(c.x + gx * r, c.y - gy * r);
-                painter.line_segment(
-                    [c, dot_pos],
-                    Stroke::new(1.5, Color32::from_rgba_unmultiplied(52, 248, 133, 160)),
-                );
-
                 let dot_col = if is_pushed {
-                    COLOR_PRIMARY_CONTAINER
+                    COLOR_ACCENT
                 } else {
-                    COLOR_TERTIARY_CONTAINER
+                    COLOR_POSITIVE
                 };
-                if is_pushed {
-                    painter.circle_stroke(dot_pos, 8.0, Stroke::new(2.0, COLOR_PRIMARY_CONTAINER));
-                }
-                painter.circle_stroke(dot_pos, 5.5, Stroke::new(1.5, dot_col));
-                painter.circle_filled(dot_pos, 2.5, dot_col);
+                painter.line_segment([c, dot_pos], Stroke::new(1.5, dot_col));
+                painter.circle_filled(dot_pos, 4.0, dot_col);
 
-                ui.add_space(8.0);
+                ui.add_space(SPACE_SM);
 
-                // Telemetría y estado de pulsación
                 ui.vertical(|ui| {
                     ui.label(
-                        RichText::new("DEFLEXIÓN ANALÓGICA:")
-                            .color(COLOR_OUTLINE)
-                            .size(9.5)
-                            .monospace(),
+                        RichText::new(x56_core::t!("prog-minigimbal-deflection"))
+                            .color(COLOR_TEXT_MUTED)
+                            .size(FONT_META),
                     );
                     ui.label(
                         RichText::new(format!(
-                            "X:{:+.3}  Y:{:+.3}",
+                            "X {:+.3}  Y {:+.3}",
                             live_state.throttle_ministick_x, live_state.throttle_ministick_y
                         ))
-                        .color(COLOR_TERTIARY_CONTAINER)
-                        .size(11.0)
-                        .strong()
+                        .color(COLOR_TEXT_PRIMARY)
+                        .size(FONT_SMALL)
                         .monospace(),
                     );
                     ui.label(
-                        RichText::new(format!("VECT: {:.3} ({:02.0}°)", mag, deg))
-                            .color(COLOR_PRIMARY_FIXED)
-                            .size(10.0)
+                        RichText::new(format!("{:.3}  {:03.0}°", mag, deg))
+                            .color(COLOR_TEXT_SECONDARY)
+                            .size(FONT_META)
                             .monospace(),
                     );
-                    ui.add_space(4.0);
+                    ui.add_space(SPACE_XS);
                     ui.horizontal_wrapped(|ui| {
-                        ui.spacing_mut().item_spacing = Vec2::new(4.0, 2.0);
-                        telemetry_badge(
+                        ui.spacing_mut().item_spacing = Vec2::new(SPACE_SM, SPACE_XS);
+                        theme::meta_kv(
                             ui,
                             "ABS_RX",
-                            &format!("{:+.2}", live_state.throttle_ministick_x),
-                            COLOR_PRIMARY_CONTAINER,
+                            &format!("{:+.3}", live_state.throttle_ministick_x),
+                            COLOR_TEXT_PRIMARY,
                         );
-                        telemetry_badge(
+                        theme::meta_kv(
                             ui,
                             "ABS_RY",
-                            &format!("{:+.2}", live_state.throttle_ministick_y),
-                            COLOR_PRIMARY_CONTAINER,
+                            &format!("{:+.3}", live_state.throttle_ministick_y),
+                            COLOR_TEXT_PRIMARY,
                         );
                     });
-                    ui.add_space(3.0);
-                    telemetry_badge(
-                        ui,
-                        "BOTÓN PUSH",
-                        if is_pushed { "¡PULSADO!" } else { "REPOSO" },
-                        if is_pushed {
-                            COLOR_TERTIARY_CONTAINER
+                    ui.horizontal(|ui| {
+                        let (push_txt, push_col) = if is_pushed {
+                            (x56_core::t!("prog-minigimbal-pressed"), COLOR_POSITIVE)
                         } else {
-                            COLOR_OUTLINE
-                        },
-                    );
+                            (x56_core::t!("prog-minigimbal-idle"), COLOR_TEXT_SECONDARY)
+                        };
+                        theme::status_dot(
+                            ui,
+                            if is_pushed {
+                                COLOR_POSITIVE
+                            } else {
+                                COLOR_TEXT_MUTED
+                            },
+                            6.0,
+                        );
+                        theme::meta_kv(
+                            ui,
+                            &x56_core::t!("prog-minigimbal-push-btn"),
+                            &push_txt,
+                            push_col,
+                        );
+                    });
                 });
             });
         });
     }
 
     // ========================================================================
-    // COLUMNA IZQUIERDA: ACCIONES RÁPIDAS DE MACROS
+    // 5. QUICK MACRO ACTIONS & RECORDER DRAWER
     // ========================================================================
 
     fn render_quick_macro_actions(&mut self, ui: &mut Ui) {
         theme::card_frame().show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.label(
-                RichText::new(format!(
-                    "{} {}",
-                    icons::ZAP,
-                    x56_core::t!("prog-macro-title")
-                ))
-                .color(COLOR_PRIMARY)
-                .size(11.0)
-                .strong()
-                .monospace(),
-            );
-            ui.add_space(4.0);
+            theme::section_heading(ui, &x56_core::t!("prog-macro-title"));
+            ui.add_space(SPACE_SM);
 
             ui.horizontal_wrapped(|ui| {
-                let new_macro_lbl = format!("{} {}", icons::PLUS, x56_core::t!("prog-macro-new"));
-                if tactical_button(ui, &new_macro_lbl, false, false).clicked() {
+                ui.spacing_mut().item_spacing = Vec2::new(SPACE_SM, SPACE_XS);
+
+                if theme::secondary_button(ui, &x56_core::t!("prog-macro-new")).clicked() {
                     self.macro_recorder_open = true;
                     self.is_recording_macro = false;
                     self.recorded_steps.clear();
@@ -3220,17 +2579,18 @@ impl ProgrammingTab {
                             .or_else(|| self.hovered_button_id.clone());
                     }
                     if self.macro_name_draft.trim().is_empty() {
-                        self.macro_name_draft = "Macro Secuencial".to_string();
+                        self.macro_name_draft = x56_core::t!("prog-macro-default-name");
                     }
                     self.status_message = Some((x56_core::t!("prog-macro-ready"), false));
                 }
 
-                let rec_label = if self.is_recording_macro {
-                    format!("{} {}", icons::SQUARE, x56_core::t!("prog-macro-stop"))
+                let rec_resp = if self.is_recording_macro {
+                    theme::danger_button(ui, &x56_core::t!("prog-macro-stop"))
                 } else {
-                    format!("{} {}", icons::CIRCLE, x56_core::t!("prog-macro-record"))
+                    theme::secondary_button(ui, &x56_core::t!("prog-macro-record"))
                 };
-                if tactical_button(ui, &rec_label, self.is_recording_macro, false).clicked() {
+
+                if rec_resp.clicked() {
                     if !self.is_recording_macro {
                         self.is_recording_macro = true;
                         self.macro_recorder_open = true;
@@ -3267,279 +2627,238 @@ impl ProgrammingTab {
             return;
         }
 
-        let border = if self.is_recording_macro {
-            Stroke::new(1.5, COLOR_WARNING_AMBER)
-        } else {
-            Stroke::new(1.0, COLOR_PRIMARY_CONTAINER)
-        };
-        egui::Frame::new()
-            .fill(COLOR_SURFACE_CONTAINER)
-            .stroke(border)
-            .corner_radius(egui::CornerRadius::same(6))
-            .inner_margin(egui::Margin::symmetric(10, 8))
-            .show(ui, |ui| {
-                ui.set_width(ui.available_width());
+        theme::subcard_frame().show(ui, |ui| {
+            ui.set_width(ui.available_width());
 
-                // Banner de estado del grabador + botón rápido de Stop/Rec
-                ui.horizontal_wrapped(|ui| {
-                    if self.is_recording_macro {
-                        ui.label(RichText::new("●").color(COLOR_ERROR).size(11.0).strong());
+            ui.horizontal_wrapped(|ui| {
+                let (dot_col, status_txt) = if self.is_recording_macro {
+                    (COLOR_NEGATIVE, x56_core::t!("prog-macro-rec-live"))
+                } else {
+                    (
+                        COLOR_TEXT_MUTED,
+                        format!(
+                            "{} ({})",
+                            x56_core::t!("prog-macro-ready"),
+                            self.recorded_steps.len()
+                        ),
+                    )
+                };
+                theme::status_dot(ui, dot_col, 8.0);
+                ui.label(
+                    RichText::new(status_txt)
+                        .color(COLOR_TEXT_PRIMARY)
+                        .size(FONT_SMALL),
+                );
+            });
+
+            ui.add_space(SPACE_SM);
+
+            let all_desc = x56_core::all_button_descriptors();
+            let selected_label = self
+                .macro_target_button_id
+                .as_deref()
+                .and_then(|id| all_desc.iter().find(|d| d.id == id))
+                .map(|d| {
+                    let prefix = if d.device == DeviceKind::Stick {
+                        x56_core::t!("curves-stick-short")
+                    } else {
+                        x56_core::t!("curves-throttle-short")
+                    };
+                    let loc = localized_node_name_by_id(&d.id, d.label);
+                    format!("{prefix} · {loc}")
+                })
+                .unwrap_or_else(|| x56_core::t!("prog-macro-no-target"));
+
+            ui.horizontal_wrapped(|ui| {
+                ui.label(
+                    RichText::new(x56_core::t!("prog-macro-target-btn"))
+                        .color(COLOR_TEXT_SECONDARY)
+                        .size(FONT_SMALL),
+                );
+                egui::ComboBox::from_id_salt("macro_target_btn_combo")
+                    .selected_text(selected_label)
+                    .width(220.0)
+                    .show_ui(ui, |ui| {
+                        for desc in &all_desc {
+                            let prefix = if desc.device == DeviceKind::Stick {
+                                x56_core::t!("curves-stick-short")
+                            } else {
+                                x56_core::t!("curves-throttle-short")
+                            };
+                            let loc = localized_node_name_by_id(&desc.id, desc.label);
+                            let item_label = format!("{prefix} · {loc}");
+                            ui.selectable_value(
+                                &mut self.macro_target_button_id,
+                                Some(desc.id.clone()),
+                                item_label,
+                            );
+                        }
+                    });
+            });
+
+            ui.add_space(SPACE_XS);
+
+            ui.horizontal_wrapped(|ui| {
+                ui.label(
+                    RichText::new(x56_core::t!("prog-macro-name-label"))
+                        .color(COLOR_TEXT_SECONDARY)
+                        .size(FONT_SMALL),
+                );
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.macro_name_draft)
+                        .hint_text(x56_core::t!("prog-macro-name-hint"))
+                        .desired_width(170.0),
+                );
+                ui.checkbox(
+                    &mut self.macro_record_timings,
+                    RichText::new(x56_core::t!("prog-macro-keep-delays"))
+                        .color(COLOR_TEXT_SECONDARY)
+                        .size(FONT_SMALL),
+                );
+            });
+
+            ui.add_space(SPACE_SM);
+
+            egui::ScrollArea::vertical()
+                .id_salt("macro_steps_scroll")
+                .max_height(130.0)
+                .stick_to_bottom(self.is_recording_macro)
+                .auto_shrink([false, true])
+                .show(ui, |ui| {
+                    if self.recorded_steps.is_empty() {
                         ui.label(
-                            RichText::new(x56_core::t!("prog-macro-rec-live"))
-                                .color(COLOR_WARNING_AMBER)
-                                .size(10.5)
-                                .strong()
-                                .monospace(),
+                            RichText::new(x56_core::t!("prog-macro-no-steps"))
+                                .color(COLOR_TEXT_MUTED)
+                                .size(FONT_SMALL),
                         );
                     } else {
-                        ui.label(
-                            RichText::new(format!(
-                                "{} ({})",
-                                x56_core::t!("prog-macro-ready"),
-                                self.recorded_steps.len()
-                            ))
-                            .color(COLOR_PRIMARY)
-                            .size(10.5)
-                            .strong()
-                            .monospace(),
-                        );
-                    }
-                });
-
-                ui.add_space(4.0);
-
-                // Selector de botón destino
-                let all_desc = x56_core::all_button_descriptors();
-                let selected_label = self
-                    .macro_target_button_id
-                    .as_deref()
-                    .and_then(|id| all_desc.iter().find(|d| d.id == id))
-                    .map(|d| {
-                        let prefix = if d.device == DeviceKind::Stick {
-                            "STICK"
-                        } else {
-                            "THR"
-                        };
-                        format!("{prefix} // {}", d.label)
-                    })
-                    .unwrap_or_else(|| x56_core::t!("prog-macro-no-target"));
-
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(
-                        RichText::new(x56_core::t!("prog-macro-target-btn"))
-                            .color(COLOR_ON_SURFACE_VARIANT)
-                            .size(10.0)
-                            .monospace(),
-                    );
-                    egui::ComboBox::from_id_salt("macro_target_btn_combo")
-                        .selected_text(selected_label)
-                        .width(220.0)
-                        .show_ui(ui, |ui| {
-                            for desc in &all_desc {
-                                let prefix = if desc.device == DeviceKind::Stick {
-                                    "STICK"
-                                } else {
-                                    "THR"
-                                };
-                                let item_label = format!("{prefix} // {}", desc.label);
-                                ui.selectable_value(
-                                    &mut self.macro_target_button_id,
-                                    Some(desc.id.clone()),
-                                    item_label,
+                        let mut remove_idx: Option<usize> = None;
+                        for (idx, step) in self.recorded_steps.iter_mut().enumerate() {
+                            ui.horizontal(|ui| {
+                                ui.label(
+                                    RichText::new(format!("#{}", idx + 1))
+                                        .color(COLOR_TEXT_MUTED)
+                                        .size(FONT_META)
+                                        .monospace(),
                                 );
-                            }
-                        });
-                });
 
-                ui.add_space(4.0);
-
-                // Nombre de la macro y toggle de tiempos reales
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(
-                        RichText::new(x56_core::t!("prog-macro-name-label"))
-                            .color(COLOR_ON_SURFACE_VARIANT)
-                            .size(10.0)
-                            .monospace(),
-                    );
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.macro_name_draft)
-                            .hint_text(x56_core::t!("prog-macro-name-hint"))
-                            .desired_width(170.0),
-                    );
-                    ui.checkbox(
-                        &mut self.macro_record_timings,
-                        x56_core::t!("prog-macro-keep-delays"),
-                    );
-                });
-
-                ui.add_space(4.0);
-
-                // Lista de pasos capturados
-                egui::ScrollArea::vertical()
-                    .id_salt("macro_steps_scroll")
-                    .max_height(130.0)
-                    .stick_to_bottom(self.is_recording_macro)
-                    .auto_shrink([false, true])
-                    .show(ui, |ui| {
-                        if self.recorded_steps.is_empty() {
-                            ui.label(
-                                RichText::new(x56_core::t!("prog-macro-no-steps"))
-                                    .color(COLOR_OUTLINE)
-                                    .size(10.0)
-                                    .italics(),
-                            );
-                        } else {
-                            let mut remove_idx: Option<usize> = None;
-                            for (idx, step) in self.recorded_steps.iter_mut().enumerate() {
-                                ui.horizontal(|ui| {
-                                    ui.label(
-                                        RichText::new(format!("#{}", idx + 1))
-                                            .color(COLOR_PRIMARY)
-                                            .size(10.0)
-                                            .strong()
-                                            .monospace(),
+                                if idx > 0 {
+                                    ui.add(
+                                        egui::DragValue::new(&mut step.delay_ms)
+                                            .range(0..=5000)
+                                            .speed(10.0)
+                                            .suffix(" ms"),
                                     );
+                                }
 
-                                    if idx > 0 {
-                                        ui.add(
-                                            egui::DragValue::new(&mut step.delay_ms)
-                                                .range(0..=5000)
-                                                .speed(10.0)
-                                                .suffix(" ms"),
-                                        );
-                                    }
+                                theme::keycap(ui, &step.keys_display());
 
-                                    egui::Frame::new()
-                                        .fill(COLOR_SURFACE_LOW)
-                                        .stroke(Stroke::new(1.0, COLOR_OUTLINE_VARIANT))
-                                        .corner_radius(egui::CornerRadius::same(4))
-                                        .inner_margin(egui::Margin::symmetric(6, 2))
-                                        .show(ui, |ui| {
-                                            ui.label(
-                                                RichText::new(step.keys_display())
-                                                    .color(COLOR_ON_SURFACE)
-                                                    .size(10.0)
-                                                    .monospace(),
-                                            );
-                                        });
-
-                                    if ui
-                                        .small_button(
-                                            RichText::new("×")
-                                                .color(COLOR_ERROR)
-                                                .size(11.0)
-                                                .strong(),
+                                if ui
+                                    .add(
+                                        egui::Button::new(
+                                            RichText::new(icons::X)
+                                                .color(COLOR_NEGATIVE)
+                                                .size(FONT_META),
                                         )
-                                        .clicked()
-                                    {
-                                        remove_idx = Some(idx);
-                                    }
-                                });
-                            }
-                            if let Some(idx) = remove_idx {
-                                self.recorded_steps.remove(idx);
-                                if idx == 0 {
-                                    if let Some(first) = self.recorded_steps.first_mut() {
-                                        first.delay_ms = 0;
-                                    }
+                                        .frame(false),
+                                    )
+                                    .clicked()
+                                {
+                                    remove_idx = Some(idx);
+                                }
+                            });
+                        }
+                        if let Some(idx) = remove_idx {
+                            self.recorded_steps.remove(idx);
+                            if idx == 0 {
+                                if let Some(first) = self.recorded_steps.first_mut() {
+                                    first.delay_ms = 0;
                                 }
                             }
                         }
-                    });
-
-                ui.add_space(6.0);
-
-                // Barra inferior de acciones del grabador
-                ui.horizontal_wrapped(|ui| {
-                    let can_save =
-                        self.macro_target_button_id.is_some() && !self.recorded_steps.is_empty();
-                    let save_lbl = format!("{} {}", icons::SAVE, x56_core::t!("prog-macro-save"));
-                    let save_clicked = ui
-                        .add_enabled_ui(can_save, |ui| {
-                            tactical_button(ui, &save_lbl, false, true).clicked()
-                        })
-                        .inner;
-                    if save_clicked {
-                        if let Some(button_id) = self.macro_target_button_id.clone() {
-                            let btn_label = all_desc
-                                .iter()
-                                .find(|d| d.id == button_id)
-                                .map(|d| d.label)
-                                .unwrap_or(button_id.as_str())
-                                .to_string();
-                            let name = if self.macro_name_draft.trim().is_empty() {
-                                format!("{btn_label} (Macro)")
-                            } else {
-                                self.macro_name_draft.trim().to_string()
-                            };
-                            let cell = CommandCell {
-                                button_id,
-                                name,
-                                keys: Vec::new(),
-                                steps: self.recorded_steps.clone(),
-                            };
-                            self.profile.set_cell(self.selected_mode, cell);
-                            monitor.set_profile(self.profile.clone());
-
-                            self.is_recording_macro = false;
-                            self.macro_recorder_open = false;
-                            self.recorded_steps.clear();
-                            self.last_record_instant = None;
-                            self.macro_name_draft.clear();
-                            self.status_message = Some((
-                                format!("{} {btn_label}", x56_core::t!("prog-macro-saved-msg")),
-                                false,
-                            ));
-                        }
                     }
+                });
 
-                    let clear_lbl =
-                        format!("{} {}", icons::TRASH, x56_core::t!("prog-macro-clear"));
-                    if tactical_button(ui, &clear_lbl, false, false).clicked() {
-                        self.recorded_steps.clear();
-                        self.last_record_instant = None;
-                    }
+            ui.add_space(SPACE_SM);
 
-                    let close_lbl = format!("{} {}", icons::X, x56_core::t!("prog-macro-close"));
-                    if tactical_button(ui, &close_lbl, false, false).clicked() {
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = Vec2::new(SPACE_SM, SPACE_XS);
+                let can_save =
+                    self.macro_target_button_id.is_some() && !self.recorded_steps.is_empty();
+                let save_clicked = ui
+                    .add_enabled_ui(can_save, |ui| {
+                        theme::primary_button(ui, &x56_core::t!("prog-macro-save")).clicked()
+                    })
+                    .inner;
+                if save_clicked {
+                    if let Some(button_id) = self.macro_target_button_id.clone() {
+                        let btn_label = all_desc
+                            .iter()
+                            .find(|d| d.id == button_id)
+                            .map(|d| localized_node_name_by_id(&d.id, d.label))
+                            .unwrap_or_else(|| button_id.clone());
+                        let name = if self.macro_name_draft.trim().is_empty() {
+                            btn_label.clone()
+                        } else {
+                            self.macro_name_draft.trim().to_string()
+                        };
+                        let cell = CommandCell {
+                            button_id,
+                            name,
+                            keys: Vec::new(),
+                            steps: self.recorded_steps.clone(),
+                        };
+                        self.profile.set_cell(self.selected_mode, cell);
+                        monitor.set_profile(self.profile.clone());
+
                         self.is_recording_macro = false;
                         self.macro_recorder_open = false;
                         self.recorded_steps.clear();
                         self.last_record_instant = None;
+                        self.macro_name_draft.clear();
+                        self.status_message = Some((
+                            format!("{} {btn_label}", x56_core::t!("prog-macro-saved-msg")),
+                            false,
+                        ));
                     }
-                });
+                }
+
+                if theme::secondary_button(ui, &x56_core::t!("prog-macro-clear")).clicked() {
+                    self.recorded_steps.clear();
+                    self.last_record_instant = None;
+                }
+
+                if theme::ghost_button(ui, &x56_core::t!("prog-macro-close")).clicked() {
+                    self.is_recording_macro = false;
+                    self.macro_recorder_open = false;
+                    self.recorded_steps.clear();
+                    self.last_record_instant = None;
+                }
             });
-        ui.add_space(6.0);
+        });
+        ui.add_space(SPACE_SM);
     }
 
     // ========================================================================
-    // COLUMNA DERECHA: BUSCADOR TÁCTICO Y ESTADÍSTICAS
+    // 6. RIGHT COLUMN: SEARCH, FILTER CHIPS & SIGNATURE MAPPING CARDS
     // ========================================================================
 
     fn render_search_and_stats(&mut self, ui: &mut Ui) {
         ui.horizontal_wrapped(|ui| {
-            // Buscador táctico
-            theme::sunken_frame()
-                .inner_margin(egui::Margin::symmetric(8, 4))
-                .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label(RichText::new(icons::SEARCH).size(12.0));
-                        let search_w = (ui.available_width() - 40.0).clamp(140.0, 240.0);
-                        let edit = egui::TextEdit::singleline(&mut self.search_query)
-                            .hint_text(x56_core::t!("prog-search-placeholder"))
-                            .desired_width(search_w);
-                        ui.add(edit);
-                        if !self.search_query.is_empty()
-                            && ui.small_button(x56_core::t!("prog-clear")).clicked()
-                        {
-                            self.search_query.clear();
-                        }
-                    });
-                });
+            ui.spacing_mut().item_spacing = Vec2::new(SPACE_SM, SPACE_XS);
 
-            ui.add_space(6.0);
+            let search_w = (ui.available_width() - 180.0).clamp(140.0, 260.0);
+            ui.add(
+                egui::TextEdit::singleline(&mut self.search_query)
+                    .hint_text(x56_core::t!("prog-search-placeholder"))
+                    .desired_width(search_w),
+            );
+            if !self.search_query.is_empty()
+                && theme::ghost_button(ui, &x56_core::t!("prog-clear")).clicked()
+            {
+                self.search_query.clear();
+            }
 
-            // Estadísticas telemétricas
             let catalog = catalog_for_device(self.selected_device);
             let total_buttons = catalog.len();
             let assigned_count = catalog
@@ -3550,29 +2869,27 @@ impl ProgrammingTab {
                         .is_some_and(|c| c.is_assigned())
                 })
                 .count();
+            let assigned_str = assigned_count.to_string();
+            let total_str = total_buttons.to_string();
 
-            telemetry_badge(
-                ui,
-                "BOTONES MAPEADOS",
-                &format!("{} / {} ASIGNADOS", assigned_count, total_buttons),
-                COLOR_TERTIARY_CONTAINER,
-            );
-
-            telemetry_badge(
-                ui,
-                "CAPAS VIRTUALES",
-                &x56_core::t!("prog-modes-real"),
-                COLOR_PRIMARY_CONTAINER,
-            );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.label(
+                    RichText::new(x56_core::t!(
+                        "prog-mapped-count",
+                        "assigned" => &assigned_str,
+                        "total" => &total_str
+                    ))
+                    .color(COLOR_TEXT_SECONDARY)
+                    .size(FONT_META)
+                    .monospace(),
+                );
+            });
         });
     }
 
-    // ========================================================================
-    // COLUMNA DERECHA: PILLS DE FILTRO POR CATEGORÍA
-    // ========================================================================
-
     fn render_filter_pills(&mut self, ui: &mut Ui) {
         ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = Vec2::new(SPACE_XS, SPACE_XS);
             let categories = [
                 FilterCategory::Todos,
                 FilterCategory::Gatillos,
@@ -3584,42 +2901,12 @@ impl ProgrammingTab {
 
             for cat in categories {
                 let is_sel = self.filter_category == cat;
-                let (bg, fg, stroke) = if is_sel {
-                    (
-                        COLOR_PRIMARY_CONTAINER,
-                        COLOR_ON_PRIMARY_CONTAINER,
-                        COLOR_PRIMARY_CONTAINER,
-                    )
-                } else {
-                    (
-                        COLOR_SURFACE_CONTAINER,
-                        COLOR_ON_SURFACE,
-                        COLOR_OUTLINE_VARIANT,
-                    )
-                };
-
-                let cat_label = format!("{} {}", cat.icon(), cat.label());
-                let btn = egui::Button::new(
-                    RichText::new(cat_label)
-                        .size(10.0)
-                        .color(fg)
-                        .strong()
-                        .monospace(),
-                )
-                .fill(bg)
-                .stroke(Stroke::new(1.0, stroke))
-                .corner_radius(egui::CornerRadius::same(4));
-
-                if ui.add(btn).clicked() {
+                if theme::segmented_button(ui, &cat.label(), is_sel).clicked() {
                     self.filter_category = cat;
                 }
             }
         });
     }
-
-    // ========================================================================
-    // COLUMNA DERECHA: FILAS DE MAPEO TÁCTICAS
-    // ========================================================================
 
     fn render_mapping_cards(
         &mut self,
@@ -3633,10 +2920,10 @@ impl ProgrammingTab {
         let mut displayed_count = 0;
 
         for btn in &catalog {
-            // Filtrado por buscador táctico
             if !q.is_empty() {
+                let loc_name = localized_node_name_by_id(&btn.id, btn.label).to_lowercase();
                 let matches_id = btn.id.to_lowercase().contains(&q);
-                let matches_label = btn.label.to_lowercase().contains(&q);
+                let matches_label = btn.label.to_lowercase().contains(&q) || loc_name.contains(&q);
                 let matches_code = format!("{:#06x}", btn.evdev_code).contains(&q);
                 let matches_assigned = self
                     .profile
@@ -3651,33 +2938,31 @@ impl ProgrammingTab {
                 }
             }
 
-            // Filtrado por categoría
             if !self.matches_category(&btn.id) {
                 continue;
             }
 
             displayed_count += 1;
-            self.render_tactical_mapping_row(ui, monitor, snapshot, btn);
-            ui.add_space(4.0);
+            self.render_mapping_card(ui, monitor, snapshot, btn);
+            ui.add_space(SPACE_XS);
         }
 
         if displayed_count == 0 {
             theme::card_frame().show(ui, |ui| {
+                ui.set_width(ui.available_width());
                 ui.vertical_centered(|ui| {
-                    ui.add_space(20.0);
+                    ui.add_space(SPACE_LG);
                     ui.label(
-                        RichText::new("NO SE ENCONTRARON ENTRADAS PARA EL FILTRO ACTUAL")
-                            .color(COLOR_OUTLINE)
-                            .size(11.0)
-                            .monospace(),
+                        RichText::new(x56_core::t!("prog-empty-filter"))
+                            .color(COLOR_TEXT_MUTED)
+                            .size(FONT_SMALL),
                     );
-                    ui.add_space(20.0);
+                    ui.add_space(SPACE_LG);
                 });
             });
         }
     }
 
-    /// Comprueba si un ID de botón pertenece a la categoría seleccionada.
     fn matches_category(&self, id: &str) -> bool {
         match self.filter_category {
             FilterCategory::Todos => true,
@@ -3710,8 +2995,8 @@ impl ProgrammingTab {
         }
     }
 
-    /// Renderiza una fila individual de mapeo en tarjeta táctica.
-    fn render_tactical_mapping_row(
+    /// Signature 2-row mapping card.
+    fn render_mapping_card(
         &mut self,
         ui: &mut Ui,
         monitor: &ButtonMonitor,
@@ -3723,295 +3008,197 @@ impl ProgrammingTab {
         let is_hovered = self.hovered_button_id.as_deref() == Some(&btn.id);
 
         let cell_opt = self.profile.get_cell(self.selected_mode, &btn.id).cloned();
-        let default_info = default_mapping_for(&btn.id);
 
-        // Borde reactivo según el estado
         let border_stroke = if is_editing {
-            Stroke::new(1.5, COLOR_PRIMARY_CONTAINER)
+            Stroke::new(1.0, COLOR_ACCENT)
         } else if is_physically_pressed {
-            Stroke::new(2.0, COLOR_TERTIARY_CONTAINER)
+            Stroke::new(1.0, COLOR_POSITIVE)
         } else if is_hovered {
-            Stroke::new(1.2, COLOR_PRIMARY_FIXED)
+            Stroke::new(1.0, COLOR_BORDER_STRONG)
         } else {
-            Stroke::new(1.0, COLOR_OUTLINE_VARIANT)
+            Stroke::new(1.0, COLOR_BORDER_HAIRLINE)
         };
 
-        let card_bg = if is_physically_pressed {
-            Color32::from_rgb(0x13, 0x24, 0x20)
-        } else {
-            COLOR_SURFACE_LOW
-        };
+        let frame_resp = theme::subcard_frame().stroke(border_stroke).show(ui, |ui| {
+            ui.set_width(ui.available_width());
 
-        let frame_resp = egui::Frame::new()
-            .fill(card_bg)
-            .stroke(border_stroke)
-            .corner_radius(egui::CornerRadius::same(6))
-            .inner_margin(egui::Margin::symmetric(10, 8))
-            .show(ui, |ui| {
-                ui.set_width(ui.available_width());
-
-                if is_editing {
-                    self.render_inline_edit_controls(ui, monitor, btn);
+            if is_editing {
+                self.render_inline_edit_controls(ui, monitor, btn);
+            } else {
+                let btn_label = localized_node_name_by_id(&btn.id, btn.label);
+                let ev_str = if btn.evdev_code != 0 {
+                    format!("{:#06x}", btn.evdev_code)
                 } else {
-                    // Badge de mapeo uinput destacado con fondo azul o cian
-                    let (mapped_text, mapped_bg, mapped_fg) = if let Some(ref c) = cell_opt {
-                        if c.is_assigned() {
-                            (
-                                format!("[{}] {}", c.keys_display(), c.name.to_uppercase()),
-                                COLOR_SECONDARY_CONTAINER,
-                                COLOR_ON_SECONDARY_CONTAINER,
-                            )
-                        } else {
-                            (
-                                format!(
-                                    "[SIN ASIGNAR] Sugerencia: {} {}",
-                                    default_info.key_display, default_info.action
-                                ),
-                                COLOR_SURFACE_HIGH,
-                                COLOR_ON_SURFACE_VARIANT,
-                            )
-                        }
-                    } else {
-                        (
-                            format!(
-                                "[SIN ASIGNAR] Sugerencia: {} {}",
-                                default_info.key_display, default_info.action
-                            ),
-                            COLOR_SURFACE_HIGH,
-                            COLOR_ON_SURFACE_VARIANT,
-                        )
-                    };
+                    "ABS_HAT0".to_string()
+                };
 
-                    // Fila 1: Identificador del control (Icono + Nombre descriptivo + Badge EVDEV + Estado físico)
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label(RichText::new(default_info.icon).size(14.0));
+                // Row 1: Button label + optional pressed dot + right-aligned quiet mono code
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new(&btn_label)
+                            .color(COLOR_TEXT_PRIMARY)
+                            .size(FONT_BODY),
+                    );
+                    if is_physically_pressed {
+                        theme::status_dot(ui, COLOR_POSITIVE, 8.0);
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.label(
-                            RichText::new(btn.label)
-                                .color(COLOR_PRIMARY)
-                                .size(11.5)
-                                .strong()
+                            RichText::new(ev_str)
+                                .color(COLOR_TEXT_MUTED)
+                                .size(FONT_META)
                                 .monospace(),
                         );
+                    });
+                });
 
-                        let ev_str = if btn.evdev_code != 0 {
-                            format!("{:#06x}", btn.evdev_code)
-                        } else {
-                            "ABS_HAT0".to_string()
-                        };
-                        telemetry_badge(ui, "EVDEV", &ev_str, COLOR_PRIMARY_FIXED);
+                ui.add_space(SPACE_XS);
 
-                        if is_physically_pressed {
-                            ui.label(
-                                RichText::new(format!("{} PULSADO (VAL: 1)", icons::CIRCLE_DOT))
-                                    .color(COLOR_TERTIARY_CONTAINER)
-                                    .size(10.0)
-                                    .strong()
+                // Row 2: Left = recessed keycaps + action name (or muted Unassigned);
+                // Right = uniform compact Test / Edit / Clear actions.
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::new(SPACE_XS, SPACE_XS);
+
+                    if let Some(c) = cell_opt.as_ref().filter(|c| c.is_assigned()) {
+                        if c.is_sequence() {
+                            for step in c.steps.iter().take(3) {
+                                theme::keycap(ui, &step.keys_display());
+                            }
+                            if c.steps.len() > 3 {
+                                let count_str = c.steps.len().to_string();
+                                ui.label(
+                                    RichText::new(x56_core::t!(
+                                        "prog-card-sequence-count",
+                                        "count" => &count_str
+                                    ))
+                                    .color(COLOR_TEXT_MUTED)
+                                    .size(FONT_META)
                                     .monospace(),
+                                );
+                            }
+                        } else {
+                            for k in &c.keys {
+                                theme::keycap(ui, k);
+                            }
+                        }
+
+                        if !c.name.trim().is_empty() {
+                            ui.add_space(SPACE_XS);
+                            ui.label(
+                                RichText::new(&c.name)
+                                    .color(COLOR_TEXT_SECONDARY)
+                                    .size(FONT_SMALL),
                             );
                         }
+                    } else {
+                        ui.label(
+                            RichText::new(unassigned_label())
+                                .color(COLOR_TEXT_MUTED)
+                                .size(FONT_SMALL),
+                        );
+                    }
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(SPACE_XS, SPACE_XS);
+
+                        if cell_opt.as_ref().is_some_and(|c| c.is_assigned())
+                            && theme::ghost_button(ui, &x56_core::t!("prog-card-clear"))
+                                .on_hover_text(x56_core::t!("prog-card-clear-tooltip"))
+                                .clicked()
+                        {
+                            self.profile.remove_cell(self.selected_mode, &btn.id);
+                            monitor.set_profile(self.profile.clone());
+                            self.status_message = Some((
+                                x56_core::t!("prog-card-cleared-msg", "label" => &btn_label),
+                                false,
+                            ));
+                        }
+
+                        if theme::secondary_button(ui, &x56_core::t!("prog-card-edit"))
+                            .on_hover_text(x56_core::t!("prog-card-edit-tooltip"))
+                            .clicked()
+                        {
+                            if let Some(ref c) = cell_opt {
+                                if c.is_sequence() {
+                                    self.macro_recorder_open = true;
+                                    self.is_recording_macro = false;
+                                    self.macro_target_button_id = Some(btn.id.clone());
+                                    self.macro_name_draft = c.name.clone();
+                                    self.recorded_steps = c.steps.clone();
+                                    self.last_record_instant = None;
+                                    self.editing_button_id = None;
+                                } else if c.is_assigned() {
+                                    self.editing_button_id = Some(btn.id.clone());
+                                    self.pending_name = c.name.clone();
+                                    self.pending_keys = c.keys.clone();
+                                } else {
+                                    self.editing_button_id = Some(btn.id.clone());
+                                    self.pending_name.clear();
+                                    self.pending_keys.clear();
+                                }
+                            } else {
+                                self.editing_button_id = Some(btn.id.clone());
+                                self.pending_name.clear();
+                                self.pending_keys.clear();
+                            }
+                        }
+
+                        if theme::ghost_button(ui, &x56_core::t!("prog-card-test"))
+                            .on_hover_text(x56_core::t!("prog-card-test-tooltip"))
+                            .clicked()
+                        {
+                            if let Some(c) = cell_opt.as_ref().filter(|c| c.is_assigned()) {
+                                match monitor.test_cell(c) {
+                                    TestTriggerStatus::Emitted => {
+                                        let keys = c.keys_display();
+                                        self.status_message = Some((
+                                            x56_core::t!(
+                                                "prog-card-test-sent",
+                                                "keys" => &keys,
+                                                "name" => &btn_label
+                                            ),
+                                            false,
+                                        ));
+                                    }
+                                    TestTriggerStatus::Paused => {
+                                        self.status_message =
+                                            Some((x56_core::t!("prog-card-test-paused"), true));
+                                    }
+                                    TestTriggerStatus::UinputUnavailable => {
+                                        self.status_message =
+                                            Some((x56_core::t!("prog-card-test-no-uinput"), true));
+                                    }
+                                    TestTriggerStatus::Unassigned => {
+                                        self.status_message = Some((
+                                            x56_core::t!(
+                                                "prog-card-unassigned-err",
+                                                "label" => &btn_label
+                                            ),
+                                            true,
+                                        ));
+                                    }
+                                }
+                            } else {
+                                self.status_message = Some((
+                                    x56_core::t!(
+                                        "prog-card-unassigned-err",
+                                        "label" => &btn_label
+                                    ),
+                                    true,
+                                ));
+                            }
+                        }
                     });
-
-                    ui.add_space(3.0);
-
-                    // Fila 2: Asignación actual destacada (Badge uinput con comando y combinación de teclas)
-                    ui.horizontal_wrapped(|ui| {
-                        egui::Frame::new()
-                            .fill(mapped_bg)
-                            .stroke(Stroke::new(1.0, COLOR_OUTLINE_VARIANT))
-                            .corner_radius(egui::CornerRadius::same(4))
-                            .inner_margin(egui::Margin::symmetric(8, 3))
-                            .show(ui, |ui| {
-                                ui.label(
-                                    RichText::new(&mapped_text)
-                                        .color(mapped_fg)
-                                        .size(10.5)
-                                        .strong()
-                                        .monospace(),
-                                );
-                            });
-                    });
-
-                    ui.add_space(4.0);
-
-                    // Fila 3 y 4: Metadatos y botones de acción (Test, Editar, Limpiar)
-                    // usando horizontal_wrapped sin right_to_left para que nunca empujen el ancho de la tarjeta
-                    self.render_row_metadata(ui, &cell_opt, &default_info);
-                    ui.add_space(3.0);
-                    ui.horizontal_wrapped(|ui| {
-                        self.render_row_actions_left_to_right(ui, monitor, btn, &cell_opt);
-                    });
-                }
-            });
+                });
+            }
+        });
 
         if frame_resp.response.hovered() {
             self.hovered_button_id = Some(btn.id.clone());
         }
     }
 
-    /// Sublínea con información de tipo, grupo y secuencia de macros.
-    fn render_row_metadata(
-        &self,
-        ui: &mut Ui,
-        cell_opt: &Option<CommandCell>,
-        default_info: &DefaultMappingInfo,
-    ) {
-        let is_assigned = cell_opt.as_ref().is_some_and(|c| c.is_assigned());
-        let meta_text = if is_assigned {
-            format!(
-                "TIPO: {} // GRUPO: {}",
-                default_info.map_type, default_info.group_sc
-            )
-        } else {
-            format!(
-                "REFERENCIA: TIPO: {} // GRUPO: {}",
-                default_info.map_type, default_info.group_sc
-            )
-        };
-        ui.horizontal_wrapped(|ui| {
-            ui.label(
-                RichText::new(meta_text)
-                    .color(COLOR_OUTLINE)
-                    .size(9.0)
-                    .monospace(),
-            );
-            if let Some(ref c) = cell_opt {
-                if c.is_sequence() {
-                    ui.label(
-                        RichText::new(format!("// SECUENCIA x{}", c.steps.len()))
-                            .color(COLOR_WARNING_AMBER)
-                            .size(9.0)
-                            .monospace(),
-                    );
-                } else if c.keys.len() > 1 {
-                    ui.label(
-                        RichText::new(format!("// COMBO x{}", c.keys.len()))
-                            .color(COLOR_WARNING_AMBER)
-                            .size(9.0)
-                            .monospace(),
-                    );
-                }
-            }
-        });
-    }
-
-    /// Botones de acción de izquierda a derecha con salto de línea seguro.
-    fn render_row_actions_left_to_right(
-        &mut self,
-        ui: &mut Ui,
-        monitor: &ButtonMonitor,
-        btn: &ButtonDescriptor,
-        cell_opt: &Option<CommandCell>,
-    ) {
-        // Test
-        let test_lbl = format!("{} TEST", icons::ZAP);
-        if ui
-            .button(
-                RichText::new(test_lbl)
-                    .color(COLOR_TERTIARY_CONTAINER)
-                    .size(10.0)
-                    .monospace(),
-            )
-            .on_hover_text("Emitir asignación actual vía /dev/uinput")
-            .clicked()
-        {
-            if let Some(c) = cell_opt.as_ref().filter(|c| c.is_assigned()) {
-                match monitor.test_cell(c) {
-                    TestTriggerStatus::Emitted => {
-                        self.status_message = Some((
-                            format!(
-                                "TEST UINPUT EMITIDO: [{}] -> {}",
-                                c.keys_display(),
-                                btn.label
-                            ),
-                            false,
-                        ));
-                    }
-                    TestTriggerStatus::Paused => {
-                        self.status_message = Some((
-                            "ROUTER UINPUT EN PAUSA // ACTIVA 'UINPUT' ARRIBA PARA PROBAR"
-                                .to_string(),
-                            true,
-                        ));
-                    }
-                    TestTriggerStatus::UinputUnavailable => {
-                        self.status_message = Some((
-                            "/dev/uinput NO DISPONIBLE // REVISA PERMISOS UDEV".to_string(),
-                            true,
-                        ));
-                    }
-                    TestTriggerStatus::Unassigned => {
-                        self.status_message = Some((
-                            format!(
-                                "BOTÓN SIN ASIGNAR: {} (CONFIGURA TECLAS O MACRO PRIMERO)",
-                                btn.label
-                            ),
-                            true,
-                        ));
-                    }
-                }
-            } else {
-                self.status_message = Some((
-                    format!(
-                        "BOTÓN SIN ASIGNAR: {} (CONFIGURA TECLAS O MACRO PRIMERO)",
-                        btn.label
-                    ),
-                    true,
-                ));
-            }
-        }
-
-        ui.add_space(4.0);
-
-        // Editar
-        let edit_lbl = format!("{} EDITAR", icons::PENCIL);
-        if tactical_button(ui, &edit_lbl, false, false)
-            .on_hover_text("Editar asignación de teclas y comando")
-            .clicked()
-        {
-            if let Some(ref c) = cell_opt {
-                if c.is_sequence() {
-                    self.macro_recorder_open = true;
-                    self.is_recording_macro = false;
-                    self.macro_target_button_id = Some(btn.id.clone());
-                    self.macro_name_draft = c.name.clone();
-                    self.recorded_steps = c.steps.clone();
-                    self.last_record_instant = None;
-                    self.editing_button_id = None;
-                } else {
-                    self.editing_button_id = Some(btn.id.clone());
-                    self.pending_name = c.name.clone();
-                    self.pending_keys = c.keys.clone();
-                }
-            } else {
-                self.editing_button_id = Some(btn.id.clone());
-                let default_info = default_mapping_for(&btn.id);
-                self.pending_name = default_info.action.to_string();
-                self.pending_keys = vec![default_info.key_display.replace(['[', ']'], "")];
-            }
-        }
-
-        if cell_opt.as_ref().is_some_and(|c| c.is_assigned()) {
-            ui.add_space(4.0);
-            let clean_lbl = format!("{} LIMPIAR", icons::TRASH);
-            if ui
-                .button(
-                    RichText::new(clean_lbl)
-                        .color(COLOR_ERROR)
-                        .size(10.0)
-                        .monospace(),
-                )
-                .on_hover_text("Limpiar asignación uinput de este botón")
-                .clicked()
-            {
-                self.profile.remove_cell(self.selected_mode, &btn.id);
-                monitor.set_profile(self.profile.clone());
-                self.status_message =
-                    Some((format!("ASIGNACIÓN ELIMINADA // {}", btn.label), false));
-            }
-        }
-    }
-
-    /// Controles de edición en línea de teclas y nombre de comando responsivos.
+    /// Inline binding editor with live key capture and recessed keycaps.
     fn render_inline_edit_controls(
         &mut self,
         ui: &mut Ui,
@@ -4019,87 +3206,72 @@ impl ProgrammingTab {
         btn: &ButtonDescriptor,
     ) {
         let card_w = ui.available_width();
-        ui.vertical(|ui| {
-            let time = ui.input(|i| i.time);
-            let cursor = if (time * 2.0).fract() < 0.5 { "_" } else { " " };
+        let btn_label = localized_node_name_by_id(&btn.id, btn.label);
 
+        ui.vertical(|ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.label(
-                    RichText::new(format!("EDITANDO: [{}] {}", btn.code_label, btn.label))
-                        .color(COLOR_PRIMARY_CONTAINER)
-                        .size(11.5)
-                        .strong()
-                        .monospace(),
+                    RichText::new(x56_core::t!(
+                        "prog-editor-title",
+                        "code" => btn.code_label,
+                        "label" => &btn_label
+                    ))
+                    .color(COLOR_TEXT_PRIMARY)
+                    .size(FONT_BODY),
                 );
+                ui.add_space(SPACE_SM);
+                theme::status_dot(ui, COLOR_ACCENT, 6.0);
                 ui.label(
-                    RichText::new(format!("{cursor} ESPERANDO PULSACIÓN DE TECLADO..."))
-                        .color(COLOR_WARNING_AMBER)
-                        .size(10.5)
-                        .monospace(),
+                    RichText::new(x56_core::t!("prog-editor-capturing"))
+                        .color(COLOR_ACCENT)
+                        .size(FONT_META),
                 );
             });
 
-            ui.add_space(4.0);
+            ui.add_space(SPACE_XS);
 
-            // Mosaicos visuales de teclas capturadas
             ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = Vec2::new(SPACE_XS, SPACE_XS);
                 ui.label(
-                    RichText::new("TECLAS:")
-                        .color(COLOR_OUTLINE)
-                        .size(10.0)
-                        .monospace(),
+                    RichText::new(x56_core::t!("prog-editor-keys"))
+                        .color(COLOR_TEXT_MUTED)
+                        .size(FONT_META),
                 );
                 if self.pending_keys.is_empty() {
                     ui.label(
-                        RichText::new("(Presiona cualquier tecla física para capturar)")
-                            .color(COLOR_ON_SURFACE_VARIANT)
-                            .size(10.5)
-                            .italics()
-                            .monospace(),
+                        RichText::new(x56_core::t!("prog-editor-capture-hint"))
+                            .color(COLOR_TEXT_SECONDARY)
+                            .size(FONT_SMALL),
                     );
                 } else {
                     for key in &self.pending_keys {
-                        egui::Frame::new()
-                            .fill(COLOR_PRIMARY)
-                            .corner_radius(egui::CornerRadius::same(3))
-                            .inner_margin(egui::Margin::symmetric(6, 2))
-                            .show(ui, |ui| {
-                                ui.label(
-                                    RichText::new(key)
-                                        .color(COLOR_SURFACE_LOWEST)
-                                        .size(11.0)
-                                        .strong()
-                                        .monospace(),
-                                );
-                            });
+                        theme::keycap(ui, key);
                     }
-                    if ui.small_button("Limpiar").clicked() {
+                    if theme::ghost_button(ui, &x56_core::t!("prog-clear")).clicked() {
                         self.pending_keys.clear();
                     }
                 }
             });
 
-            ui.add_space(4.0);
+            ui.add_space(SPACE_XS);
 
-            // Campo de nombre y botones de confirmación con horizontal_wrapped seguro
             ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = Vec2::new(SPACE_SM, SPACE_XS);
                 ui.label(
-                    RichText::new("ACCIÓN:")
-                        .color(COLOR_OUTLINE)
-                        .size(10.0)
-                        .monospace(),
+                    RichText::new(x56_core::t!("prog-editor-action"))
+                        .color(COLOR_TEXT_MUTED)
+                        .size(FONT_META),
                 );
                 let edit_w = (card_w - 80.0).clamp(120.0, 220.0);
                 ui.add(
                     egui::TextEdit::singleline(&mut self.pending_name)
                         .desired_width(edit_w)
-                        .hint_text("Nombre de comando"),
+                        .hint_text(x56_core::t!("prog-editor-action-hint")),
                 );
 
-                let confirm_lbl = format!("{} CONFIRMAR MAPEO", icons::CHECK);
-                if tactical_button(ui, &confirm_lbl, false, true).clicked() {
+                if theme::primary_button(ui, &x56_core::t!("prog-editor-confirm")).clicked() {
                     let name_final = if self.pending_name.trim().is_empty() {
-                        btn.label.to_string()
+                        btn_label.clone()
                     } else {
                         self.pending_name.trim().to_string()
                     };
@@ -4113,24 +3285,17 @@ impl ProgrammingTab {
 
                     self.profile.set_cell(self.selected_mode, cell);
                     monitor.set_profile(self.profile.clone());
-                    self.status_message =
-                        Some((format!("MAPEO CONFIRMADO PARA {}", btn.label), false));
+                    self.status_message = Some((
+                        x56_core::t!("prog-editor-confirmed-msg", "label" => &btn_label),
+                        false,
+                    ));
 
                     self.editing_button_id = None;
                     self.pending_keys.clear();
                     self.pending_name.clear();
                 }
 
-                let cancel_lbl = format!("{} CANCELAR", icons::X);
-                if ui
-                    .button(
-                        RichText::new(cancel_lbl)
-                            .color(COLOR_ERROR)
-                            .size(10.5)
-                            .monospace(),
-                    )
-                    .clicked()
-                {
+                if theme::ghost_button(ui, &x56_core::t!("prog-editor-cancel")).clicked() {
                     self.editing_button_id = None;
                     self.pending_keys.clear();
                     self.pending_name.clear();
@@ -4140,11 +3305,7 @@ impl ProgrammingTab {
     }
 
     // ========================================================================
-    // FOOTER TÁCTICO
-    // ========================================================================
-
-    // ========================================================================
-    // MODAL DE PRUEBA DE LOOP EVDEV
+    // 7. TEST EVDEV LOOP MODAL
     // ========================================================================
 
     fn render_test_modal(
@@ -4162,7 +3323,7 @@ impl ProgrammingTab {
         let mut close_modal = false;
         let mut open = self.show_test_window;
 
-        let win_title = format!("{} TEST EVDEV LOOP // MONITOR EN TIEMPO REAL", icons::ZAP);
+        let win_title = x56_core::t!("prog-test-title");
         egui::Window::new(win_title)
             .open(&mut open)
             .collapsible(false)
@@ -4171,22 +3332,9 @@ impl ProgrammingTab {
             .show(ui.ctx(), |ui| {
                 ui.vertical(|ui| {
                     ui.horizontal(|ui| {
-                        ui.label(
-                            RichText::new("CAPTURA DE COMANDOS DISPARADOS Y RETORNO UINPUT")
-                                .color(COLOR_PRIMARY)
-                                .size(11.0)
-                                .monospace()
-                                .strong(),
-                        );
+                        theme::section_heading(ui, &x56_core::t!("prog-test-subtitle"));
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            let clean_lbl = format!("{} LIMPIAR LOG", icons::TRASH);
-                            if ui
-                                .button(
-                                    RichText::new(clean_lbl)
-                                        .color(COLOR_ERROR)
-                                        .size(10.0)
-                                        .monospace(),
-                                )
+                            if theme::danger_button(ui, &x56_core::t!("prog-test-clear-log"))
                                 .clicked()
                             {
                                 self.test_log.clear();
@@ -4194,145 +3342,123 @@ impl ProgrammingTab {
                         });
                     });
 
-                    ui.add_space(4.0);
+                    ui.add_space(SPACE_XS);
 
-                    // Indicadores
                     ui.horizontal(|ui| {
-                        telemetry_badge(
+                        theme::meta_kv(
                             ui,
-                            "MODO FÍSICO",
+                            &x56_core::t!("prog-test-hw-mode"),
                             snapshot.active_mode.as_str(),
-                            COLOR_PRIMARY_CONTAINER,
+                            COLOR_ACCENT,
                         );
-                        let (u_txt, u_col) = if monitor.is_active() {
-                            ("EMITIENDO (DIANA ON)", COLOR_TERTIARY_CONTAINER)
+                        ui.add_space(SPACE_MD);
+                        let is_active = monitor.is_active();
+                        let (u_txt, u_col) = if is_active {
+                            (x56_core::t!("prog-test-emitting"), COLOR_POSITIVE)
                         } else {
-                            ("EN PAUSA (DIANA OFF)", COLOR_WARNING_AMBER)
+                            (x56_core::t!("prog-test-paused"), COLOR_WARNING)
                         };
-                        telemetry_badge(ui, "ROUTER", u_txt, u_col);
+                        theme::status_dot(ui, u_col, 8.0);
+                        theme::meta_kv(ui, &x56_core::t!("prog-test-router"), &u_txt, u_col);
                     });
 
-                    ui.add_space(6.0);
+                    ui.add_space(SPACE_SM);
 
-                    // Campo de prueba de pulsaciones
                     ui.label(
-                        RichText::new(
-                            "CAMPO DE PRUEBA DE PULSACIONES (HAZ CLIC Y PULSA UN BOTÓN FÍSICO):",
-                        )
-                        .color(COLOR_OUTLINE)
-                        .size(9.5)
-                        .monospace(),
+                        RichText::new(x56_core::t!("prog-test-input-label"))
+                            .color(COLOR_TEXT_SECONDARY)
+                            .size(FONT_SMALL),
                     );
                     ui.add(
-                        egui::TextEdit::singleline(&mut self.test_input_text).hint_text(
-                            "El texto o atajos inyectados por uinput se escribirán aquí...",
-                        ),
+                        egui::TextEdit::singleline(&mut self.test_input_text)
+                            .hint_text(x56_core::t!("prog-test-input-hint")),
                     );
 
-                    ui.add_space(6.0);
+                    ui.add_space(SPACE_SM);
                     ui.separator();
+                    ui.add_space(SPACE_XS);
 
-                    // Tabla de eventos
                     egui::ScrollArea::vertical()
-                        .max_height(220.0)
+                        .max_height(240.0)
                         .stick_to_bottom(true)
                         .show(ui, |ui| {
                             if self.test_log.is_empty() {
                                 ui.vertical_centered(|ui| {
-                                    ui.add_space(20.0);
+                                    ui.add_space(SPACE_LG);
                                     ui.label(
-                                        RichText::new("ESPERANDO EVENTOS EVDEV EN VIVO...")
-                                            .color(COLOR_OUTLINE)
-                                            .size(11.0)
-                                            .monospace(),
+                                        RichText::new(x56_core::t!("prog-test-waiting"))
+                                            .color(COLOR_TEXT_MUTED)
+                                            .size(FONT_SMALL),
                                     );
-                                    ui.add_space(20.0);
+                                    ui.add_space(SPACE_LG);
                                 });
                             } else {
                                 egui::Grid::new("test_events_grid")
                                     .striped(true)
-                                    .spacing(Vec2::new(12.0, 6.0))
+                                    .spacing(Vec2::new(SPACE_MD, SPACE_SM))
                                     .show(ui, |ui| {
-                                        ui.label(
-                                            RichText::new("HORA")
-                                                .color(COLOR_OUTLINE)
-                                                .size(9.5)
-                                                .monospace(),
-                                        );
-                                        ui.label(
-                                            RichText::new("MODO")
-                                                .color(COLOR_OUTLINE)
-                                                .size(9.5)
-                                                .monospace(),
-                                        );
-                                        ui.label(
-                                            RichText::new("BOTÓN")
-                                                .color(COLOR_OUTLINE)
-                                                .size(9.5)
-                                                .monospace(),
-                                        );
-                                        ui.label(
-                                            RichText::new("COMANDO")
-                                                .color(COLOR_OUTLINE)
-                                                .size(9.5)
-                                                .monospace(),
-                                        );
-                                        ui.label(
-                                            RichText::new("TECLAS")
-                                                .color(COLOR_OUTLINE)
-                                                .size(9.5)
-                                                .monospace(),
-                                        );
-                                        ui.label(
-                                            RichText::new("ROUTER")
-                                                .color(COLOR_OUTLINE)
-                                                .size(9.5)
-                                                .monospace(),
-                                        );
+                                        for col_key in [
+                                            "prog-test-col-time",
+                                            "prog-test-col-mode",
+                                            "prog-test-col-button",
+                                            "prog-test-col-command",
+                                            "prog-test-col-keys",
+                                            "prog-test-col-router",
+                                        ] {
+                                            ui.label(
+                                                RichText::new(x56_core::t!(col_key))
+                                                    .color(COLOR_TEXT_MUTED)
+                                                    .size(FONT_META),
+                                            );
+                                        }
                                         ui.end_row();
 
                                         for ev in &self.test_log {
                                             ui.label(
                                                 RichText::new(&ev.timestamp_hms)
-                                                    .color(COLOR_ON_SURFACE_VARIANT)
-                                                    .size(9.5)
+                                                    .color(COLOR_TEXT_SECONDARY)
+                                                    .size(FONT_META)
                                                     .monospace(),
                                             );
                                             ui.label(
                                                 RichText::new(ev.mode.as_str())
-                                                    .color(COLOR_PRIMARY_CONTAINER)
-                                                    .size(9.5)
-                                                    .monospace()
-                                                    .strong(),
+                                                    .color(COLOR_ACCENT)
+                                                    .size(FONT_META)
+                                                    .monospace(),
                                             );
                                             ui.label(
                                                 RichText::new(&ev.button_label)
-                                                    .color(COLOR_PRIMARY)
-                                                    .size(9.5)
+                                                    .color(COLOR_TEXT_PRIMARY)
+                                                    .size(FONT_META)
                                                     .monospace(),
                                             );
                                             ui.label(
                                                 RichText::new(&ev.command_name)
-                                                    .color(COLOR_TERTIARY_CONTAINER)
-                                                    .size(9.5)
-                                                    .monospace()
-                                                    .strong(),
+                                                    .color(COLOR_POSITIVE)
+                                                    .size(FONT_META)
+                                                    .monospace(),
                                             );
                                             ui.label(
                                                 RichText::new(ev.keys.join("+"))
-                                                    .color(COLOR_PRIMARY_FIXED)
-                                                    .size(9.5)
+                                                    .color(COLOR_TEXT_SECONDARY)
+                                                    .size(FONT_META)
                                                     .monospace(),
                                             );
-                                            let st = if ev.uinput_emitted {
-                                                format!("{} EMITIDO", icons::CHECK)
+                                            let (st_txt, st_col) = if ev.uinput_emitted {
+                                                (
+                                                    x56_core::t!("prog-test-status-emitted"),
+                                                    COLOR_POSITIVE,
+                                                )
                                             } else {
-                                                format!("{} SIMULADO", icons::CIRCLE_DOT)
+                                                (
+                                                    x56_core::t!("prog-test-status-simulated"),
+                                                    COLOR_TEXT_MUTED,
+                                                )
                                             };
                                             ui.label(
-                                                RichText::new(st)
-                                                    .color(COLOR_TERTIARY_CONTAINER)
-                                                    .size(9.5)
+                                                RichText::new(st_txt)
+                                                    .color(st_col)
+                                                    .size(FONT_META)
                                                     .monospace(),
                                             );
                                             ui.end_row();
@@ -4341,9 +3467,10 @@ impl ProgrammingTab {
                             }
                         });
 
-                    ui.add_space(6.0);
+                    ui.add_space(SPACE_SM);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if tactical_button(ui, "CERRAR", false, false).clicked() {
+                        if theme::secondary_button(ui, &x56_core::t!("prog-macro-close")).clicked()
+                        {
                             close_modal = true;
                         }
                     });
@@ -4357,190 +3484,117 @@ impl ProgrammingTab {
 }
 
 // ============================================================================
-// HELPERS DE METADATOS TÁCTICOS Y MAPEADO PREDETERMINADO
+// LOCALIZED HELPERS
 // ============================================================================
 
-struct DefaultMappingInfo {
-    action: &'static str,
-    key_display: &'static str,
-    map_type: &'static str,
-    group_sc: &'static str,
-    icon: &'static str,
+fn short_view_label(full: &str) -> String {
+    full.split(": ").nth(1).unwrap_or(full).trim().to_string()
 }
 
-fn default_mapping_for(id: &str) -> DefaultMappingInfo {
-    match id {
-        "stick_trigger" => DefaultMappingInfo {
-            action: "DISPARO PRIMARIO (WEAPONS)",
-            key_display: "[ESPACIO]",
-            map_type: "HOLD",
-            group_sc: "SC: WEAPONS",
-            icon: icons::CROSSHAIR,
-        },
-        "stick_btn_a" => DefaultMappingInfo {
-            action: "FIJAR BLANCO RETÍCULA (LOCK)",
-            key_display: "[T]",
-            map_type: "INSTANTÁNEO",
-            group_sc: "SC: TARGETING",
-            icon: icons::TARGET,
-        },
-        "stick_btn_b" => DefaultMappingInfo {
-            action: "CONTRAMEDIDAS // FLARE",
-            key_display: "[R]",
-            map_type: "TOGGLE (delay 120ms)",
-            group_sc: "SC: SYSTEMS",
-            icon: icons::SHIELD_CHECK,
-        },
-        "stick_btn_c" => DefaultMappingInfo {
-            action: "C-STICK SENSOR SLEW PUSH",
-            key_display: "[F3]",
-            map_type: "INSTANTÁNEO",
-            group_sc: "SC: SENSORS",
-            icon: icons::JOYSTICK,
-        },
-        "stick_btn_d" => DefaultMappingInfo {
-            action: "DESACOPLAR VECTOR (DECOUPLED)",
-            key_display: "[V]",
-            map_type: "TOGGLE",
-            group_sc: "SC: FLIGHT",
-            icon: icons::ROCKET,
-        },
-        "stick_pinkie" => DefaultMappingInfo {
-            action: "BOOST // POSTQUEMADOR",
-            key_display: "[LSHIFT]",
-            map_type: "HOLD",
-            group_sc: "SC: FLIGHT",
-            icon: icons::ZAP,
-        },
+fn unassigned_label() -> String {
+    let raw = x56_core::t!("prog-unassigned-suggestion", "key" => "", "action" => "");
+    raw.split(" — ").next().unwrap_or(&raw).trim().to_string()
+}
+
+struct ControlMeta {
+    kind: String,
+    group: String,
+}
+
+fn control_meta_for(id: &str) -> ControlMeta {
+    let (kind_key, group_key) = match id {
+        "stick_trigger" => ("prog-maptype-hold", "prog-group-weapons"),
+        "stick_btn_a" => ("prog-maptype-instant", "prog-group-targeting"),
+        "stick_btn_b" => ("prog-maptype-toggle-delay", "prog-group-systems"),
+        "stick_btn_c" => ("prog-maptype-instant", "prog-group-sensors"),
+        "stick_btn_d" => ("prog-maptype-toggle", "prog-group-flight"),
+        "stick_pinkie" => ("prog-maptype-hold", "prog-group-flight"),
         "stick_pov_up" | "stick_pov_right" | "stick_pov_down" | "stick_pov_left" => {
-            DefaultMappingInfo {
-                action: "VISTA COCKPIT POV // HEAD LOOK",
-                key_display: "[POV-LOOK]",
-                map_type: "ANALOG/POV",
-                group_sc: "SC: VIEW",
-                icon: icons::COMPASS,
-            }
+            ("prog-maptype-analog-pov", "prog-group-view")
         }
         "stick_h1_up" | "stick_h1_right" | "stick_h1_down" | "stick_h1_left" => {
-            DefaultMappingInfo {
-                action: "GESTIÓN BLANCOS RADAR // SUBSISTEMAS",
-                key_display: "[P/O/I/U]",
-                map_type: "INSTANTÁNEO",
-                group_sc: "SC: RADAR",
-                icon: icons::RADIO,
-            }
+            ("prog-maptype-instant", "prog-group-radar")
         }
         "stick_h2_up" | "stick_h2_right" | "stick_h2_down" | "stick_h2_left" => {
-            DefaultMappingInfo {
-                action: "DISTRIBUCIÓN ENERGÍA ESCUDOS",
-                key_display: "[F5..F8]",
-                map_type: "INSTANTÁNEO",
-                group_sc: "SC: POWER",
-                icon: icons::ZAP,
-            }
+            ("prog-maptype-instant", "prog-group-power")
         }
-        "thr_sw_1" => DefaultMappingInfo {
-            action: "DESPLIEGUE TREN ATERRIZAJE (SW 1)",
-            key_display: "[G]",
-            map_type: "TOGGLE (anti-accidental)",
-            group_sc: "SC: FLIGHT",
-            icon: icons::PLANE_LANDING,
-        },
-        "thr_sw_2" => DefaultMappingInfo {
-            action: "RECOGIDA TREN ATERRIZAJE (SW 2)",
-            key_display: "[LALT+G]",
-            map_type: "TOGGLE (anti-accidental)",
-            group_sc: "SC: FLIGHT",
-            icon: icons::PLANE_TAKEOFF,
-        },
-        "thr_sld" => DefaultMappingInfo {
-            action: "AEROFRENOS // SPOILERS (SLD)",
-            key_display: "[B]",
-            map_type: "HOLD / POSITIONAL",
-            group_sc: "SC: FLIGHT",
-            icon: icons::OCTAGON_ALERT,
-        },
-        "thr_btn_e" => DefaultMappingInfo {
-            action: "SALTO CUÁNTICO (QUANTUM TRAVEL)",
-            key_display: "[B/LALT+B]",
-            map_type: "HOLD (spool)",
-            group_sc: "SC: NAVIGATION",
-            icon: icons::SPARKLES,
-        },
-        "thr_btn_h" => DefaultMappingInfo {
-            action: "MODO MINERÍA // ESCANEO PING",
-            key_display: "[M / TAB]",
-            map_type: "TOGGLE",
-            group_sc: "SC: MINING",
-            icon: icons::PICKAXE,
-        },
-        "thr_btn_i" => DefaultMappingInfo {
-            action: "LUCES EXTERIORES COCKPIT",
-            key_display: "[L]",
-            map_type: "TOGGLE",
-            group_sc: "SC: SYSTEMS",
-            icon: icons::LIGHTBULB,
-        },
-        "thr_ministick_push" => DefaultMappingInfo {
-            action: "PROPULSORES LATERALES // STRAFE PUSH",
-            key_display: "[LCTRL]",
-            map_type: "INSTANTÁNEO",
-            group_sc: "SC: STRAFE",
-            icon: icons::JOYSTICK,
-        },
-        "thr_rty_f_push" => DefaultMappingInfo {
-            action: "LIMITADOR DE VELOCIDAD PUSH (F)",
-            key_display: "[BACKSPACE]",
-            map_type: "TOGGLE",
-            group_sc: "SC: PROPULSION",
-            icon: icons::SETTINGS,
-        },
-        "thr_rty_g_push" => DefaultMappingInfo {
-            action: "LÁSER DE EXTRACCIÓN PUSH (G)",
-            key_display: "[MOUSE1]",
-            map_type: "HOLD",
-            group_sc: "SC: MINING",
-            icon: icons::SETTINGS,
-        },
-        "thr_scroll_fwd" => DefaultMappingInfo {
-            action: "INCREMENTAR LIMITADOR ACELERACIÓN",
-            key_display: "[SCROLL-UP]",
-            map_type: "INSTANTÁNEO",
-            group_sc: "SC: PROPULSION",
-            icon: icons::CHEVRONS_UP,
-        },
-        "thr_scroll_bck" => DefaultMappingInfo {
-            action: "DISMINUIR LIMITADOR ACELERACIÓN",
-            key_display: "[SCROLL-DN]",
-            map_type: "INSTANTÁNEO",
-            group_sc: "SC: PROPULSION",
-            icon: icons::CHEVRONS_DOWN,
-        },
-        "thr_k1_up" => DefaultMappingInfo {
-            action: "MODO CRUCERO VELOCIDAD (SCM)",
-            key_display: "[C]",
-            map_type: "TOGGLE",
-            group_sc: "SC: FLIGHT",
-            icon: icons::ROCKET,
-        },
-        "thr_k1_down" => DefaultMappingInfo {
-            action: "MODO PRECISIÓN MANIOBRA",
-            key_display: "[LALT+C]",
-            map_type: "TOGGLE",
-            group_sc: "SC: FLIGHT",
-            icon: icons::TARGET,
-        },
-        _ => DefaultMappingInfo {
-            action: "ACCIÓN ASIGNABLE HOTAS",
-            key_display: "[DIRECT]",
-            map_type: "INSTANTÁNEO",
-            group_sc: "SC: GENERAL",
-            icon: icons::CIRCLE_DOT,
-        },
+        "thr_sw_1" | "thr_sw_2" => ("prog-maptype-toggle-safe", "prog-group-flight"),
+        "thr_sld" => ("prog-maptype-positional", "prog-group-flight"),
+        "thr_btn_e" => ("prog-maptype-hold-spool", "prog-group-navigation"),
+        "thr_btn_h" => ("prog-maptype-toggle", "prog-group-mining"),
+        "thr_btn_i" => ("prog-maptype-toggle", "prog-group-systems"),
+        "thr_ministick_push" => ("prog-maptype-instant", "prog-group-strafe"),
+        "thr_rty_f_push" => ("prog-maptype-toggle", "prog-group-propulsion"),
+        "thr_rty_g_push" => ("prog-maptype-hold", "prog-group-mining"),
+        "thr_scroll_fwd" | "thr_scroll_bck" => ("prog-maptype-instant", "prog-group-propulsion"),
+        "thr_k1_up" | "thr_k1_down" => ("prog-maptype-toggle", "prog-group-flight"),
+        _ => ("prog-maptype-instant", "prog-group-general"),
+    };
+    ControlMeta {
+        kind: x56_core::t!(kind_key),
+        group: x56_core::t!(group_key),
     }
 }
 
-/// Mapea una tecla de egui a un nombre de tecla canónico de Linux / uinput.
+fn localized_node_name_by_id(id: &str, fallback: &str) -> String {
+    let key = match id {
+        "stick_pov_up" => Some("prog-label-pov-up"),
+        "stick_pov_right" => Some("prog-label-pov-right"),
+        "stick_pov_down" => Some("prog-label-pov-down"),
+        "stick_pov_left" => Some("prog-label-pov-left"),
+        "stick_btn_a" => Some("prog-label-btn-a"),
+        "stick_h1_up" => Some("prog-label-h1-up"),
+        "stick_h1_right" => Some("prog-label-h1-right"),
+        "stick_h1_down" => Some("prog-label-h1-down"),
+        "stick_h1_left" => Some("prog-label-h1-left"),
+        "stick_btn_b" => Some("prog-label-btn-b"),
+        "stick_h2_up" => Some("prog-label-h2-up"),
+        "stick_h2_right" => Some("prog-label-h2-right"),
+        "stick_h2_down" => Some("prog-label-h2-down"),
+        "stick_h2_left" => Some("prog-label-h2-left"),
+        "stick_trigger" => Some("prog-label-trigger"),
+        "stick_btn_c" => Some("prog-label-btn-c"),
+        "stick_pinkie" => Some("prog-label-pinkie"),
+        "stick_btn_d" => Some("prog-label-btn-d"),
+        "thr_scroll_fwd" => Some("prog-label-scroll-fwd"),
+        "thr_scroll_bck" => Some("prog-label-scroll-bck"),
+        "thr_k1_up" => Some("prog-label-k1-up"),
+        "thr_k1_down" => Some("prog-label-k1-down"),
+        "thr_btn_i" => Some("prog-label-btn-i"),
+        "thr_btn_h" => Some("prog-label-btn-h"),
+        "thr_sld" => Some("prog-label-sld"),
+        "thr_btn_e" => Some("prog-label-btn-e"),
+        "thr_rty_f_push" => Some("prog-label-rty-f-push"),
+        "thr_rty_g_push" => Some("prog-label-rty-g-push"),
+        "thr_h3_up" => Some("prog-label-h3-up"),
+        "thr_h3_right" => Some("prog-label-h3-right"),
+        "thr_h3_down" => Some("prog-label-h3-down"),
+        "thr_h3_left" => Some("prog-label-h3-left"),
+        "thr_h4_up" => Some("prog-label-h4-up"),
+        "thr_h4_right" => Some("prog-label-h4-right"),
+        "thr_h4_down" => Some("prog-label-h4-down"),
+        "thr_h4_left" => Some("prog-label-h4-left"),
+        "thr_sw_13" => Some("prog-label-sw13"),
+        "thr_sw_14" => Some("prog-label-sw14"),
+        "thr_sw_11" => Some("prog-label-sw11"),
+        "thr_sw_12" => Some("prog-label-sw12"),
+        "thr_sw_9" => Some("prog-label-sw9"),
+        "thr_sw_10" => Some("prog-label-sw10"),
+        "thr_sw_7" => Some("prog-label-sw7"),
+        "thr_sw_8" => Some("prog-label-sw8"),
+        "thr_sw_1" => Some("prog-label-sw1"),
+        "thr_sw_2" => Some("prog-label-sw2"),
+        "thr_sw_3" => Some("prog-label-sw3"),
+        "thr_sw_4" => Some("prog-label-sw4"),
+        "thr_sw_5" => Some("prog-label-sw5"),
+        "thr_sw_6" => Some("prog-label-sw6"),
+        _ => None,
+    };
+    key.map(|k| x56_core::t!(k))
+        .unwrap_or_else(|| fallback.to_string())
+}
+
+/// Maps an egui key to a canonical Linux / uinput key name.
 fn map_key_to_name(key: Key) -> Option<&'static str> {
     match key {
         Key::ControlLeft => Some("Ctrl"),
@@ -4628,7 +3682,7 @@ fn map_key_to_name(key: Key) -> Option<&'static str> {
 }
 
 // ============================================================================
-// NODOS ESQUEMÁTICOS PARA EL MAPA VECTORIAL
+// SCHEMATIC NODES FOR 2D VECTOR MAP
 // ============================================================================
 
 struct SchematicNode {
@@ -4645,7 +3699,7 @@ struct SchematicNode {
 fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
     match kind {
         DeviceKind::Stick => vec![
-            // 1. Sección A: Selector de Vista POV 8-Way (cx = 0.330, cy = 0.242)
+            // 1. POV 8-Way (cx = 0.330, cy = 0.242)
             SchematicNode {
                 id: "stick_pov_up",
                 short_label: "▲",
@@ -4686,7 +3740,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
-            // 2. Sección D: Botón A (Cabezal Superior) (cx = 0.415, cy = 0.138)
+            // 2. Button A (cx = 0.415, cy = 0.138)
             SchematicNode {
                 id: "stick_btn_a",
                 short_label: "A",
@@ -4697,7 +3751,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
-            // 3. Sección C: HAT 1 (Witches) (Cluster Witch-Hat: cx = 0.525, cy = 0.121)
+            // 3. HAT 1 (Witches) (cx = 0.525, cy = 0.121)
             SchematicNode {
                 id: "stick_h1_up",
                 short_label: "▲",
@@ -4738,7 +3792,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
-            // 4. Sección D: Botón B (Lateral Pulgar) (cx = 0.670, cy = 0.072)
+            // 4. Button B (cx = 0.670, cy = 0.072)
             SchematicNode {
                 id: "stick_btn_b",
                 short_label: "B",
@@ -4749,7 +3803,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
-            // 5. Sección C: HAT 2 (Castle) (Cluster Castle-Hat: cx = 0.630, cy = 0.285)
+            // 5. HAT 2 (Castle) (cx = 0.630, cy = 0.285)
             SchematicNode {
                 id: "stick_h2_up",
                 short_label: "▲",
@@ -4790,7 +3844,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
-            // 6. Sección D: Gatillo Principal (Trigger: cx = 0.500, cy = 0.420)
+            // 6. Trigger (cx = 0.500, cy = 0.420)
             SchematicNode {
                 id: "stick_trigger",
                 short_label: "TRG",
@@ -4801,7 +3855,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 is_rect: true,
                 rect_size: Vec2::new(54.0, 26.0),
             },
-            // 7. Sección B: Botón C (Minipalanca Push: cx = 0.440, cy = 0.560)
+            // 7. Button C (cx = 0.440, cy = 0.560)
             SchematicNode {
                 id: "stick_btn_c",
                 short_label: "C",
@@ -4812,7 +3866,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
-            // 8. Sección F: Palanca Meñique (Pinkie Lever: cx = 0.500, cy = 0.700)
+            // 8. Pinkie Lever (cx = 0.500, cy = 0.700)
             SchematicNode {
                 id: "stick_pinkie",
                 short_label: "PNK",
@@ -4823,7 +3877,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 is_rect: true,
                 rect_size: Vec2::new(64.0, 26.0),
             },
-            // 9. Sección D: Botón D (Meñique: cx = 0.570, cy = 0.840)
+            // 9. Button D (cx = 0.570, cy = 0.840)
             SchematicNode {
                 id: "stick_btn_d",
                 short_label: "D",
@@ -4836,7 +3890,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
             },
         ],
         DeviceKind::Throttle => vec![
-            // 1. Lado Izquierdo: Rueda Scroll (SC)
+            // 1. Scroll Wheel (SC)
             SchematicNode {
                 id: "thr_scroll_fwd",
                 short_label: "▲",
@@ -4857,7 +3911,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
-            // 2. Lado Izquierdo: Interruptor K1
+            // 2. K1 Switch
             SchematicNode {
                 id: "thr_k1_up",
                 short_label: "▲",
@@ -4878,7 +3932,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
-            // 3. Empuñadura Central Superior: Botones I, H, SLD, E
+            // 3. Grip Buttons I, H, SLD, E
             SchematicNode {
                 id: "thr_btn_i",
                 short_label: "I",
@@ -4919,7 +3973,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 is_rect: true,
                 rect_size: Vec2::new(34.0, 34.0),
             },
-            // 4. Giratorios Superiores F y G (Reemplazan RTY 5 y RTY 6)
+            // 4. Rotaries F and G
             SchematicNode {
                 id: "thr_rty_f_push",
                 short_label: "F",
@@ -4940,7 +3994,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
-            // 5. HAT 3 (H3) - 4 Direcciones (H3▲, H3▶, H3▼, H3◀)
+            // 5. HAT 3 (H3)
             SchematicNode {
                 id: "thr_h3_up",
                 short_label: "▲",
@@ -4981,7 +4035,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
-            // 6. HAT 4 (H4) - 4 Direcciones (H4▲, H4▶, H4▼, H4◀)
+            // 6. HAT 4 (H4)
             SchematicNode {
                 id: "thr_h4_up",
                 short_label: "▲",
@@ -5022,7 +4076,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
-            // 7. Columna Derecha de Toggles: TGL 4, TGL 3, TGL 2, TGL 1
+            // 7. Right Toggle Column: TGL 4, TGL 3, TGL 2, TGL 1
             SchematicNode {
                 id: "thr_sw_13",
                 short_label: "▲",
@@ -5103,7 +4157,7 @@ fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
                 is_rect: false,
                 rect_size: Vec2::ZERO,
             },
-            // 8. Fila Inferior de Conmutadores: SW 1/2, SW 3/4, SW 5/6
+            // 8. Bottom Switches: SW 1/2, SW 3/4, SW 5/6
             SchematicNode {
                 id: "thr_sw_1",
                 short_label: "1",
@@ -5177,7 +4231,6 @@ mod tests {
         let nodes = get_device_schematic_nodes(DeviceKind::Throttle);
         assert_eq!(nodes.len(), 32);
 
-        // Verifica que RTY 5 y RTY 6 hayan sido reemplazados por F y G con coords 1180x790
         let node_f = nodes.iter().find(|n| n.id == "thr_rty_f_push").unwrap();
         assert_eq!(node_f.short_label, "F");
         assert!((node_f.norm_x - 0.6314).abs() < 1e-3);
@@ -5188,7 +4241,6 @@ mod tests {
         assert!((node_g.norm_x - 0.6314).abs() < 1e-3);
         assert!((node_g.norm_y - 0.3443).abs() < 1e-3);
 
-        // Verifica HAT 3 y HAT 4
         let h3_up = nodes.iter().find(|n| n.id == "thr_h3_up").unwrap();
         assert!(h3_up.full_name.contains("H3▲"));
         assert!((h3_up.norm_x - 0.5887).abs() < 1e-3);
@@ -5197,18 +4249,15 @@ mod tests {
         assert!(h4_up.full_name.contains("H4▲"));
         assert!((h4_up.norm_x - 0.5489).abs() < 1e-3);
 
-        // Verifica SC y K1 en lado izquierdo
         let sc_fwd = nodes.iter().find(|n| n.id == "thr_scroll_fwd").unwrap();
         assert!((sc_fwd.norm_x - 0.1169).abs() < 1e-3);
 
         let k1_up = nodes.iter().find(|n| n.id == "thr_k1_up").unwrap();
         assert!((k1_up.norm_x - 0.1992).abs() < 1e-3);
 
-        // Verifica TGL 1..4 en lado derecho
         let tgl4_up = nodes.iter().find(|n| n.id == "thr_sw_13").unwrap();
         assert!((tgl4_up.norm_x - 0.8771).abs() < 1e-3);
 
-        // Verifica SW 1..6 en fila inferior
         let sw1 = nodes.iter().find(|n| n.id == "thr_sw_1").unwrap();
         assert_eq!(sw1.short_label, "1");
         assert!((sw1.norm_y - 0.8142).abs() < 1e-3);

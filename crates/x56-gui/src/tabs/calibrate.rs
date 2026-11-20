@@ -1,9 +1,10 @@
-//! Pestaña del asistente de calibración de sensores de efecto Hall.
+//! Hall-effect sensor neutral calibration wizard tab.
 
-use eframe::egui::{self, Color32, Ui};
+use eframe::egui::{self, RichText, Ui};
 use x56_core::{Calibrator, HallCalibrationResult};
 
 use crate::icons;
+use crate::theme;
 
 pub struct CalibrateTab {
     pub samples: usize,
@@ -36,111 +37,177 @@ impl CalibrateTab {
                 self.results = Some(res);
             }
             Err(err) => {
-                self.status_message = Some((format!("Error: {err}"), true));
+                let err_str = err.to_string();
+                self.status_message = Some((x56_core::t!("cal-error", "err" => &err_str), true));
             }
         }
     }
 
     pub fn ui(&mut self, ui: &mut Ui) {
-        ui.heading(x56_core::t!("cal-title"));
-        ui.label(x56_core::t!("cal-subtitle"));
+        ui.set_min_width(ui.available_width());
 
-        ui.add_space(8.0);
+        theme::section_heading(ui, &x56_core::t!("cal-title"));
+        ui.add_space(theme::SPACE_XS);
+        ui.label(
+            RichText::new(x56_core::t!("cal-subtitle"))
+                .color(theme::COLOR_TEXT_SECONDARY)
+                .size(theme::FONT_SMALL),
+        );
 
-        ui.group(|ui| {
-            ui.label(format!(
-                "{} {}",
-                icons::ALERT_TRIANGLE,
-                x56_core::t!("cal-instructions")
-            ));
+        ui.add_space(theme::SPACE_MD);
+
+        theme::subcard_frame().show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(icons::ALERT_TRIANGLE)
+                        .color(theme::COLOR_WARNING)
+                        .size(theme::FONT_BODY),
+                );
+                ui.label(
+                    RichText::new(x56_core::t!("cal-instructions"))
+                        .color(theme::COLOR_TEXT_PRIMARY)
+                        .size(theme::FONT_BODY),
+                );
+            });
+
+            ui.add_space(theme::SPACE_XS);
+
+            let ms = (self.samples as u64 * 2).to_string();
+            for step in [
+                x56_core::t!("cal-step1"),
+                x56_core::t!("cal-step2", "ms" => &ms),
+                x56_core::t!("cal-step3"),
+            ] {
+                ui.label(
+                    RichText::new(step)
+                        .color(theme::COLOR_TEXT_SECONDARY)
+                        .size(theme::FONT_SMALL),
+                );
+            }
+        });
+
+        ui.add_space(theme::SPACE_MD);
+
+        ui.horizontal_wrapped(|ui| {
             ui.label(
-                "1. Suelta la palanca por completo y permite que el resorte la centre libremente.",
+                RichText::new(x56_core::t!("cal-samples-label"))
+                    .color(theme::COLOR_TEXT_SECONDARY)
+                    .size(theme::FONT_SMALL),
             );
-            ui.label(format!(
-                "2. No toques la base ni el vástago durante el muestreo (~{} ms).",
-                self.samples as u64 * 2
-            ));
-            ui.label(
-                "3. Primero realiza un muestreo en modo simulación para revisar las desviaciones.",
+            let unit = x56_core::t!("cal-samples-unit");
+            ui.add(egui::Slider::new(&mut self.samples, 20..=200).text(unit));
+
+            ui.add_space(theme::SPACE_MD);
+
+            ui.checkbox(
+                &mut self.dry_run,
+                RichText::new(x56_core::t!("cal-dry-run"))
+                    .color(theme::COLOR_TEXT_SECONDARY)
+                    .size(theme::FONT_SMALL),
             );
         });
 
-        ui.add_space(10.0);
+        ui.add_space(theme::SPACE_MD);
 
-        ui.horizontal(|ui| {
-            ui.label("Número de muestras:");
-            ui.add(egui::Slider::new(&mut self.samples, 20..=200).text("paquetes"));
-            ui.separator();
-            ui.checkbox(&mut self.dry_run, "Bloqueo EEPROM (Solo Simulación)");
-        });
-
-        ui.add_space(8.0);
-
-        ui.horizontal(|ui| {
-            let sample_lbl = format!("{} Muestrear Posición Central", icons::CROSSHAIR);
-            if ui.button(sample_lbl).clicked() {
+        ui.horizontal_wrapped(|ui| {
+            if theme::secondary_button(ui, &x56_core::t!("cal-sample-btn")).clicked() {
                 self.execute_calibration(true);
             }
 
-            let apply_lbl = format!("{} Grabar Calibración en la EEPROM", icons::SAVE);
-            let apply_btn = ui.add_enabled(!self.dry_run, egui::Button::new(apply_lbl));
-            if apply_btn.clicked() {
-                self.execute_calibration(false);
-            }
+            ui.add_enabled_ui(!self.dry_run, |ui| {
+                if theme::primary_button(ui, &x56_core::t!("cal-write-btn")).clicked() {
+                    self.execute_calibration(false);
+                }
+            });
         });
 
-        ui.add_space(10.0);
-
         if let Some((ref msg, is_err)) = self.status_message {
+            ui.add_space(theme::SPACE_MD);
             let col = if is_err {
-                Color32::from_rgb(255, 90, 90)
+                theme::COLOR_NEGATIVE
             } else {
-                Color32::from_rgb(100, 230, 100)
+                theme::COLOR_POSITIVE
             };
-            ui.colored_label(col, msg);
-            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                theme::status_dot(ui, col, 8.0);
+                ui.label(RichText::new(msg).color(col).size(theme::FONT_SMALL));
+            });
         }
 
         if let Some(ref res) = self.results {
-            ui.group(|ui| {
-                ui.heading("Resultados del Muestreo de Centro:");
-                ui.add_space(6.0);
+            ui.add_space(theme::SPACE_MD);
+            theme::subcard_frame().show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+                theme::section_heading(ui, &x56_core::t!("cal-results-heading"));
+                ui.add_space(theme::SPACE_SM);
 
-                for r in res {
-                    ui.label(format!("• {}:", r.axis_name));
-                    ui.horizontal(|ui| {
-                        ui.label(format!(
-                            "  Punto cero anterior: {:#06x} ({})",
-                            r.old_hall_zero, r.old_hall_zero
-                        ));
-                        ui.separator();
-                        ui.label(format!(
-                            "  Punto cero muestreado: {:#06x} ({})",
-                            r.sampled_hall_zero, r.sampled_hall_zero
-                        ));
+                for (idx, r) in res.iter().enumerate() {
+                    if idx > 0 {
+                        ui.add_space(theme::SPACE_SM);
+                    }
+                    ui.label(
+                        RichText::new(&r.axis_name)
+                            .color(theme::COLOR_TEXT_PRIMARY)
+                            .size(theme::FONT_BODY),
+                    );
+                    ui.add_space(theme::SPACE_XS);
+
+                    let prev_hex = format!("0x{:04X}", r.old_hall_zero);
+                    let prev_dec = r.old_hall_zero.to_string();
+                    let sampled_hex = format!("0x{:04X}", r.sampled_hall_zero);
+                    let sampled_dec = r.sampled_hall_zero.to_string();
+
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(
+                            RichText::new(x56_core::t!(
+                                "cal-prev-zero",
+                                "hex" => &prev_hex,
+                                "dec" => &prev_dec
+                            ))
+                            .color(theme::COLOR_TEXT_SECONDARY)
+                            .size(theme::FONT_META)
+                            .monospace(),
+                        );
+                        ui.add_space(theme::SPACE_MD);
+                        ui.label(
+                            RichText::new(x56_core::t!(
+                                "cal-sampled-zero",
+                                "hex" => &sampled_hex,
+                                "dec" => &sampled_dec
+                            ))
+                            .color(theme::COLOR_TEXT_SECONDARY)
+                            .size(theme::FONT_META)
+                            .monospace(),
+                        );
                     });
 
                     let drift_color = if r.delta.abs() < 500 {
-                        Color32::from_rgb(100, 230, 100) // Verde: excelente
+                        theme::COLOR_POSITIVE
                     } else if r.delta.abs() < 2500 {
-                        Color32::from_rgb(255, 200, 50) // Amarillo: desvío moderado
+                        theme::COLOR_WARNING
                     } else {
-                        Color32::from_rgb(255, 100, 100) // Rojo: desvío notable
+                        theme::COLOR_NEGATIVE
                     };
 
-                    ui.colored_label(
-                        drift_color,
-                        format!(
-                            "  Ajuste necesario (Delta): {:+} | Estado: {}",
-                            r.delta,
-                            if r.applied {
-                                "APLICADO"
-                            } else {
-                                "PENDIENTE (dry-run)"
-                            }
-                        ),
+                    let delta_str = format!("{:+}", r.delta);
+                    let status_str = if r.applied {
+                        x56_core::t!("cal-status-applied")
+                    } else {
+                        x56_core::t!("cal-status-pending")
+                    };
+
+                    ui.label(
+                        RichText::new(x56_core::t!(
+                            "cal-delta-status",
+                            "delta" => &delta_str,
+                            "status" => &status_str
+                        ))
+                        .color(drift_color)
+                        .size(theme::FONT_META)
+                        .monospace(),
                     );
-                    ui.add_space(4.0);
                 }
             });
         }
