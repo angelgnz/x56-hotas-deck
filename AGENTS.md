@@ -38,7 +38,7 @@ Delegate each subtask selecting the model and reasoning effort strictly based on
   - `medium`: PR reviews, business logic validation, protocol data contracts verification.
   - `low`: Lightweight sanity checks and targeted invariant verification.
 
-### D. AGY - Flash (`low` / `medium` / `high`)
+### D. AGY - Hydrogen (`low` / `medium` / `high`)
 - **Role:** High-volume operational execution, speed, and large-context synthesis.
 - **Use Cases:** Repetitive tasks, large-window reading/synthesis, test suite generation, mechanical migrations, string extraction, and rapid API integrations.
 - **Effort Allocation:**

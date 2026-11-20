@@ -72,4 +72,11 @@ core.*
 .agents/scratch/
 .agents/logs/
 .agents/tmp/
+/capture/
+/craft.json
+/feed.json
+/inbox/
+/investigation.cany/
+/pinned/
+/usage.json
 
