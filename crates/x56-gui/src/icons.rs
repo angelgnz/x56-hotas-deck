@@ -57,10 +57,18 @@ pub const CIRCLE: &str = "\u{e076}";
 pub const CIRCLE_DOT: &str = "\u{e345}";
 pub const SQUARE: &str = "\u{e167}";
 pub const PLAY: &str = "\u{e13c}";
+pub const PAUSE: &str = "\u{e12e}";
+pub const POWER: &str = "\u{e140}";
 pub const FLAME: &str = "\u{e0d2}";
-pub const SPARKLES: &str = "\u{e412}";
 pub const WRENCH: &str = "\u{e1b1}";
 pub const SETTINGS: &str = "\u{e154}";
+pub const INFO: &str = "\u{e0f9}";
+pub const GLOBE: &str = "\u{e0e8}";
+pub const KEYBOARD: &str = "\u{e284}";
+pub const USB: &str = "\u{e356}";
+pub const LINK: &str = "\u{e102}";
+pub const UNLINK: &str = "\u{e19c}";
+pub const GAUGE: &str = "\u{e1bf}";
 pub const FILE_CODE: &str = "\u{e0c3}";
 pub const FILE_TEXT: &str = "\u{e0cc}";
 pub const FACTORY: &str = "\u{e29f}";
@@ -108,5 +116,11 @@ mod tests {
         assert!(!lucide_icons::LUCIDE_FONT_BYTES.is_empty());
         assert_eq!(Icon::Save.unicode(), '\u{e14d}');
         assert_eq!(Icon::Plane.unicode(), '\u{e1de}');
+        assert_eq!(Icon::Power.unicode(), '\u{e140}');
+        assert_eq!(Icon::Pause.unicode(), '\u{e12e}');
+        assert_eq!(Icon::SlidersHorizontal.unicode(), '\u{e29a}');
+        assert_eq!(Icon::RotateCcw.unicode(), '\u{e148}');
+        assert_eq!(Icon::Check.unicode(), '\u{e06c}');
+        assert_eq!(Icon::X.unicode(), '\u{e1b2}');
     }
 }

@@ -55,9 +55,9 @@ fn main() -> eframe::Result<()> {
     };
 
     let mut viewport = egui::ViewportBuilder::default()
-        .with_inner_size([1200.0, 800.0])
-        .with_min_inner_size([720.0, 520.0])
-        .with_title("X56 HOTAS Deck // Control Center");
+        .with_inner_size([1280.0, 820.0])
+        .with_min_inner_size([800.0, 560.0])
+        .with_title("X56 Deck");
 
     if let Some(icon) = tray::load_window_icon() {
         viewport = viewport.with_icon(icon);

@@ -33,21 +33,21 @@ impl CurveType {
         CurveType::Bezier,
     ];
 
-    pub fn label(&self) -> &'static str {
+    pub fn label(&self) -> String {
         match self {
-            Self::Linear => "Lineal 1:1",
-            Self::SCurve => "S-Curve",
-            Self::Exponential => "Exponencial",
-            Self::Bezier => "Bézier libre (Vista previa)",
+            Self::Linear => x56_core::t!("curves-type-linear"),
+            Self::SCurve => x56_core::t!("curves-type-scurve"),
+            Self::Exponential => x56_core::t!("curves-type-expo"),
+            Self::Bezier => x56_core::t!("curves-type-bezier"),
         }
     }
 
-    pub fn polynomial_badge(&self) -> &'static str {
+    pub fn polynomial_badge(&self) -> String {
         match self {
-            Self::Linear => "1:1 LINEAR",
-            Self::SCurve => "HARDWARE S-PROFILE (EXPO)",
-            Self::Exponential => "HARDWARE J-PROFILE (ASYM)",
-            Self::Bezier => "PREVIEW CUBIC-BÉZIER",
+            Self::Linear => x56_core::t!("curves-badge-linear"),
+            Self::SCurve => x56_core::t!("curves-badge-scurve"),
+            Self::Exponential => x56_core::t!("curves-badge-expo"),
+            Self::Bezier => x56_core::t!("curves-badge-bezier"),
         }
     }
 }
@@ -83,6 +83,21 @@ impl Default for CurveParameters {
 }
 
 impl CurveParameters {
+    /// Returns genuine 1:1 linear curve parameters with zero deadband and full range.
+    pub fn linear() -> Self {
+        Self {
+            xsat: 1000,
+            ysat: 1000,
+            deadband: 0,
+            curvature: 500,
+            profile: CurveProfile::J,
+            curve_type: CurveType::Linear,
+            invert: false,
+            bezier_p1: [0.35, 0.14],
+            bezier_p2: [0.72, 0.88],
+        }
+    }
+
     /// Retorna la zona muerta central expresada en porcentaje (`0.0..=25.0%`).
     pub fn deadband_pct(&self) -> f32 {
         ((self.deadband as f32) / 10.0).clamp(0.0, 25.0)
@@ -735,5 +750,21 @@ mod tests {
         let (mag, deg) = state.throttle_gimbal_vector();
         assert!((mag - 1.0).abs() < 1e-4);
         assert!((deg - 90.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn linear_preset_is_genuine_one_to_one() {
+        let p = CurveParameters::linear();
+        assert_eq!(p.curve_type, CurveType::Linear);
+        assert_eq!(p.profile, CurveProfile::J);
+        assert_eq!(p.deadband, 0);
+        assert_eq!(p.curvature, 500);
+        assert_eq!(p.xsat, 1000);
+        assert_eq!(p.ysat, 1000);
+        assert!(!p.invert);
+        assert_eq!(p.evaluate(0.0), 0.0);
+        assert!((p.evaluate(0.25) - 0.25).abs() < 1e-4);
+        assert!((p.evaluate(-0.75) - -0.75).abs() < 1e-4);
+        assert!((p.evaluate(1.0) - 1.0).abs() < 1e-4);
     }
 }

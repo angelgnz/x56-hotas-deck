@@ -1,9 +1,9 @@
-//! Pestaña de diagnóstico del sistema (`x56 doctor`) e integridad de permisos.
+//! System diagnostics and permissions integrity tab (`x56 doctor`).
 
-use eframe::egui::{self, Color32, Ui};
+use eframe::egui::{self, RichText, Ui};
 use x56_core::{CheckStatus, Doctor, DoctorReport};
 
-use crate::icons;
+use crate::theme;
 
 pub struct DoctorTab {
     pub report: DoctorReport,
@@ -23,80 +23,104 @@ impl DoctorTab {
     }
 
     pub fn ui(&mut self, ui: &mut Ui) {
-        ui.heading(x56_core::t!("doc-title"));
-        ui.label(x56_core::t!("doc-subtitle"));
-
-        ui.add_space(8.0);
+        ui.set_min_width(ui.available_width());
 
         ui.horizontal(|ui| {
-            let refresh_lbl = format!("{} {}", icons::REFRESH_CW, x56_core::t!("doc-refresh"));
-            if ui.button(refresh_lbl).clicked() {
-                self.refresh();
-            }
-
-            let status_badge = if self.report.is_healthy() {
-                (
-                    Color32::from_rgb(40, 160, 40),
-                    format!("{} {}", icons::CHECK, x56_core::t!("doc-status-ok")),
-                )
-            } else if self.report.fail_count > 0 {
-                (
-                    Color32::from_rgb(200, 40, 40),
-                    format!("{} {}", icons::X, x56_core::t!("doc-status-fail")),
-                )
-            } else {
-                (
-                    Color32::from_rgb(200, 150, 20),
-                    format!("{} {}", icons::ALERT_TRIANGLE, x56_core::t!("doc-status-warn")),
-                )
-            };
-
-            ui.colored_label(status_badge.0, status_badge.1);
-            let ok_str = self.report.ok_count.to_string();
-            let warn_str = self.report.warn_count.to_string();
-            let fail_str = self.report.fail_count.to_string();
-            ui.label(x56_core::t!("doc-summary", "ok" => &ok_str, "warn" => &warn_str, "fail" => &fail_str));
+            theme::section_heading(ui, &x56_core::t!("doc-title"));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if theme::secondary_button(ui, &x56_core::t!("doc-refresh")).clicked() {
+                    self.refresh();
+                }
+            });
         });
 
-        ui.add_space(10.0);
+        ui.add_space(theme::SPACE_XS);
+        ui.label(
+            RichText::new(x56_core::t!("doc-subtitle"))
+                .color(theme::COLOR_TEXT_SECONDARY)
+                .size(theme::FONT_SMALL),
+        );
+
+        ui.add_space(theme::SPACE_MD);
+
+        let (status_color, status_text) = if self.report.is_healthy() {
+            (theme::COLOR_POSITIVE, x56_core::t!("doc-status-ok"))
+        } else if self.report.fail_count > 0 {
+            (theme::COLOR_NEGATIVE, x56_core::t!("doc-status-fail"))
+        } else {
+            (theme::COLOR_WARNING, x56_core::t!("doc-status-warn"))
+        };
+
+        let ok_str = self.report.ok_count.to_string();
+        let warn_str = self.report.warn_count.to_string();
+        let fail_str = self.report.fail_count.to_string();
+        let summary_text =
+            x56_core::t!("doc-summary", "ok" => &ok_str, "warn" => &warn_str, "fail" => &fail_str);
+
+        ui.horizontal_wrapped(|ui| {
+            theme::status_dot(ui, status_color, 8.0);
+            ui.label(
+                RichText::new(status_text)
+                    .color(theme::COLOR_TEXT_PRIMARY)
+                    .size(theme::FONT_SMALL),
+            );
+            ui.label(
+                RichText::new(summary_text)
+                    .color(theme::COLOR_TEXT_MUTED)
+                    .size(theme::FONT_META)
+                    .monospace(),
+            );
+        });
+
+        ui.add_space(theme::SPACE_MD);
 
         egui::ScrollArea::vertical().show(ui, |ui| {
-            for check in &self.report.checks {
-                ui.group(|ui| {
-                    ui.horizontal(|ui| {
-                        let (badge_col, tag) = match check.status {
-                            CheckStatus::Ok => (
-                                Color32::from_rgb(80, 220, 80),
-                                format!("{} {}", icons::CHECK, x56_core::t!("doc-pass")),
-                            ),
-                            CheckStatus::Warn => (
-                                Color32::from_rgb(255, 200, 50),
-                                format!("{} {}", icons::ALERT_TRIANGLE, x56_core::t!("doc-warn")),
-                            ),
-                            CheckStatus::Fail => (
-                                Color32::from_rgb(255, 70, 70),
-                                format!("{} {}", icons::X, x56_core::t!("doc-fail")),
-                            ),
-                        };
+            ui.set_min_width(ui.available_width());
 
-                        ui.colored_label(badge_col, tag);
-                        ui.label(format!(
-                            "[{}] {}",
-                            check.category.to_uppercase(),
-                            check.title
-                        ));
+            for check in &self.report.checks {
+                theme::subcard_frame().show(ui, |ui| {
+                    ui.set_min_width(ui.available_width());
+
+                    let (dot_col, tag) = match check.status {
+                        CheckStatus::Ok => (theme::COLOR_POSITIVE, x56_core::t!("doc-pass")),
+                        CheckStatus::Warn => (theme::COLOR_WARNING, x56_core::t!("doc-warn")),
+                        CheckStatus::Fail => (theme::COLOR_NEGATIVE, x56_core::t!("doc-fail")),
+                    };
+
+                    ui.horizontal(|ui| {
+                        theme::status_dot(ui, dot_col, 8.0);
+                        ui.label(
+                            RichText::new(tag)
+                                .color(dot_col)
+                                .size(theme::FONT_META)
+                                .monospace(),
+                        );
+                        ui.label(
+                            RichText::new(format!("{} · {}", check.category, check.title))
+                                .color(theme::COLOR_TEXT_PRIMARY)
+                                .size(theme::FONT_BODY),
+                        );
                     });
 
-                    ui.label(format!("  {}", check.message));
-
-                    if let Some(ref remedy) = check.remedy {
-                        ui.colored_label(
-                            Color32::from_rgb(255, 180, 80),
-                            format!("  {} Solución: {}", icons::CORNER_DOWN_RIGHT, remedy),
+                    ui.add_space(theme::SPACE_XS);
+                    ui.indent(("doc_msg", &check.category, &check.title), |ui| {
+                        ui.label(
+                            RichText::new(&check.message)
+                                .color(theme::COLOR_TEXT_SECONDARY)
+                                .size(theme::FONT_SMALL),
                         );
-                    }
+
+                        if let Some(ref remedy) = check.remedy {
+                            ui.add_space(theme::SPACE_XS);
+                            ui.label(
+                                RichText::new(x56_core::t!("doc-remedy", "remedy" => remedy))
+                                    .color(theme::COLOR_WARNING)
+                                    .size(theme::FONT_SMALL),
+                            );
+                        }
+                    });
                 });
-                ui.add_space(4.0);
+                ui.add_space(theme::SPACE_SM);
             }
         });
     }

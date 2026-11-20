@@ -90,39 +90,33 @@ impl Doctor {
         match found_rule {
             Some(path) => {
                 let content = fs::read_to_string(path).unwrap_or_default();
+                let path_str = path.display().to_string();
 
                 if is_udev_rule_complete(&content) {
                     report.add(DoctorCheck {
-                        category: "udev".into(),
-                        title: "Regla udev para acceso sin root".into(),
+                        category: crate::t!("doc-cat-udev"),
+                        title: crate::t!("doc-udev-ok-title"),
                         status: CheckStatus::Ok,
-                        message: format!("Regla activa y completa en {}", path.display()),
+                        message: crate::t!("doc-udev-ok-msg", "path" => path_str.as_str()),
                         remedy: None,
                     });
                 } else {
                     report.add(DoctorCheck {
-                        category: "udev".into(),
-                        title: "Regla udev incompleta".into(),
+                        category: crate::t!("doc-cat-udev"),
+                        title: crate::t!("doc-udev-warn-title"),
                         status: CheckStatus::Warn,
-                        message: format!(
-                            "Regla en {} carece de soporte para uaccess, VIDs soportados (0738/046d) o regla uinput",
-                            path.display()
-                        ),
-                        remedy: Some(
-                            "Reinstala la regla moderna packaging/70-x56.rules en /etc/udev/rules.d/".into(),
-                        ),
+                        message: crate::t!("doc-udev-warn-msg", "path" => path_str.as_str()),
+                        remedy: Some(crate::t!("doc-udev-warn-remedy")),
                     });
                 }
             }
             None => {
                 report.add(DoctorCheck {
-                    category: "udev".into(),
-                    title: "Regla udev no encontrada".into(),
+                    category: crate::t!("doc-cat-udev"),
+                    title: crate::t!("doc-udev-fail-title"),
                     status: CheckStatus::Fail,
-                    message: "No se encontró el archivo 70-x56.rules en las rutas del sistema".into(),
-                    remedy: Some(
-                        "Copia packaging/70-x56.rules a /etc/udev/rules.d/ y ejecuta: sudo udevadm control --reload-rules && sudo udevadm trigger".into(),
-                    ),
+                    message: crate::t!("doc-udev-fail-msg"),
+                    remedy: Some(crate::t!("doc-udev-fail-remedy")),
                 });
             }
         }
@@ -132,11 +126,11 @@ impl Doctor {
         let is_root = unsafe { libc::geteuid() == 0 };
         if is_root {
             report.add(DoctorCheck {
-                category: "permisos".into(),
-                title: "Ejecución como root".into(),
+                category: crate::t!("doc-cat-permissions"),
+                title: crate::t!("doc-root-title"),
                 status: CheckStatus::Warn,
-                message: "Estás ejecutando como root. X56 HOTAS Deck está diseñado para ejecutarse sin privilegios vía uaccess".into(),
-                remedy: Some("Ejecuta como usuario estándar para verificar la seguridad del sistema".into()),
+                message: crate::t!("doc-root-msg"),
+                remedy: Some(crate::t!("doc-root-remedy")),
             });
         }
 
@@ -144,21 +138,19 @@ impl Doctor {
         let in_input_group = Self::is_in_group("input");
         if in_input_group {
             report.add(DoctorCheck {
-                category: "permisos".into(),
-                title: "Grupo 'input'".into(),
+                category: crate::t!("doc-cat-permissions"),
+                title: crate::t!("doc-group-title"),
                 status: CheckStatus::Ok,
-                message:
-                    "El usuario actual pertenece al grupo 'input' (acceso headless garantizado)"
-                        .into(),
+                message: crate::t!("doc-group-in-msg"),
                 remedy: None,
             });
         } else {
             report.add(DoctorCheck {
-                category: "permisos".into(),
-                title: "Grupo 'input'".into(),
+                category: crate::t!("doc-cat-permissions"),
+                title: crate::t!("doc-group-title"),
                 status: CheckStatus::Ok,
-                message: "El usuario no está en el grupo 'input', pero uaccess cubre sesiones locales de escritorio".into(),
-                remedy: Some("Si usas SSH sin sesión de escritorio, añade tu usuario al grupo: sudo usermod -aG input $USER".into()),
+                message: crate::t!("doc-group-out-msg"),
+                remedy: Some(crate::t!("doc-group-out-remedy")),
             });
         }
     }
@@ -167,11 +159,11 @@ impl Doctor {
         let devices = X56Device::enumerate();
         if devices.is_empty() {
             report.add(DoctorCheck {
-                category: "hardware".into(),
-                title: "Detección de dispositivos USB".into(),
+                category: crate::t!("doc-cat-hardware"),
+                title: crate::t!("doc-hw-missing-title"),
                 status: CheckStatus::Warn,
-                message: "No se detectaron periféricos X56 conectados o sus nodos hidraw no son visibles".into(),
-                remedy: Some("Verifica la conexión física del Stick y Throttle a puertos USB 2.0/3.0 estables".into()),
+                message: crate::t!("doc-hw-missing-msg"),
+                remedy: Some(crate::t!("doc-hw-missing-remedy")),
             });
             return;
         }
@@ -179,23 +171,26 @@ impl Doctor {
         let has_stick = devices.iter().any(|d| d.kind == DeviceKind::Stick);
         let has_throttle = devices.iter().any(|d| d.kind == DeviceKind::Throttle);
 
-        let summary = format!(
-            "Detectados: Stick: {}, Throttle: {}",
-            if has_stick {
-                "CONECTADO"
-            } else {
-                "NO DETECTADO"
-            },
-            if has_throttle {
-                "CONECTADO"
-            } else {
-                "NO DETECTADO"
-            }
+        let stick_status = if has_stick {
+            crate::t!("doc-hw-connected")
+        } else {
+            crate::t!("doc-hw-not-detected")
+        };
+        let throttle_status = if has_throttle {
+            crate::t!("doc-hw-connected")
+        } else {
+            crate::t!("doc-hw-not-detected")
+        };
+
+        let summary = crate::t!(
+            "doc-hw-found-msg",
+            "stick" => stick_status.as_str(),
+            "throttle" => throttle_status.as_str()
         );
 
         report.add(DoctorCheck {
-            category: "hardware".into(),
-            title: "Periféricos HOTAS detectados".into(),
+            category: crate::t!("doc-cat-hardware"),
+            title: crate::t!("doc-hw-found-title"),
             status: CheckStatus::Ok,
             message: summary,
             remedy: None,
@@ -206,13 +201,11 @@ impl Doctor {
         let sys_hidraw = Path::new("/sys/class/hidraw");
         if !sys_hidraw.is_dir() {
             report.add(DoctorCheck {
-                category: "kernel".into(),
-                title: "Soporte hidraw en el kernel".into(),
+                category: crate::t!("doc-cat-kernel"),
+                title: crate::t!("doc-hidraw-kernel-title"),
                 status: CheckStatus::Fail,
-                message: "No se encontró el directorio /sys/class/hidraw".into(),
-                remedy: Some(
-                    "Asegúrate de que el módulo 'hidraw' esté cargado en el kernel".into(),
-                ),
+                message: crate::t!("doc-hidraw-kernel-msg"),
+                remedy: Some(crate::t!("doc-hidraw-kernel-remedy")),
             });
             return;
         }
@@ -253,22 +246,22 @@ impl Doctor {
         }
 
         if denied_nodes.is_empty() {
+            let count_str = checked_nodes.to_string();
             report.add(DoctorCheck {
-                category: "hidraw".into(),
-                title: "Permisos de lectura y escritura".into(),
+                category: crate::t!("doc-cat-hidraw"),
+                title: crate::t!("doc-hidraw-ok-title"),
                 status: CheckStatus::Ok,
-                message: format!("Acceso concedido sin root en todos los nodos hidraw ({checked_nodes} nodos verificados)"),
+                message: crate::t!("doc-hidraw-ok-msg", "count" => count_str.as_str()),
                 remedy: None,
             });
         } else {
+            let nodes_str = format!("{denied_nodes:?}");
             report.add(DoctorCheck {
-                category: "hidraw".into(),
-                title: "Permisos insuficientes en hidraw".into(),
+                category: crate::t!("doc-cat-hidraw"),
+                title: crate::t!("doc-hidraw-fail-title"),
                 status: CheckStatus::Fail,
-                message: format!("Permiso denegado en: {:?}", denied_nodes),
-                remedy: Some(
-                    "Verifica la regla udev 70-x56.rules y reconecta los dispositivos USB".into(),
-                ),
+                message: crate::t!("doc-hidraw-fail-msg", "nodes" => nodes_str.as_str()),
+                remedy: Some(crate::t!("doc-hidraw-fail-remedy")),
             });
         }
     }
@@ -285,19 +278,19 @@ impl Doctor {
 
         if has_js {
             report.add(DoctorCheck {
-                category: "simulacion".into(),
-                title: "Driver de joystick del kernel (Interfaz 0)".into(),
+                category: crate::t!("doc-cat-simulation"),
+                title: crate::t!("doc-joydev-title"),
                 status: CheckStatus::Ok,
-                message: "Nodos /dev/input/js* presentes; simuladores de vuelo (DCS, X-Plane) recibirán ejes continuamente".into(),
+                message: crate::t!("doc-joydev-ok-msg"),
                 remedy: None,
             });
         } else {
             report.add(DoctorCheck {
-                category: "simulacion".into(),
-                title: "Driver de joystick del kernel (Interfaz 0)".into(),
+                category: crate::t!("doc-cat-simulation"),
+                title: crate::t!("doc-joydev-title"),
                 status: CheckStatus::Warn,
-                message: "No se detectaron nodos /dev/input/js*".into(),
-                remedy: Some("Asegúrate de que el módulo 'joydev' del kernel esté cargado si usas juegos clásicos".into()),
+                message: crate::t!("doc-joydev-warn-msg"),
+                remedy: Some(crate::t!("doc-joydev-warn-remedy")),
             });
         }
     }
@@ -315,13 +308,12 @@ impl Doctor {
         }
 
         if handshake_ok > 0 {
+            let count_str = handshake_ok.to_string();
             report.add(DoctorCheck {
-                category: "protocolo".into(),
-                title: "Handshake con firmware X56 (Interfaz 2)".into(),
+                category: crate::t!("doc-cat-protocol"),
+                title: crate::t!("doc-handshake-title"),
                 status: CheckStatus::Ok,
-                message: format!(
-                    "Comunicación bidireccional confirmada en {handshake_ok} dispositivo(s)"
-                ),
+                message: crate::t!("doc-handshake-msg", "count" => count_str.as_str()),
                 remedy: None,
             });
         }

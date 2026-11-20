@@ -286,7 +286,7 @@ mod tests {
 
         // 1. English translations
         i18n.set_language(Language::EnUs);
-        assert_eq!(i18n.tr("nav-curves"), "Response Curves");
+        assert_eq!(i18n.tr("nav-curves"), "Response curves");
         assert_eq!(
             i18n.tr_with_args("tray-profile", &[("name", "ALPHA")]),
             "Active profile: ALPHA"
@@ -294,7 +294,7 @@ mod tests {
 
         // 2. Spanish translations
         i18n.set_language(Language::EsEs);
-        assert_eq!(i18n.tr("nav-curves"), "Curvas de Respuesta");
+        assert_eq!(i18n.tr("nav-curves"), "Curvas de respuesta");
         assert_eq!(
             i18n.tr_with_args("tray-profile", &[("name", "ALPHA")]),
             "Perfil activo: ALPHA"
@@ -302,6 +302,45 @@ mod tests {
 
         // 3. Fallback for non-existent key returns key itself
         assert_eq!(i18n.tr("non-existent-key-123"), "non-existent-key-123");
+    }
+
+    #[test]
+    fn test_en_and_es_ftl_parity() {
+        FluentResource::try_new(FTL_EN.to_string()).expect("en-US FTL parses cleanly");
+        FluentResource::try_new(FTL_ES.to_string()).expect("es-ES FTL parses cleanly");
+
+        fn collect_keys(src: &str) -> std::collections::BTreeSet<&str> {
+            src.lines()
+                .filter_map(|line| {
+                    let trimmed = line.trim();
+                    if trimmed.is_empty() || trimmed.starts_with('#') {
+                        None
+                    } else {
+                        trimmed.split_once('=').map(|(k, _)| k.trim())
+                    }
+                })
+                .collect()
+        }
+
+        let en_keys = collect_keys(FTL_EN);
+        let es_keys = collect_keys(FTL_ES);
+
+        let missing_in_es: Vec<_> = en_keys.difference(&es_keys).collect();
+        let missing_in_en: Vec<_> = es_keys.difference(&en_keys).collect();
+        assert!(
+            missing_in_es.is_empty(),
+            "Missing in es-ES: {missing_in_es:?}"
+        );
+        assert!(
+            missing_in_en.is_empty(),
+            "Missing in en-US: {missing_in_en:?}"
+        );
+
+        let i18n = I18n::new();
+        for key in &en_keys {
+            assert!(i18n.en_bundle.has_message(key), "en_bundle missing '{key}'");
+            assert!(i18n.es_bundle.has_message(key), "es_bundle missing '{key}'");
+        }
     }
 
     #[test]
