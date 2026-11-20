@@ -48,7 +48,7 @@ def inspect_zst_pkg(pkg_path: str) -> tuple[dict[str, list[str]], list[str]]:
     try:
         with tarfile.open(fileobj=proc.stdout, mode="r|") as tf:
             for member in tf:
-                clean_name = member.name.lstrip("./")
+                clean_name = member.name.removeprefix("./").lstrip("/")
                 if clean_name == ".PKGINFO":
                     extracted = tf.extractfile(member)
                     if extracted is not None:

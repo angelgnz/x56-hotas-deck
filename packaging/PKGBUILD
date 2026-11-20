@@ -16,17 +16,6 @@ conflicts=('x56-hotas-deck-git' 'x56linux')
 source=("${_pkgname}::git+https://github.com/angelgnz/x56-hotas-deck.git#branch=master")
 sha256sums=('SKIP')
 
-pkgver() {
-  cd "$srcdir/$_pkgname"
-  if git describe --exact-match --tags >/dev/null 2>&1; then
-    git describe --exact-match --tags | sed 's/^v//'
-  elif git describe --long --tags >/dev/null 2>&1; then
-    git describe --long --tags | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
-  else
-    printf "0.2.2.r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
-  fi
-}
-
 prepare() {
   cd "$srcdir/$_pkgname"
   export RUSTUP_TOOLCHAIN=stable
