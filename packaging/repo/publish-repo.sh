@@ -73,12 +73,13 @@ if [ "${#rpms[@]}" -eq 0 ]; then
   exit 1
 fi
 rm -f "${REPO_DIR}/rpm/Packages/x56-hotas-deck-"*.rpm "${REPO_DIR}/rpm/Packages/x56-cli-"*.rpm
-cp -f "${rpms[@]}" "${REPO_DIR}/rpm/Packages/"
-for dest_rpm in "${REPO_DIR}/rpm/Packages/"*.rpm; do
+for src_rpm in "${rpms[@]}"; do
+  dest_rpm="${REPO_DIR}/rpm/Packages/$(basename "${src_rpm}")"
+  cp -f "${src_rpm}" "${dest_rpm}"
   rpmsign \
     --define "_gpg_name ${GPG_KEY_ID}" \
     --define "__gpg $(command -v gpg)" \
-    --addsign "${dest_rpm}"
+    --resign "${dest_rpm}"
 done
 
 createrepo_c --update "${REPO_DIR}/rpm"
