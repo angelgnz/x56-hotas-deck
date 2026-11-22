@@ -14,7 +14,7 @@ The suite provides dual interface binaries:
 Specifically engineered to operate on Linux **without root privileges (`sudo`)** and **without detaching the kernel joystick driver (`usbhid`/`joydev`/`evdev`)**, ensuring that flight and space simulators (*DCS World, X-Plane, Microsoft Flight Simulator, Star Citizen, Elite Dangerous, FlightGear*) continue receiving uninterrupted axis and button inputs while adjusting configuration live.
 
 ![X56 HOTAS Deck — Avionics Vector Control Center](doc/screenshots/01-curves-editor.png)
-*X56 HOTAS Deck (`x56-deck`) — Response Curve Editor, Live 2D Gimbal Monitor, and Physical Spring Selector*
+*X56 HOTAS Deck (`x56-deck`) — Response Curve Editor, Live Axis Telemetry, and Physical Spring Selector*
 
 ---
 
@@ -585,6 +585,17 @@ Directly inspired by **Section 8 of the Official Logitech G X56 HOTAS User Manua
 ### 6. TOML Profile Management
 - Direct top-bar access to `Save TOML Profile` or `Load TOML Profile`.
 - Allows backing up complete profiles (axes, curves, RGB lighting, and full 3-mode button bindings) and sharing them across different flight simulators (*DCS*, *MSFS*, *X-Plane*, *Star Citizen*).
+
+### 7. Hardware Test Bench (`Prueba de hardware`)
+- Simultaneous side-by-side live verification of **Throttle Quadrant** (left) and **Flight Stick** (right), with filter modes (`Both`, `Throttle`, `Stick`) and session reset.
+- Interactive 2D input maps tracking all 33 throttle controls and 18 stick controls with pressed highlights and verified-session checklist markers.
+- Dedicated live axis instruments:
+  - **Main Gimbal + Integrated Twist Z (`X / Y / Z`)** and independent **2D Ministick Gimbals** (`C` push and Throttle Slew mini-gimbal).
+  - **Graduated Vertical Dual Throttle Bars** (`LEFT` / `RIGHT`).
+  - **4 Circular 270° Rotary Dial Gauges** (`RTY 1 (F)`, `RTY 2 (G)`, `RTY 3`, `RTY 4`) with push illumination.
+
+![Hardware Test Bench — Live Input Maps, Gimbals, Throttles & Rotaries](doc/screenshots/06-hardware-test.png)
+*Hardware Test Bench (`Prueba de hardware`) — Simultaneous Throttle & Stick Maps, Gimbals, Dual Throttle Bars, and Circular Rotary Gauges*
 
 ---
 
