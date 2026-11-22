@@ -132,18 +132,23 @@ impl Dir4Interact {
 }
 
 /// Resolved interaction map for an immediate-mode schematic render frame.
-pub struct InteractionMap<'a> {
+pub(crate) struct InteractionMap<'a> {
     pub pressed: &'a HashSet<String>,
     pub hovered: Option<&'a str>,
     pub profile: &'a ProgrammingProfile,
     pub mode: ModeSlot,
+    pub highlighted_ids: Option<&'a HashSet<String>>,
 }
 
 impl InteractionMap<'_> {
     pub fn is_assigned(&self, id: &str) -> bool {
-        self.profile
-            .get_cell(self.mode, id)
-            .is_some_and(|c| c.is_assigned())
+        if let Some(highlighted) = self.highlighted_ids {
+            highlighted.contains(id)
+        } else {
+            self.profile
+                .get_cell(self.mode, id)
+                .is_some_and(|c| c.is_assigned())
+        }
     }
 
     pub fn assigned_dir2(&self, up: &str, down: &str) -> (bool, bool) {
@@ -906,7 +911,7 @@ impl ProgrammingTab {
     // ========================================================================
 
     #[inline]
-    fn compact_vector_map_x(rect: egui::Rect, norm_x: f32, _device: DeviceKind) -> f32 {
+    pub(crate) fn compact_vector_map_x(rect: egui::Rect, norm_x: f32, _device: DeviceKind) -> f32 {
         rect.min.x + norm_x * rect.width()
     }
 
@@ -1005,12 +1010,13 @@ impl ProgrammingTab {
                     hovered: active_hovered,
                     profile: &self.profile,
                     mode: self.selected_mode,
+                    highlighted_ids: None,
                 };
 
                 match self.selected_device {
-                    DeviceKind::Stick => self.draw_vector_stick_silhouette(&painter, rect, &im),
+                    DeviceKind::Stick => Self::draw_vector_stick_silhouette(&painter, rect, &im),
                     DeviceKind::Throttle => {
-                        self.draw_vector_throttle_silhouette(&painter, rect, &im);
+                        Self::draw_vector_throttle_silhouette(&painter, rect, &im);
                     }
                 }
 
@@ -1123,8 +1129,7 @@ impl ProgrammingTab {
     }
 
     /// Draws the anodized graphite Stick chassis silhouette and interactive controls.
-    fn draw_vector_stick_silhouette(
-        &self,
+    pub(crate) fn draw_vector_stick_silhouette(
         painter: &egui::Painter,
         rect: egui::Rect,
         im: &InteractionMap,
@@ -1384,8 +1389,7 @@ impl ProgrammingTab {
     }
 
     /// Draws the restrained Dual Throttle chassis silhouette and all 32 interactive controls.
-    fn draw_vector_throttle_silhouette(
-        &self,
+    pub(crate) fn draw_vector_throttle_silhouette(
         painter: &egui::Painter,
         rect: egui::Rect,
         im: &InteractionMap,
@@ -3496,12 +3500,12 @@ fn unassigned_label() -> String {
     raw.split(" — ").next().unwrap_or(&raw).trim().to_string()
 }
 
-struct ControlMeta {
-    kind: String,
-    group: String,
+pub(crate) struct ControlMeta {
+    pub(crate) kind: String,
+    pub(crate) group: String,
 }
 
-fn control_meta_for(id: &str) -> ControlMeta {
+pub(crate) fn control_meta_for(id: &str) -> ControlMeta {
     let (kind_key, group_key) = match id {
         "stick_trigger" => ("prog-maptype-hold", "prog-group-weapons"),
         "stick_btn_a" => ("prog-maptype-instant", "prog-group-targeting"),
@@ -3536,7 +3540,7 @@ fn control_meta_for(id: &str) -> ControlMeta {
     }
 }
 
-fn localized_node_name_by_id(id: &str, fallback: &str) -> String {
+pub(crate) fn localized_node_name_by_id(id: &str, fallback: &str) -> String {
     let key = match id {
         "stick_pov_up" => Some("prog-label-pov-up"),
         "stick_pov_right" => Some("prog-label-pov-right"),
@@ -3685,18 +3689,18 @@ fn map_key_to_name(key: Key) -> Option<&'static str> {
 // SCHEMATIC NODES FOR 2D VECTOR MAP
 // ============================================================================
 
-struct SchematicNode {
-    id: &'static str,
-    short_label: &'static str,
-    full_name: &'static str,
-    norm_x: f32,
-    norm_y: f32,
-    radius: f32,
-    is_rect: bool,
-    rect_size: Vec2,
+pub(crate) struct SchematicNode {
+    pub(crate) id: &'static str,
+    pub(crate) short_label: &'static str,
+    pub(crate) full_name: &'static str,
+    pub(crate) norm_x: f32,
+    pub(crate) norm_y: f32,
+    pub(crate) radius: f32,
+    pub(crate) is_rect: bool,
+    pub(crate) rect_size: Vec2,
 }
 
-fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
+pub(crate) fn get_device_schematic_nodes(kind: DeviceKind) -> Vec<SchematicNode> {
     match kind {
         DeviceKind::Stick => vec![
             // 1. POV 8-Way (cx = 0.330, cy = 0.242)

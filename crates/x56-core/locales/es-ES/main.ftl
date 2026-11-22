@@ -12,6 +12,8 @@ nav-rgb-subtitle = Colores LED y cero Hall
 nav-calibrate = Calibración Hall
 nav-doctor = Perfiles y diagnóstico
 nav-doctor-subtitle = Perfiles TOML y diagnóstico
+nav-test = Prueba de hardware
+nav-test-subtitle = Prueba en vivo de botones y ejes
 
 # Acciones y Estado de Barra Superior
 header-profile = Perfil
@@ -665,3 +667,34 @@ profile-saved = Perfil guardado en disco
 profile-loaded = Perfil cargado
 filter-toml = Perfiles TOML (*.toml)
 filter-all = Todos los archivos (*.*)
+
+# Módulo de Prueba de Hardware (Botones y Ejes)
+hwtest-title = Prueba de hardware (botones y ejes)
+hwtest-filter-both = Ambos
+hwtest-filter-stick = Palanca
+hwtest-filter-throttle = Acelerador
+hwtest-reset = Reiniciar prueba
+hwtest-reset-tooltip = Limpiar registro de botones y ejes probados en esta sesión
+hwtest-progress-stick = Palanca: { $tested }/{ $total }
+hwtest-progress-throttle = Acelerador: { $tested }/{ $total }
+hwtest-progress-axes = Ejes: { $tested }/{ $total }
+hwtest-stick-map-title = Mapa de entradas · Palanca X56
+hwtest-throttle-map-title = Mapa de entradas · Acelerador X56
+hwtest-stick-axes-title = Ejes de la palanca
+hwtest-throttle-axes-title = Ejes del acelerador
+hwtest-main-gimbal = Gimbal principal (X / Y) + Torsión Z
+hwtest-stick-ministick = Minipalanca C (slew X / Y)
+hwtest-thr-ministick = Mini-gimbal del acelerador (slew X / Y)
+hwtest-dual-throttle = Aceleradores izquierdo y derecho
+hwtest-thr-left = IZQ
+hwtest-thr-right = DER
+hwtest-rotaries-title = Controles rotatorios
+hwtest-rty-1 = RTY 1 (F)
+hwtest-rty-2 = RTY 2 (G)
+hwtest-rty-3 = RTY 3
+hwtest-rty-4 = RTY 4
+hwtest-status-tested = Probado
+hwtest-status-pending = Pendiente
+hwtest-status-pressed = Pulsado
+hwtest-last-button = Último botón: { $name } ({ $id })
+hwtest-last-button-none = Último botón: Ninguno — pulsa cualquier control para verificar

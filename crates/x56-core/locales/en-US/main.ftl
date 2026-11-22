@@ -13,6 +13,8 @@ nav-rgb-subtitle = LED colors and Hall center zero
 nav-calibrate = Hall calibration
 nav-doctor = Profiles & diagnostics
 nav-doctor-subtitle = TOML profiles and system checks
+nav-test = Hardware test
+nav-test-subtitle = Live button and axis tester
 
 # Header Bar Actions & Status
 header-profile = Profile
@@ -666,3 +668,34 @@ profile-saved = Profile saved to disk
 profile-loaded = Profile loaded
 filter-toml = TOML profiles (*.toml)
 filter-all = All files (*.*)
+
+# Hardware Test Module (Buttons & Axes)
+hwtest-title = Hardware test (buttons & axes)
+hwtest-filter-both = Both
+hwtest-filter-stick = Stick
+hwtest-filter-throttle = Throttle
+hwtest-reset = Reset test
+hwtest-reset-tooltip = Clear tested buttons and axes recorded in this session
+hwtest-progress-stick = Stick: { $tested }/{ $total }
+hwtest-progress-throttle = Throttle: { $tested }/{ $total }
+hwtest-progress-axes = Axes: { $tested }/{ $total }
+hwtest-stick-map-title = Input map · X56 Stick
+hwtest-throttle-map-title = Input map · X56 Throttle
+hwtest-stick-axes-title = Stick axes
+hwtest-throttle-axes-title = Throttle axes
+hwtest-main-gimbal = Main gimbal (X / Y) + Twist Z
+hwtest-stick-ministick = C ministick (slew X / Y)
+hwtest-thr-ministick = Throttle mini-gimbal (slew X / Y)
+hwtest-dual-throttle = Left & right throttles
+hwtest-thr-left = LEFT
+hwtest-thr-right = RIGHT
+hwtest-rotaries-title = Rotary controls
+hwtest-rty-1 = RTY 1 (F)
+hwtest-rty-2 = RTY 2 (G)
+hwtest-rty-3 = RTY 3
+hwtest-rty-4 = RTY 4
+hwtest-status-tested = Tested
+hwtest-status-pending = Pending
+hwtest-status-pressed = Pressed
+hwtest-last-button = Last button: { $name } ({ $id })
+hwtest-last-button-none = Last button: None — press any control to verify
