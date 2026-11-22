@@ -2,7 +2,7 @@
 # Contributor: Community
 pkgname=x56-hotas-deck
 _pkgname=x56-hotas-deck
-pkgver=0.2.3
+pkgver=0.2.4
 pkgrel=1
 pkgdesc="X56 HOTAS Deck - Configurador y controlador en espacio de usuario para HOTAS Saitek / Logitech G X56 (CLI y GUI Avionics Vector)"
 arch=('x86_64')

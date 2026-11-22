@@ -19,6 +19,7 @@ use crate::icons;
 use crate::tabs::calibrate::CalibrateTab;
 use crate::tabs::curves::CurvesTab;
 use crate::tabs::doctor::DoctorTab;
+use crate::tabs::hardware_test::HardwareTestTab;
 use crate::tabs::programming::ProgrammingTab;
 use crate::tabs::rgb::RgbTab;
 use crate::theme::{
@@ -40,6 +41,8 @@ pub enum ActiveSubsystem {
     RgbCalibrate,
     /// 4. Perfiles & Exportación (Gestión de perfiles TOML y Diagnóstico Doctor).
     Profiles,
+    /// 5. Prueba de Hardware (Mapas de entradas, gimbals, aceleradores y rotatorios en vivo).
+    HardwareTest,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,6 +58,7 @@ pub struct X56App {
     pub rgb_tab: RgbTab,
     pub calibrate_tab: CalibrateTab,
     pub doctor_tab: DoctorTab,
+    pub hardware_test_tab: HardwareTestTab,
     pub poller: LiveInputPoller,
     pub button_monitor: ButtonMonitor,
 
@@ -101,6 +105,7 @@ impl Default for X56App {
             rgb_tab: RgbTab::default(),
             calibrate_tab: CalibrateTab::default(),
             doctor_tab: DoctorTab::default(),
+            hardware_test_tab: HardwareTestTab::default(),
             poller: LiveInputPoller::new(),
             button_monitor: ButtonMonitor::new(),
             stick_node: None,
@@ -605,6 +610,7 @@ impl X56App {
                     icons::LIGHTBULB,
                     t!("nav-rgb"),
                 ),
+                (ActiveSubsystem::HardwareTest, icons::GAUGE, t!("nav-test")),
                 (ActiveSubsystem::Profiles, icons::BOXES, t!("nav-doctor")),
             ];
 
@@ -719,6 +725,7 @@ impl X56App {
                     icons::LIGHTBULB,
                     t!("nav-rgb"),
                 ),
+                (ActiveSubsystem::HardwareTest, icons::GAUGE, t!("nav-test")),
                 (ActiveSubsystem::Profiles, icons::BOXES, t!("nav-doctor")),
             ];
 
@@ -1104,13 +1111,13 @@ impl X56App {
                     format!("{} {}", icons::PLAY, t!("dock-test"))
                 };
 
-                let test_resp = if self.show_live_test_modal {
+                let test_resp = if self.active_subsystem == ActiveSubsystem::HardwareTest {
                     theme::segmented_button(ui, &test_lbl, true)
                 } else {
                     theme::ghost_button(ui, &test_lbl)
                 };
                 if test_resp.on_hover_text(t!("dock-test-tooltip")).clicked() {
-                    self.show_live_test_modal = !self.show_live_test_modal;
+                    self.active_subsystem = ActiveSubsystem::HardwareTest;
                 }
             });
         });
@@ -1428,7 +1435,7 @@ impl eframe::App for X56App {
         if self.window_visible_state {
             if matches!(
                 self.active_subsystem,
-                ActiveSubsystem::Curves | ActiveSubsystem::Mapping
+                ActiveSubsystem::Curves | ActiveSubsystem::Mapping | ActiveSubsystem::HardwareTest
             ) || self.show_live_test_modal
             {
                 ui.ctx()
@@ -1516,6 +1523,14 @@ impl eframe::App for X56App {
                         .ui(ui, &self.button_monitor, &self.poller)
                 }
                 ActiveSubsystem::RgbCalibrate => self.render_rgb_calibrate_subsystem(ui),
+                ActiveSubsystem::HardwareTest => {
+                    self.hardware_test_tab.ui(
+                        ui,
+                        &self.poller,
+                        &self.button_monitor,
+                        &self.programming_tab.profile,
+                    );
+                }
                 ActiveSubsystem::Profiles => self.render_profiles_subsystem(ui),
             });
 
