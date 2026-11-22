@@ -10,7 +10,7 @@ use x56_core::{
     TriggeredCommandEvent,
 };
 
-use crate::curve_math::{LiveAxesState, LiveInputPoller};
+use crate::curve_math::LiveInputPoller;
 use crate::icons;
 use crate::theme::{
     self, COLOR_ACCENT, COLOR_ACCENT_BORDER, COLOR_BORDER_HAIRLINE, COLOR_BORDER_STRONG,
@@ -249,12 +249,11 @@ impl ProgrammingTab {
     }
 
     /// Main UI entry point for the button programming tab.
-    pub fn ui(&mut self, ui: &mut Ui, monitor: &ButtonMonitor, poller: &LiveInputPoller) {
+    pub fn ui(&mut self, ui: &mut Ui, monitor: &ButtonMonitor, _poller: &LiveInputPoller) {
         let avail_w = ui.available_width();
         ui.set_max_width(avail_w);
 
         let snapshot = monitor.snapshot();
-        let live_axes = poller.get_state();
 
         if self.follow_hardware_mode {
             self.selected_mode = snapshot.active_mode;
@@ -338,15 +337,6 @@ impl ProgrammingTab {
                                     self.render_vector_map_card(ui, &snapshot);
                                     ui.add_space(SPACE_MD);
 
-                                    if self.selected_device == DeviceKind::Stick {
-                                        self.render_pov_compass_card(ui, &snapshot);
-                                    } else {
-                                        self.render_throttle_ministick_card(
-                                            ui, &snapshot, &live_axes,
-                                        );
-                                    }
-                                    ui.add_space(SPACE_MD);
-
                                     self.render_quick_macro_actions(ui);
                                     ui.add_space(SPACE_SM);
                                 });
@@ -389,13 +379,6 @@ impl ProgrammingTab {
                         ui.add_space(SPACE_MD);
 
                         self.render_vector_map_card(ui, &snapshot);
-                        ui.add_space(SPACE_MD);
-
-                        if self.selected_device == DeviceKind::Stick {
-                            self.render_pov_compass_card(ui, &snapshot);
-                        } else {
-                            self.render_throttle_ministick_card(ui, &snapshot, &live_axes);
-                        }
                         ui.add_space(SPACE_MD);
 
                         self.render_quick_macro_actions(ui);
@@ -2339,227 +2322,7 @@ impl ProgrammingTab {
     }
 
     // ========================================================================
-    // 4. CONTEXTUAL POV COMPASS & THROTTLE MINI-GIMBAL
-    // ========================================================================
-
-    fn render_pov_compass_card(&self, ui: &mut Ui, snapshot: &LiveButtonsSnapshot) {
-        theme::card_frame().show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            theme::section_heading(ui, &x56_core::t!("prog-pov-title"));
-            ui.add_space(SPACE_SM);
-
-            let up = snapshot.pressed_buttons.contains("stick_pov_up");
-            let right = snapshot.pressed_buttons.contains("stick_pov_right");
-            let down = snapshot.pressed_buttons.contains("stick_pov_down");
-            let left = snapshot.pressed_buttons.contains("stick_pov_left");
-
-            let (angle_str, abs_x, abs_y, dir_idx) = match (up, right, down, left) {
-                (true, true, _, _) => (x56_core::t!("prog-pov-ne"), 1, -1, Some(1)),
-                (true, _, _, true) => (x56_core::t!("prog-pov-nw"), -1, -1, Some(7)),
-                (true, _, _, _) => (x56_core::t!("prog-pov-n"), 0, -1, Some(0)),
-                (_, true, true, _) => (x56_core::t!("prog-pov-se"), 1, 1, Some(3)),
-                (_, _, true, true) => (x56_core::t!("prog-pov-sw"), -1, 1, Some(5)),
-                (_, _, true, _) => (x56_core::t!("prog-pov-s"), 0, 1, Some(4)),
-                (_, true, _, _) => (x56_core::t!("prog-pov-e"), 1, 0, Some(2)),
-                (_, _, _, true) => (x56_core::t!("prog-pov-w"), -1, 0, Some(6)),
-                _ => (x56_core::t!("prog-pov-center"), 0, 0, None),
-            };
-
-            ui.horizontal(|ui| {
-                let compass_size = Vec2::new(124.0, 114.0);
-                let (_, painter) = ui.allocate_painter(compass_size, egui::Sense::hover());
-                let c = painter.clip_rect().center();
-                let r = 42.0;
-
-                // Quiet #0f0f10 instrument dial
-                painter.circle_filled(c, r + 14.0, COLOR_SURFACE_LOWEST);
-                painter.circle_stroke(c, r + 14.0, Stroke::new(1.0, COLOR_BORDER_HAIRLINE));
-                painter.circle_stroke(c, r, Stroke::new(1.0, COLOR_BORDER_HAIRLINE));
-                painter.circle_stroke(c, 16.0, Stroke::new(1.0, COLOR_BORDER_SUBTLE));
-                painter.line_segment(
-                    [egui::pos2(c.x - r, c.y), egui::pos2(c.x + r, c.y)],
-                    Stroke::new(0.5, COLOR_BORDER_SUBTLE),
-                );
-                painter.line_segment(
-                    [egui::pos2(c.x, c.y - r), egui::pos2(c.x, c.y + r)],
-                    Stroke::new(0.5, COLOR_BORDER_SUBTLE),
-                );
-
-                let dir_names = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-                for (i, name) in dir_names.iter().enumerate() {
-                    let rad: f32 =
-                        (i as f32) * std::f32::consts::FRAC_PI_4 - std::f32::consts::FRAC_PI_2;
-                    let p = egui::pos2(c.x + r * rad.cos(), c.y + r * rad.sin());
-                    let is_active_dir = dir_idx == Some(i);
-
-                    let (col, dot_r) = if is_active_dir {
-                        (COLOR_POSITIVE, 4.0)
-                    } else {
-                        (COLOR_BORDER_STRONG, 2.0)
-                    };
-                    if is_active_dir {
-                        painter.line_segment([c, p], Stroke::new(1.5, COLOR_POSITIVE));
-                    }
-                    painter.circle_filled(p, dot_r, col);
-
-                    let text_p =
-                        egui::pos2(c.x + (r + 9.0) * rad.cos(), c.y + (r + 9.0) * rad.sin());
-                    painter.text(
-                        text_p,
-                        egui::Align2::CENTER_CENTER,
-                        *name,
-                        egui::FontId::monospace(8.5),
-                        if is_active_dir {
-                            COLOR_POSITIVE
-                        } else {
-                            COLOR_TEXT_MUTED
-                        },
-                    );
-                }
-
-                if dir_idx.is_none() {
-                    painter.circle_filled(c, 3.5, COLOR_ACCENT);
-                }
-
-                ui.add_space(SPACE_SM);
-
-                ui.vertical(|ui| {
-                    ui.label(
-                        RichText::new(x56_core::t!("prog-pov-angle"))
-                            .color(COLOR_TEXT_MUTED)
-                            .size(FONT_META),
-                    );
-                    ui.label(
-                        RichText::new(angle_str)
-                            .color(if dir_idx.is_some() {
-                                COLOR_POSITIVE
-                            } else {
-                                COLOR_TEXT_PRIMARY
-                            })
-                            .size(FONT_BODY)
-                            .monospace(),
-                    );
-                    ui.add_space(SPACE_XS);
-                    theme::meta_kv(ui, "ABS_HAT0X", &format!("{:+}", abs_x), COLOR_TEXT_PRIMARY);
-                    theme::meta_kv(ui, "ABS_HAT0Y", &format!("{:+}", abs_y), COLOR_TEXT_PRIMARY);
-                });
-            });
-        });
-    }
-
-    fn render_throttle_ministick_card(
-        &self,
-        ui: &mut Ui,
-        snapshot: &LiveButtonsSnapshot,
-        live_state: &LiveAxesState,
-    ) {
-        theme::card_frame().show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            theme::section_heading(ui, &x56_core::t!("prog-minigimbal-title"));
-            ui.add_space(SPACE_SM);
-
-            let is_pushed = snapshot.pressed_buttons.contains("thr_ministick_push");
-            let (mag, deg) = live_state.throttle_gimbal_vector();
-            let gx = live_state.throttle_ministick_x as f32;
-            let gy = live_state.throttle_ministick_y as f32;
-
-            ui.horizontal(|ui| {
-                let radar_size = Vec2::new(124.0, 114.0);
-                let (_, painter) = ui.allocate_painter(radar_size, egui::Sense::hover());
-                let c = painter.clip_rect().center();
-                let r = 42.0;
-
-                // Quiet #0f0f10 instrument dial
-                painter.circle_filled(c, r + 14.0, COLOR_SURFACE_LOWEST);
-                painter.circle_stroke(c, r + 14.0, Stroke::new(1.0, COLOR_BORDER_HAIRLINE));
-                painter.circle_stroke(c, r, Stroke::new(1.0, COLOR_BORDER_HAIRLINE));
-                painter.circle_stroke(c, r * 0.5, Stroke::new(0.8, COLOR_BORDER_SUBTLE));
-                painter.line_segment(
-                    [egui::pos2(c.x - r, c.y), egui::pos2(c.x + r, c.y)],
-                    Stroke::new(0.5, COLOR_BORDER_SUBTLE),
-                );
-                painter.line_segment(
-                    [egui::pos2(c.x, c.y - r), egui::pos2(c.x, c.y + r)],
-                    Stroke::new(0.5, COLOR_BORDER_SUBTLE),
-                );
-
-                let dot_pos = egui::pos2(c.x + gx * r, c.y - gy * r);
-                let dot_col = if is_pushed {
-                    COLOR_ACCENT
-                } else {
-                    COLOR_POSITIVE
-                };
-                painter.line_segment([c, dot_pos], Stroke::new(1.5, dot_col));
-                painter.circle_filled(dot_pos, 4.0, dot_col);
-
-                ui.add_space(SPACE_SM);
-
-                ui.vertical(|ui| {
-                    ui.label(
-                        RichText::new(x56_core::t!("prog-minigimbal-deflection"))
-                            .color(COLOR_TEXT_MUTED)
-                            .size(FONT_META),
-                    );
-                    ui.label(
-                        RichText::new(format!(
-                            "X {:+.3}  Y {:+.3}",
-                            live_state.throttle_ministick_x, live_state.throttle_ministick_y
-                        ))
-                        .color(COLOR_TEXT_PRIMARY)
-                        .size(FONT_SMALL)
-                        .monospace(),
-                    );
-                    ui.label(
-                        RichText::new(format!("{:.3}  {:03.0}°", mag, deg))
-                            .color(COLOR_TEXT_SECONDARY)
-                            .size(FONT_META)
-                            .monospace(),
-                    );
-                    ui.add_space(SPACE_XS);
-                    ui.horizontal_wrapped(|ui| {
-                        ui.spacing_mut().item_spacing = Vec2::new(SPACE_SM, SPACE_XS);
-                        theme::meta_kv(
-                            ui,
-                            "ABS_RX",
-                            &format!("{:+.3}", live_state.throttle_ministick_x),
-                            COLOR_TEXT_PRIMARY,
-                        );
-                        theme::meta_kv(
-                            ui,
-                            "ABS_RY",
-                            &format!("{:+.3}", live_state.throttle_ministick_y),
-                            COLOR_TEXT_PRIMARY,
-                        );
-                    });
-                    ui.horizontal(|ui| {
-                        let (push_txt, push_col) = if is_pushed {
-                            (x56_core::t!("prog-minigimbal-pressed"), COLOR_POSITIVE)
-                        } else {
-                            (x56_core::t!("prog-minigimbal-idle"), COLOR_TEXT_SECONDARY)
-                        };
-                        theme::status_dot(
-                            ui,
-                            if is_pushed {
-                                COLOR_POSITIVE
-                            } else {
-                                COLOR_TEXT_MUTED
-                            },
-                            6.0,
-                        );
-                        theme::meta_kv(
-                            ui,
-                            &x56_core::t!("prog-minigimbal-push-btn"),
-                            &push_txt,
-                            push_col,
-                        );
-                    });
-                });
-            });
-        });
-    }
-
-    // ========================================================================
-    // 5. QUICK MACRO ACTIONS & RECORDER DRAWER
+    // 4. QUICK MACRO ACTIONS & RECORDER DRAWER
     // ========================================================================
 
     fn render_quick_macro_actions(&mut self, ui: &mut Ui) {
