@@ -383,7 +383,8 @@ pub fn dock_frame() -> Frame {
 
 /// Primary off-white CTA button (`#ededed` bg, `#ffffff` hover, `#141415` text, `r=8`, `min_h=32`).
 pub fn primary_button(ui: &mut Ui, text: &str) -> egui::Response {
-    ui.scope(|ui| {
+    let prev_widgets = ui.visuals().widgets.clone();
+    {
         let visuals = ui.visuals_mut();
         visuals.widgets.inactive.weak_bg_fill = COLOR_CTA_BG;
         visuals.widgets.inactive.bg_fill = COLOR_CTA_BG;
@@ -397,42 +398,43 @@ pub fn primary_button(ui: &mut Ui, text: &str) -> egui::Response {
         visuals.widgets.active.bg_fill = Color32::from_rgb(0xd4, 0xd4, 0xd8);
         visuals.widgets.active.bg_stroke = Stroke::NONE;
         visuals.widgets.active.fg_stroke = Stroke::new(1.0, COLOR_CTA_TEXT);
-
-        let rich = RichText::new(text).color(COLOR_CTA_TEXT).size(FONT_SMALL);
-        ui.add(
-            egui::Button::new(rich)
-                .corner_radius(CornerRadius::same(RADIUS_CONTROL))
-                .min_size(Vec2::new(0.0, 32.0)),
-        )
-    })
-    .inner
+    }
+    let rich = RichText::new(text).color(COLOR_CTA_TEXT).size(FONT_SMALL);
+    let resp = ui.add(
+        egui::Button::new(rich)
+            .wrap_mode(egui::TextWrapMode::Extend)
+            .corner_radius(CornerRadius::same(RADIUS_CONTROL))
+            .min_size(Vec2::new(0.0, 32.0)),
+    );
+    ui.visuals_mut().widgets = prev_widgets;
+    resp
 }
 
 /// Secondary raised surface button (`#232325`, 1px hairline, `#ededed` text, `r=8`, `min_h=32`).
 pub fn secondary_button(ui: &mut Ui, text: &str) -> egui::Response {
-    let resp = ui
-        .scope(|ui| {
-            let visuals = ui.visuals_mut();
-            visuals.widgets.inactive.weak_bg_fill = COLOR_SURFACE_HIGH;
-            visuals.widgets.inactive.bg_fill = COLOR_SURFACE_HIGH;
-            visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, COLOR_BORDER_HAIRLINE);
-            visuals.widgets.hovered.weak_bg_fill = COLOR_SURFACE_HIGHEST;
-            visuals.widgets.hovered.bg_fill = COLOR_SURFACE_HIGHEST;
-            visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, COLOR_BORDER_STRONG);
-            visuals.widgets.active.weak_bg_fill = COLOR_SURFACE_BRIGHT;
-            visuals.widgets.active.bg_fill = COLOR_SURFACE_BRIGHT;
-            visuals.widgets.active.bg_stroke = Stroke::new(1.0, COLOR_BORDER_STRONG);
-
-            let rich = RichText::new(text)
-                .color(COLOR_TEXT_PRIMARY)
-                .size(FONT_SMALL);
-            ui.add(
-                egui::Button::new(rich)
-                    .corner_radius(CornerRadius::same(RADIUS_CONTROL))
-                    .min_size(Vec2::new(0.0, 32.0)),
-            )
-        })
-        .inner;
+    let prev_widgets = ui.visuals().widgets.clone();
+    {
+        let visuals = ui.visuals_mut();
+        visuals.widgets.inactive.weak_bg_fill = COLOR_SURFACE_HIGH;
+        visuals.widgets.inactive.bg_fill = COLOR_SURFACE_HIGH;
+        visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, COLOR_BORDER_HAIRLINE);
+        visuals.widgets.hovered.weak_bg_fill = COLOR_SURFACE_HIGHEST;
+        visuals.widgets.hovered.bg_fill = COLOR_SURFACE_HIGHEST;
+        visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, COLOR_BORDER_STRONG);
+        visuals.widgets.active.weak_bg_fill = COLOR_SURFACE_BRIGHT;
+        visuals.widgets.active.bg_fill = COLOR_SURFACE_BRIGHT;
+        visuals.widgets.active.bg_stroke = Stroke::new(1.0, COLOR_BORDER_STRONG);
+    }
+    let rich = RichText::new(text)
+        .color(COLOR_TEXT_PRIMARY)
+        .size(FONT_SMALL);
+    let resp = ui.add(
+        egui::Button::new(rich)
+            .wrap_mode(egui::TextWrapMode::Extend)
+            .corner_radius(CornerRadius::same(RADIUS_CONTROL))
+            .min_size(Vec2::new(0.0, 32.0)),
+    );
+    ui.visuals_mut().widgets = prev_widgets;
 
     if ui.is_rect_visible(resp.rect) {
         let r = resp.rect;
@@ -447,7 +449,8 @@ pub fn secondary_button(ui: &mut Ui, text: &str) -> egui::Response {
 
 /// Quiet transparent ghost button (`#a1a1a6` text, `#232325` hover fill, `r=8`, `min_h=32`).
 pub fn ghost_button(ui: &mut Ui, text: &str) -> egui::Response {
-    ui.scope(|ui| {
+    let prev_widgets = ui.visuals().widgets.clone();
+    {
         let visuals = ui.visuals_mut();
         visuals.widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
         visuals.widgets.inactive.bg_fill = Color32::TRANSPARENT;
@@ -458,17 +461,18 @@ pub fn ghost_button(ui: &mut Ui, text: &str) -> egui::Response {
         visuals.widgets.active.weak_bg_fill = COLOR_SURFACE_HIGHEST;
         visuals.widgets.active.bg_fill = COLOR_SURFACE_HIGHEST;
         visuals.widgets.active.bg_stroke = Stroke::new(1.0, COLOR_BORDER_HAIRLINE);
-
-        let rich = RichText::new(text)
-            .color(COLOR_TEXT_SECONDARY)
-            .size(FONT_SMALL);
-        ui.add(
-            egui::Button::new(rich)
-                .corner_radius(CornerRadius::same(RADIUS_CONTROL))
-                .min_size(Vec2::new(0.0, 32.0)),
-        )
-    })
-    .inner
+    }
+    let rich = RichText::new(text)
+        .color(COLOR_TEXT_SECONDARY)
+        .size(FONT_SMALL);
+    let resp = ui.add(
+        egui::Button::new(rich)
+            .wrap_mode(egui::TextWrapMode::Extend)
+            .corner_radius(CornerRadius::same(RADIUS_CONTROL))
+            .min_size(Vec2::new(0.0, 32.0)),
+    );
+    ui.visuals_mut().widgets = prev_widgets;
+    resp
 }
 
 /// Destructive action button (`#e5484d` semantic red text and subtle tint, `r=8`, `min_h=32`).
@@ -478,7 +482,8 @@ pub fn danger_button(ui: &mut Ui, text: &str) -> egui::Response {
     let active_bg = Color32::from_rgba_unmultiplied_const(229, 72, 77, 68);
     let border = Color32::from_rgba_unmultiplied_const(229, 72, 77, 92);
 
-    ui.scope(|ui| {
+    let prev_widgets = ui.visuals().widgets.clone();
+    {
         let visuals = ui.visuals_mut();
         visuals.widgets.inactive.weak_bg_fill = rest_bg;
         visuals.widgets.inactive.bg_fill = rest_bg;
@@ -489,20 +494,22 @@ pub fn danger_button(ui: &mut Ui, text: &str) -> egui::Response {
         visuals.widgets.active.weak_bg_fill = active_bg;
         visuals.widgets.active.bg_fill = active_bg;
         visuals.widgets.active.bg_stroke = Stroke::new(1.0, COLOR_NEGATIVE);
-
-        let rich = RichText::new(text).color(COLOR_NEGATIVE).size(FONT_SMALL);
-        ui.add(
-            egui::Button::new(rich)
-                .corner_radius(CornerRadius::same(RADIUS_CONTROL))
-                .min_size(Vec2::new(0.0, 32.0)),
-        )
-    })
-    .inner
+    }
+    let rich = RichText::new(text).color(COLOR_NEGATIVE).size(FONT_SMALL);
+    let resp = ui.add(
+        egui::Button::new(rich)
+            .wrap_mode(egui::TextWrapMode::Extend)
+            .corner_radius(CornerRadius::same(RADIUS_CONTROL))
+            .min_size(Vec2::new(0.0, 32.0)),
+    );
+    ui.visuals_mut().widgets = prev_widgets;
+    resp
 }
 
 /// Segmented selector button (`r=8`, `min_h=32`, single Instrument Cyan border when selected).
 pub fn segmented_button(ui: &mut Ui, text: &str, selected: bool) -> egui::Response {
-    ui.scope(|ui| {
+    let prev_widgets = ui.visuals().widgets.clone();
+    {
         let visuals = ui.visuals_mut();
         if selected {
             visuals.widgets.inactive.weak_bg_fill = COLOR_ACCENT_SOFT;
@@ -519,20 +526,21 @@ pub fn segmented_button(ui: &mut Ui, text: &str, selected: bool) -> egui::Respon
             visuals.widgets.hovered.bg_fill = COLOR_SURFACE_HIGH;
             visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, COLOR_BORDER_STRONG);
         }
-
-        let text_col = if selected {
-            COLOR_TEXT_PRIMARY
-        } else {
-            COLOR_TEXT_SECONDARY
-        };
-        let rich = RichText::new(text).color(text_col).size(FONT_SMALL);
-        ui.add(
-            egui::Button::new(rich)
-                .corner_radius(CornerRadius::same(RADIUS_CONTROL))
-                .min_size(Vec2::new(0.0, 32.0)),
-        )
-    })
-    .inner
+    }
+    let text_col = if selected {
+        COLOR_TEXT_PRIMARY
+    } else {
+        COLOR_TEXT_SECONDARY
+    };
+    let rich = RichText::new(text).color(text_col).size(FONT_SMALL);
+    let resp = ui.add(
+        egui::Button::new(rich)
+            .wrap_mode(egui::TextWrapMode::Extend)
+            .corner_radius(CornerRadius::same(RADIUS_CONTROL))
+            .min_size(Vec2::new(0.0, 32.0)),
+    );
+    ui.visuals_mut().widgets = prev_widgets;
+    resp
 }
 
 /// Recessed keycap well (`#0f0f10`, 1px hairline, `r=4`, `12px` mono `#ededed`).
@@ -567,41 +575,41 @@ pub fn keycap(ui: &mut Ui, text: &str) {
 
 /// Tactile selector detent for M1 / M2 / S1 mode switches (`r=8`, `min_h=28`).
 pub fn mode_detent(ui: &mut Ui, label: &str, selected: bool) -> egui::Response {
-    let resp = ui
-        .scope(|ui| {
-            let visuals = ui.visuals_mut();
-            if selected {
-                visuals.widgets.inactive.weak_bg_fill = COLOR_ACCENT_SOFT;
-                visuals.widgets.inactive.bg_fill = COLOR_ACCENT_SOFT;
-                visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, COLOR_ACCENT_BORDER);
-                visuals.widgets.hovered.weak_bg_fill = COLOR_ACCENT_SOFT;
-                visuals.widgets.hovered.bg_fill = COLOR_ACCENT_SOFT;
-                visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, COLOR_ACCENT);
-            } else {
-                visuals.widgets.inactive.weak_bg_fill = COLOR_SURFACE_HIGH;
-                visuals.widgets.inactive.bg_fill = COLOR_SURFACE_HIGH;
-                visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, COLOR_BORDER_HAIRLINE);
-                visuals.widgets.hovered.weak_bg_fill = COLOR_SURFACE_HIGHEST;
-                visuals.widgets.hovered.bg_fill = COLOR_SURFACE_HIGHEST;
-                visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, COLOR_BORDER_STRONG);
-            }
-
-            let text_col = if selected {
-                COLOR_ACCENT
-            } else {
-                COLOR_TEXT_SECONDARY
-            };
-            let rich = RichText::new(label)
-                .color(text_col)
-                .size(FONT_META)
-                .monospace();
-            ui.add(
-                egui::Button::new(rich)
-                    .corner_radius(CornerRadius::same(RADIUS_CONTROL))
-                    .min_size(Vec2::new(0.0, 28.0)),
-            )
-        })
-        .inner;
+    let prev_widgets = ui.visuals().widgets.clone();
+    {
+        let visuals = ui.visuals_mut();
+        if selected {
+            visuals.widgets.inactive.weak_bg_fill = COLOR_ACCENT_SOFT;
+            visuals.widgets.inactive.bg_fill = COLOR_ACCENT_SOFT;
+            visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, COLOR_ACCENT_BORDER);
+            visuals.widgets.hovered.weak_bg_fill = COLOR_ACCENT_SOFT;
+            visuals.widgets.hovered.bg_fill = COLOR_ACCENT_SOFT;
+            visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, COLOR_ACCENT);
+        } else {
+            visuals.widgets.inactive.weak_bg_fill = COLOR_SURFACE_HIGH;
+            visuals.widgets.inactive.bg_fill = COLOR_SURFACE_HIGH;
+            visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, COLOR_BORDER_HAIRLINE);
+            visuals.widgets.hovered.weak_bg_fill = COLOR_SURFACE_HIGHEST;
+            visuals.widgets.hovered.bg_fill = COLOR_SURFACE_HIGHEST;
+            visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, COLOR_BORDER_STRONG);
+        }
+    }
+    let text_col = if selected {
+        COLOR_ACCENT
+    } else {
+        COLOR_TEXT_SECONDARY
+    };
+    let rich = RichText::new(label)
+        .color(text_col)
+        .size(FONT_META)
+        .monospace();
+    let resp = ui.add(
+        egui::Button::new(rich)
+            .wrap_mode(egui::TextWrapMode::Extend)
+            .corner_radius(CornerRadius::same(RADIUS_CONTROL))
+            .min_size(Vec2::new(0.0, 28.0)),
+    );
+    ui.visuals_mut().widgets = prev_widgets;
 
     if selected && ui.is_rect_visible(resp.rect) {
         let r = resp.rect;

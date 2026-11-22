@@ -730,15 +730,12 @@ impl ProgrammingTab {
                         x56_core::t!("prog-router-uinput"),
                         x56_core::t!("prog-router-offline")
                     );
-                    ui.horizontal(|ui| {
-                        theme::status_dot(ui, COLOR_NEGATIVE, 8.0);
-                        ui.label(
-                            RichText::new(router_text)
-                                .color(COLOR_TEXT_MUTED)
-                                .size(FONT_META),
-                        );
-                    })
-                    .response
+                    theme::status_dot(ui, COLOR_NEGATIVE, 8.0);
+                    ui.label(
+                        RichText::new(router_text)
+                            .color(COLOR_TEXT_MUTED)
+                            .size(FONT_META),
+                    )
                     .on_hover_text(x56_core::t!("sidebar-uinput-offline-tooltip"));
                 } else {
                     let is_active = monitor.is_active();
@@ -752,24 +749,22 @@ impl ProgrammingTab {
                     } else {
                         x56_core::t!("prog-uinput-paused-short")
                     };
-                    ui.horizontal(|ui| {
-                        theme::status_dot(ui, dot_col, 8.0);
-                        if theme::ghost_button(ui, &toggle_lbl)
-                            .on_hover_text(x56_core::t!("prog-uinput-toggle-tooltip"))
-                            .clicked()
-                        {
-                            if is_active {
-                                monitor.set_active(false);
-                                self.status_message =
-                                    Some((x56_core::t!("prog-uinput-paused-msg"), false));
-                            } else {
-                                monitor.set_profile(self.profile.clone());
-                                monitor.set_active(true);
-                                self.status_message =
-                                    Some((x56_core::t!("prog-uinput-resumed-msg"), false));
-                            }
+                    theme::status_dot(ui, dot_col, 8.0);
+                    if theme::ghost_button(ui, &toggle_lbl)
+                        .on_hover_text(x56_core::t!("prog-uinput-toggle-tooltip"))
+                        .clicked()
+                    {
+                        if is_active {
+                            monitor.set_active(false);
+                            self.status_message =
+                                Some((x56_core::t!("prog-uinput-paused-msg"), false));
+                        } else {
+                            monitor.set_profile(self.profile.clone());
+                            monitor.set_active(true);
+                            self.status_message =
+                                Some((x56_core::t!("prog-uinput-resumed-msg"), false));
                         }
-                    });
+                    }
                 }
 
                 // Test loop modal trigger
